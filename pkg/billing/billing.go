@@ -19,12 +19,13 @@ type Service struct {
 	baseChatCount int64
 }
 
-func NewService(api billingAPI, storage storage, returnUrl, masterOrgID string) *Service {
+func NewService(api billingAPI, storage storage, returnUrl, masterOrgID string, baseChatCount int64) *Service {
 	return &Service{
-		billingAPI:  api,
-		storage:     storage,
-		returnURL:   returnUrl,
-		masterOrgID: masterOrgID,
+		billingAPI:    api,
+		storage:       storage,
+		returnURL:     returnUrl,
+		masterOrgID:   masterOrgID,
+		baseChatCount: baseChatCount,
 	}
 }
 
