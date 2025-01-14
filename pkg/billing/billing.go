@@ -4,28 +4,24 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/rs/xid"
 )
 
-type billingAPI interface {
-	CreateRecurrentCharge(ctx context.Context, params CreateRecurrentChargeParams) (*RecurrentCharge, error)
-	GetRecurrentCharge(ctx context.Context, id string) (*RecurrentCharge, error)
-}
-
 type Service struct {
-	billingAPI    billingAPI
-	storage       storage
-	returnURL     string
-	masterOrgID   string
-	baseChatCount int64
+	billingAPI  api
+	storage     Storage
+	plans       Plans
+	returnURL   string
+	masterOrgID string
 }
 
-func NewService(api billingAPI, storage storage, returnUrl, masterOrgID string, baseChatCount int64) *Service {
+func NewService(api *API, storage Storage, plans Plans, returnUrl, masterOrgID string) *Service {
 	return &Service{
-		billingAPI:    api,
-		storage:       storage,
-		returnURL:     returnUrl,
-		masterOrgID:   masterOrgID,
-		baseChatCount: baseChatCount,
+		billingAPI:  api,
+		storage:     storage,
+		plans:       plans,
+		returnURL:   returnUrl,
+		masterOrgID: masterOrgID,
 	}
 }
 
@@ -43,20 +39,18 @@ func (s *Service) CreateRecurrentCharge(ctx context.Context, name string, price 
 		return "", fmt.Errorf("failed to create recurrent charge via lc: %w", err)
 	}
 
-	rawCharge, err := json.Marshal(lcCharge)
-	if err != nil {
-		return "", fmt.Errorf("failed to marshal charge: %w", err)
-	}
-	charge := InstallationCharge{
-		InstallationID: lcOrganizationID,
-		Charge: &Charge{
-			ID:      lcCharge.ID,
-			Type:    ChargeTypeRecurring,
-			Payload: rawCharge,
-		},
+	if lcCharge == nil {
+		return "", fmt.Errorf("failed to create recurrent charge via lc: charge is nil")
 	}
 
-	if err = s.storage.CreateCharge(ctx, charge); err != nil {
+	rawCharge, _ := json.Marshal(lcCharge)
+
+	if err = s.storage.CreateCharge(ctx, Charge{
+		LCOrganizationID: lcOrganizationID,
+		ID:               lcCharge.ID,
+		Type:             ChargeTypeRecurring,
+		Payload:          rawCharge,
+	}); err != nil {
 		return "", fmt.Errorf("failed to create charge in database: %w", err)
 	}
 
@@ -85,28 +79,42 @@ func (s *Service) SyncRecurrentCharge(ctx context.Context, id string) error {
 	return nil
 }
 
-func (s *Service) GetCharge(ctx context.Context, id string) (*InstallationCharge, error) {
+func (s *Service) GetCharge(ctx context.Context, id string) (*Charge, error) {
 	return s.storage.GetCharge(ctx, id)
 }
 
-func (s *Service) IsValidSubscription(ctx context.Context, id string, chatsCount int64) (bool, error) {
-	charge, err := s.storage.GetChargeByInstallationID(ctx, id)
+func (s *Service) IsPremium(ctx context.Context, id string) (bool, error) {
+	sub, err := s.storage.GetSubscriptionByOrganizationID(ctx, id)
 	if err != nil {
 		return false, fmt.Errorf("failed to get charge by installation id: %w", err)
 	}
 
-	if charge == nil || !charge.IsActive() {
-		return chatsCount < s.baseChatCount, nil
-	}
-
-	return true, nil
+	return sub != nil && sub.IsActive(), nil
 }
 
-func (s *Service) IsPremium(ctx context.Context, id string) (bool, error) {
-	charge, err := s.storage.GetChargeByInstallationID(ctx, id)
-	if err != nil {
-		return false, fmt.Errorf("failed to get charge by installation id: %w", err)
+func (s *Service) CreateSubscription(ctx context.Context, lcOrganizationID string, planName string) error {
+	plan := s.plans.GetPlan(planName)
+	if plan == nil {
+		return fmt.Errorf("plan not found")
 	}
 
-	return charge != nil && charge.IsActive(), nil
+	charge, err := s.storage.GetChargeByOrganizationID(ctx, lcOrganizationID)
+	if err != nil {
+		return fmt.Errorf("failed to get charge by organization id: %w", err)
+	}
+
+	if charge == nil {
+		return fmt.Errorf("charge not found")
+	}
+
+	if err = s.storage.CreateSubscription(ctx, Subscription{
+		ID:               xid.New().String(),
+		Charge:           charge,
+		LCOrganizationID: lcOrganizationID,
+		PlanName:         planName,
+	}); err != nil {
+		return fmt.Errorf("failed to create subscription in database: %w", err)
+	}
+
+	return nil
 }

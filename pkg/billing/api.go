@@ -47,8 +47,17 @@ type RecurrentCharge struct {
 	NextChargeAt    *time.Time `json:"next_charge_at"`
 }
 
+type api interface {
+	CreateRecurrentCharge(ctx context.Context, params CreateRecurrentChargeParams) (*RecurrentCharge, error)
+	GetRecurrentCharge(ctx context.Context, id string) (*RecurrentCharge, error)
+}
+
+type httpCaller interface {
+	Do(req *http.Request) (*http.Response, error)
+}
+
 type API struct {
-	httpClient *http.Client
+	httpClient httpCaller
 	apiBaseURL string
 	token      string
 }
@@ -105,31 +114,6 @@ type CreateDirectChargeParams struct {
 	CommissionPercent *int
 }
 
-func (a *API) CreateDirectCharge(ctx context.Context, params CreateDirectChargeParams) (*DirectCharge, error) {
-	type payload struct {
-		Name              string `json:"name"`
-		Price             int    `json:"price"`
-		ReturnURL         string `json:"return_url"`
-		Test              bool   `json:"test"`
-		Quantity          int    `json:"quantity"`
-		CommissionPercent *int   `json:"commission_percent,omitempty"`
-	}
-
-	resp, err := a.call(ctx, "POST", "/v1/direct_charge", payload{
-		Name:              params.Name,
-		Price:             params.Price,
-		ReturnURL:         params.ReturnURL,
-		Test:              params.Test,
-		Quantity:          1,
-		CommissionPercent: params.CommissionPercent,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return asDirectCharge(resp)
-}
-
 func (a *API) GetRecurrentCharge(ctx context.Context, id string) (*RecurrentCharge, error) {
 	resp, err := a.call(ctx, "GET", "/v1/recurrent_charge/"+id, nil)
 	if err != nil {
@@ -137,42 +121,6 @@ func (a *API) GetRecurrentCharge(ctx context.Context, id string) (*RecurrentChar
 	}
 
 	return asRecurrentCharge(resp)
-}
-
-func (a *API) DirectCharge(ctx context.Context, id string) (*DirectCharge, error) {
-	resp, err := a.call(ctx, "GET", "/v1/direct_charge/"+id, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return asDirectCharge(resp)
-}
-
-func (a *API) CancelRecurrentCharge(ctx context.Context, id string) (*RecurrentCharge, error) {
-	resp, err := a.call(ctx, "PUT", fmt.Sprintf("/v2/recurrent_charge/%s/cancel", id), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return asRecurrentCharge(resp)
-}
-
-func (a *API) ActivateRecurrentCharge(ctx context.Context, id string) (*RecurrentCharge, error) {
-	resp, err := a.call(ctx, "PUT", fmt.Sprintf("/v2/recurrent_charge/livechat/%s/activate", id), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return asRecurrentCharge(resp)
-}
-
-func (a *API) ActivateDirectCharge(ctx context.Context, id string) (*DirectCharge, error) {
-	resp, err := a.call(ctx, "PUT", fmt.Sprintf("/v2/direct_charge/livechat/%s/activate", id), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return asDirectCharge(resp)
 }
 
 func asRecurrentCharge(body []byte) (*RecurrentCharge, error) {
@@ -184,15 +132,6 @@ func asRecurrentCharge(body []byte) (*RecurrentCharge, error) {
 	return &rc, nil
 }
 
-func asDirectCharge(body []byte) (*DirectCharge, error) {
-	var dc DirectCharge
-	if err := json.Unmarshal(body, &dc); err != nil {
-		return nil, err
-	}
-
-	return &dc, nil
-}
-
 func (a *API) call(ctx context.Context, method, path string, body interface{}) ([]byte, error) {
 	var b []byte
 	if body != nil {
@@ -202,6 +141,10 @@ func (a *API) call(ctx context.Context, method, path string, body interface{}) (
 	req, err := http.NewRequestWithContext(ctx, method, a.apiBaseURL+path, bytes.NewBuffer(b))
 	if err != nil {
 		return nil, fmt.Errorf("billing api: create request: %w", err)
+	}
+
+	if a.token == "" {
+		return nil, fmt.Errorf("billing api: empty token")
 	}
 
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", a.token))
@@ -216,7 +159,11 @@ func (a *API) call(ctx context.Context, method, path string, body interface{}) (
 		return nil, nil
 	}
 	if resp.StatusCode >= 300 {
-		e, _ := io.ReadAll(resp.Body)
+		var e []byte
+		if resp.Body != nil {
+			e, _ = io.ReadAll(resp.Body)
+		}
+
 		return nil, fmt.Errorf("biling api call to %s: bad status code %d, response: %s", path, resp.StatusCode, string(e))
 	}
 

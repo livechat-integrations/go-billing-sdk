@@ -13,21 +13,44 @@ const (
 
 // Charge is a representation of a charge
 type Charge struct {
-	ID         string
-	Type       ChargeType
-	Payload    json.RawMessage
-	CreatedAt  time.Time
-	CanceledAt *time.Time
+	ID               string
+	LCOrganizationID string
+	Type             ChargeType
+	Payload          json.RawMessage
+	CreatedAt        time.Time
+	CanceledAt       *time.Time
+}
+type Subscription struct {
+	ID               string
+	Charge           *Charge
+	LCOrganizationID string
+	PlanName         string
+	CreatedAt        time.Time
+	DeletedAt        *time.Time
 }
 
-type InstallationCharge struct {
-	InstallationID string
-	Charge         *Charge
+type Plan struct {
+	Name   string
+	Config json.RawMessage
 }
 
-func (c InstallationCharge) IsActive() bool {
+type Plans []Plan
+
+func (p Plans) GetPlan(name string) *Plan {
+	for _, plan := range p {
+		if plan.Name == name {
+			return &plan
+		}
+	}
+	return nil
+}
+
+func (c Subscription) IsActive() bool {
+	if c.Charge == nil {
+		return true
+	}
+
 	var p BaseCharge
 	_ = json.Unmarshal(c.Charge.Payload, &p)
-	return c.Charge == nil ||
-		(c.Charge.CanceledAt == nil && (p.Status == "active" || p.Status == "success"))
+	return c.Charge.CanceledAt == nil && (p.Status == "active" || p.Status == "success")
 }
