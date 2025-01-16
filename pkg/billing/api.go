@@ -32,11 +32,6 @@ type BaseCharge struct {
 	CreatedAt         *time.Time `json:"created_at"`
 }
 
-type DirectCharge struct {
-	BaseCharge
-	Quantity int `json:"quantity"`
-}
-
 type RecurrentCharge struct {
 	BaseCharge
 	TrialDays       int        `json:"trial_days"`
@@ -47,8 +42,8 @@ type RecurrentCharge struct {
 	NextChargeAt    *time.Time `json:"next_charge_at"`
 }
 
-type api interface {
-	CreateRecurrentCharge(ctx context.Context, params CreateRecurrentChargeParams) (*RecurrentCharge, error)
+type apiInterface interface {
+	CreateRecurrentCharge(ctx context.Context, params createRecurrentChargeParams) (*RecurrentCharge, error)
 	GetRecurrentCharge(ctx context.Context, id string) (*RecurrentCharge, error)
 }
 
@@ -56,21 +51,15 @@ type httpCaller interface {
 	Do(req *http.Request) (*http.Response, error)
 }
 
-type API struct {
+type TokenFn func(ctx context.Context) (string, error)
+
+type api struct {
 	httpClient httpCaller
 	apiBaseURL string
-	token      string
+	tokenFn    TokenFn
 }
 
-func NewAPI(httpClient *http.Client, livechatEnvironment string, token string) *API {
-	return &API{
-		httpClient: httpClient,
-		apiBaseURL: EnvURL(billingAPIBaseURL, livechatEnvironment),
-		token:      token,
-	}
-}
-
-type CreateRecurrentChargeParams struct {
+type createRecurrentChargeParams struct {
 	Name              string
 	ReturnURL         string
 	Price             int
@@ -80,7 +69,7 @@ type CreateRecurrentChargeParams struct {
 	CommissionPercent *int
 }
 
-func (a *API) CreateRecurrentCharge(ctx context.Context, params CreateRecurrentChargeParams) (*RecurrentCharge, error) {
+func (a *api) CreateRecurrentCharge(ctx context.Context, params createRecurrentChargeParams) (*RecurrentCharge, error) {
 	type payload struct {
 		Name              string `json:"name"`
 		Price             int    `json:"price"`
@@ -106,15 +95,7 @@ func (a *API) CreateRecurrentCharge(ctx context.Context, params CreateRecurrentC
 	return asRecurrentCharge(resp)
 }
 
-type CreateDirectChargeParams struct {
-	Name              string
-	ReturnURL         string
-	Price             int
-	Test              bool
-	CommissionPercent *int
-}
-
-func (a *API) GetRecurrentCharge(ctx context.Context, id string) (*RecurrentCharge, error) {
+func (a *api) GetRecurrentCharge(ctx context.Context, id string) (*RecurrentCharge, error) {
 	resp, err := a.call(ctx, "GET", "/v1/recurrent_charge/"+id, nil)
 	if err != nil {
 		return nil, err
@@ -132,7 +113,7 @@ func asRecurrentCharge(body []byte) (*RecurrentCharge, error) {
 	return &rc, nil
 }
 
-func (a *API) call(ctx context.Context, method, path string, body interface{}) ([]byte, error) {
+func (a *api) call(ctx context.Context, method, path string, body interface{}) ([]byte, error) {
 	var b []byte
 	if body != nil {
 		b, _ = json.Marshal(body)
@@ -143,11 +124,15 @@ func (a *API) call(ctx context.Context, method, path string, body interface{}) (
 		return nil, fmt.Errorf("billing api: create request: %w", err)
 	}
 
-	if a.token == "" {
+	token, err := a.tokenFn(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("billing api: get token: %w", err)
+	}
+	if token == "" {
 		return nil, fmt.Errorf("billing api: empty token")
 	}
 
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", a.token))
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := a.httpClient.Do(req)

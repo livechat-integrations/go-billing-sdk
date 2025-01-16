@@ -42,7 +42,7 @@ func (m *apiMock) GetRecurrentCharge(ctx context.Context, id string) (*Recurrent
 	return args.Get(0).(*RecurrentCharge), args.Error(1)
 }
 
-func (m *apiMock) CreateRecurrentCharge(ctx context.Context, params CreateRecurrentChargeParams) (*RecurrentCharge, error) {
+func (m *apiMock) CreateRecurrentCharge(ctx context.Context, params createRecurrentChargeParams) (*RecurrentCharge, error) {
 	args := m.Called(ctx, params)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
@@ -99,7 +99,7 @@ func (m *storageMock) GetSubscriptionByOrganizationID(ctx context.Context, lcID 
 
 func TestNewService(t *testing.T) {
 	t.Run("NewService", func(t *testing.T) {
-		newService := NewService(nil, &storageMock{}, nil, "returnURL", "masterOrgID")
+		newService := NewService(nil, "labs", func(ctx context.Context) (string, error) { return "", nil }, &storageMock{}, nil, "returnURL", "masterOrgID")
 
 		assert.NotNil(t, newService)
 	})
@@ -125,7 +125,7 @@ func TestService_CreateRecurrentCharge(t *testing.T) {
 			Payload:          rawRC,
 			LCOrganizationID: "lcOrganizationID",
 		}
-		am.On("CreateRecurrentCharge", ctx, CreateRecurrentChargeParams{
+		am.On("CreateRecurrentCharge", ctx, createRecurrentChargeParams{
 			Name:      "name",
 			ReturnURL: "returnURL",
 			Price:     10,
@@ -162,7 +162,7 @@ func TestService_CreateRecurrentCharge(t *testing.T) {
 			Payload:          rawRC,
 			LCOrganizationID: "masterOrgID",
 		}
-		am.On("CreateRecurrentCharge", ctx, CreateRecurrentChargeParams{
+		am.On("CreateRecurrentCharge", ctx, createRecurrentChargeParams{
 			Name:      "name",
 			ReturnURL: "returnURL",
 			Price:     10,
@@ -181,7 +181,7 @@ func TestService_CreateRecurrentCharge(t *testing.T) {
 	})
 
 	t.Run("error creating recurrent charge", func(t *testing.T) {
-		am.On("CreateRecurrentCharge", ctx, CreateRecurrentChargeParams{
+		am.On("CreateRecurrentCharge", ctx, createRecurrentChargeParams{
 			Name:      "name",
 			ReturnURL: "returnURL",
 			Price:     10,
@@ -199,7 +199,7 @@ func TestService_CreateRecurrentCharge(t *testing.T) {
 	})
 
 	t.Run("error charge is nil", func(t *testing.T) {
-		am.On("CreateRecurrentCharge", ctx, CreateRecurrentChargeParams{
+		am.On("CreateRecurrentCharge", ctx, createRecurrentChargeParams{
 			Name:      "name",
 			ReturnURL: "returnURL",
 			Price:     10,
@@ -236,7 +236,7 @@ func TestService_CreateRecurrentCharge(t *testing.T) {
 			LCOrganizationID: "lcOrganizationID",
 		}
 
-		am.On("CreateRecurrentCharge", ctx, CreateRecurrentChargeParams{
+		am.On("CreateRecurrentCharge", ctx, createRecurrentChargeParams{
 			Name:      "name",
 			ReturnURL: "returnURL",
 			Price:     10,

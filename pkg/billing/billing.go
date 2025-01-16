@@ -5,19 +5,26 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/rs/xid"
+	"net/http"
 )
 
 type Service struct {
-	billingAPI  api
+	billingAPI  apiInterface
 	storage     Storage
 	plans       Plans
 	returnURL   string
 	masterOrgID string
 }
 
-func NewService(api *API, storage Storage, plans Plans, returnUrl, masterOrgID string) *Service {
+func NewService(httpClient *http.Client, livechatEnvironment string, tokenFn TokenFn, storage Storage, plans Plans, returnUrl, masterOrgID string) *Service {
+	a := &api{
+		httpClient: httpClient,
+		apiBaseURL: EnvURL(billingAPIBaseURL, livechatEnvironment),
+		tokenFn:    tokenFn,
+	}
+
 	return &Service{
-		billingAPI:  api,
+		billingAPI:  a,
 		storage:     storage,
 		plans:       plans,
 		returnURL:   returnUrl,
@@ -26,7 +33,7 @@ func NewService(api *API, storage Storage, plans Plans, returnUrl, masterOrgID s
 }
 
 func (s *Service) CreateRecurrentCharge(ctx context.Context, name string, price int, lcOrganizationID string) (string, error) {
-	lcCharge, err := s.billingAPI.CreateRecurrentCharge(ctx, CreateRecurrentChargeParams{
+	lcCharge, err := s.billingAPI.CreateRecurrentCharge(ctx, createRecurrentChargeParams{
 		Name:      name,
 		ReturnURL: s.returnURL,
 		Price:     price,

@@ -5,20 +5,27 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/livechat-integrations/go-billing-sdk/pkg/billing"
 	"github.com/livechat-integrations/go-billing-sdk/pkg/billing/storage/postgresql/sqlc"
 )
 
-type PostgresqlSQLC struct {
+type PGXConn interface {
+	Exec(context.Context, string, ...interface{}) (pgconn.CommandTag, error)
+	Query(context.Context, string, ...interface{}) (pgx.Rows, error)
+	QueryRow(context.Context, string, ...interface{}) pgx.Row
+}
+
+type PostgresqlPGX struct {
 	queries *sqlc.Queries
 }
 
-func NewPostgresqlSQLC(queries *sqlc.Queries) *PostgresqlSQLC {
-	return &PostgresqlSQLC{queries: queries}
+func NewPostgresqlPGX(conn PGXConn) *PostgresqlPGX {
+	return &PostgresqlPGX{queries: sqlc.New(conn)}
 }
 
-func (r *PostgresqlSQLC) CreateCharge(ctx context.Context, c billing.Charge) error {
+func (r *PostgresqlPGX) CreateCharge(ctx context.Context, c billing.Charge) error {
 	rawPayload, err := json.Marshal(c.Payload)
 	if err != nil {
 		return err
@@ -36,7 +43,7 @@ func (r *PostgresqlSQLC) CreateCharge(ctx context.Context, c billing.Charge) err
 	return nil
 }
 
-func (r *PostgresqlSQLC) GetCharge(ctx context.Context, id string) (*billing.Charge, error) {
+func (r *PostgresqlPGX) GetCharge(ctx context.Context, id string) (*billing.Charge, error) {
 	row, err := r.queries.GetChargeByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -48,7 +55,7 @@ func (r *PostgresqlSQLC) GetCharge(ctx context.Context, id string) (*billing.Cha
 	return row.ToBillingCharge(), nil
 }
 
-func (r *PostgresqlSQLC) GetChargeByOrganizationID(ctx context.Context, lcID string) (*billing.Charge, error) {
+func (r *PostgresqlPGX) GetChargeByOrganizationID(ctx context.Context, lcID string) (*billing.Charge, error) {
 	row, err := r.queries.GetChargeByOrganizationID(ctx, lcID)
 
 	if err != nil {
@@ -61,7 +68,7 @@ func (r *PostgresqlSQLC) GetChargeByOrganizationID(ctx context.Context, lcID str
 	return row.ToBillingCharge(), nil
 }
 
-func (r *PostgresqlSQLC) UpdateChargePayload(ctx context.Context, id string, payload billing.BaseCharge) error {
+func (r *PostgresqlPGX) UpdateChargePayload(ctx context.Context, id string, payload billing.BaseCharge) error {
 	rawPayload, err := json.Marshal(payload)
 	if err != nil {
 		return err
@@ -73,7 +80,7 @@ func (r *PostgresqlSQLC) UpdateChargePayload(ctx context.Context, id string, pay
 	})
 }
 
-func (r *PostgresqlSQLC) CreateSubscription(ctx context.Context, subscription billing.Subscription) error {
+func (r *PostgresqlPGX) CreateSubscription(ctx context.Context, subscription billing.Subscription) error {
 	if err := r.queries.CreateSubscription(ctx, sqlc.CreateSubscriptionParams{
 		ID:               subscription.ID,
 		LcOrganizationID: subscription.LCOrganizationID,
@@ -86,7 +93,7 @@ func (r *PostgresqlSQLC) CreateSubscription(ctx context.Context, subscription bi
 	return nil
 }
 
-func (r *PostgresqlSQLC) GetSubscriptionByOrganizationID(ctx context.Context, lcID string) (*billing.Subscription, error) {
+func (r *PostgresqlPGX) GetSubscriptionByOrganizationID(ctx context.Context, lcID string) (*billing.Subscription, error) {
 	row, err := r.queries.GetSubscriptionByOrganizationID(ctx, lcID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

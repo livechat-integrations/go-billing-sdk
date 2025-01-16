@@ -14,10 +14,12 @@ import (
 
 var hm = new(httpMock)
 
-var a = API{
+var a = api{
 	httpClient: hm,
 	apiBaseURL: "https://api.livechatinc.com",
-	token:      "token",
+	tokenFn: func(ctx context.Context) (string, error) {
+		return "token", nil
+	},
 }
 
 type httpMock struct {
@@ -36,7 +38,7 @@ func TestAPI_CreateRecurrentCharge(t *testing.T) {
 			Body:       io.NopCloser(strings.NewReader(`{"id":"1"}`)),
 		}, nil).Once()
 
-		charge, err := a.CreateRecurrentCharge(context.Background(), CreateRecurrentChargeParams{})
+		charge, err := a.CreateRecurrentCharge(context.Background(), createRecurrentChargeParams{})
 		assert.NoError(t, err)
 		assert.Equal(t, "1", charge.ID)
 	})
@@ -47,7 +49,7 @@ func TestAPI_CreateRecurrentCharge(t *testing.T) {
 			Body:       io.NopCloser(strings.NewReader(``)),
 		}, nil).Once()
 
-		charge, err := a.CreateRecurrentCharge(context.Background(), CreateRecurrentChargeParams{})
+		charge, err := a.CreateRecurrentCharge(context.Background(), createRecurrentChargeParams{})
 		assert.Error(t, err)
 		assert.Nil(t, charge)
 	})
@@ -99,13 +101,25 @@ func TestAPI_call(t *testing.T) {
 	})
 
 	t.Run("empty token", func(t *testing.T) {
-		a.token = ""
+		a.tokenFn = func(ctx context.Context) (string, error) {
+			return "", nil
+		}
 		_, err := a.call(context.Background(), "GET", "/", nil)
 		assert.ErrorContains(t, err, "empty token")
 	})
 
+	t.Run("error get token", func(t *testing.T) {
+		a.tokenFn = func(ctx context.Context) (string, error) {
+			return "", fmt.Errorf("error")
+		}
+		_, err := a.call(context.Background(), "GET", "/", nil)
+		assert.ErrorContains(t, err, "get token")
+	})
+
 	t.Run("error send request", func(t *testing.T) {
-		a.token = "token"
+		a.tokenFn = func(ctx context.Context) (string, error) {
+			return "token", nil
+		}
 		hm.On("Do", mock.Anything).Return(&http.Response{}, fmt.Errorf("error")).Once()
 
 		resp, err := a.call(context.Background(), "GET", "/", nil)
@@ -142,14 +156,6 @@ func TestAPI_call(t *testing.T) {
 		resp, err := a.call(context.Background(), "GET", "/", nil)
 		assert.Error(t, err)
 		assert.Nil(t, resp)
-	})
-}
-
-func TestNewAPI(t *testing.T) {
-	t.Run("success", func(t *testing.T) {
-		newApi := NewAPI(nil, "labs", "token")
-		assert.NotNil(t, newApi)
-		assert.Equal(t, "token", newApi.token)
 	})
 }
 
