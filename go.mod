@@ -2,7 +2,7 @@ module github.com/livechat-integrations/go-billing-sdk
 
 go 1.22.0
 
-toolchain go1.22.10
+toolchain go1.22.11
 
 require (
 	github.com/jackc/pgx/v5 v5.7.2

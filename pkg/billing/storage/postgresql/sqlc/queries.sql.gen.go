@@ -81,6 +81,7 @@ const getChargeByID = `-- name: GetChargeByID :one
 SELECT id, lc_organization_id, type, payload, created_at, deleted_at
 FROM charges
 WHERE id = $1
+AND deleted_at IS NULL
 `
 
 func (q *Queries) GetChargeByID(ctx context.Context, id string) (Charge, error) {
@@ -101,6 +102,7 @@ const getChargeByOrganizationID = `-- name: GetChargeByOrganizationID :one
 SELECT id, lc_organization_id, type, payload, created_at, deleted_at
 FROM charges
 WHERE lc_organization_id = $1
+AND deleted_at IS NULL
 `
 
 func (q *Queries) GetChargeByOrganizationID(ctx context.Context, lcOrganizationID string) (Charge, error) {
@@ -122,6 +124,7 @@ SELECT s.id, s.lc_organization_id, plan_name, charge_id, s.created_at, s.deleted
 FROM subscriptions s
 LEFT JOIN charges c on s.charge_id = c.id
 WHERE s.lc_organization_id = $1
+AND s.deleted_at IS NULL
 `
 
 type GetSubscriptionByOrganizationIDRow struct {
@@ -163,6 +166,7 @@ const updateCharge = `-- name: UpdateCharge :exec
 UPDATE charges
 SET payload = $2
 WHERE id = $1
+AND deleted_at IS NULL
 `
 
 type UpdateChargeParams struct {

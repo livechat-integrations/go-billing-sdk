@@ -5,17 +5,20 @@ VALUES ($1, $2, $3, $4, NOW());
 -- name: GetChargeByID :one
 SELECT *
 FROM charges
-WHERE id = $1;
+WHERE id = $1
+AND deleted_at IS NULL;
 
 -- name: GetChargeByOrganizationID :one
 SELECT *
 FROM charges
-WHERE lc_organization_id = $1;
+WHERE lc_organization_id = $1
+AND deleted_at IS NULL;
 
 -- name: UpdateCharge :exec
 UPDATE charges
 SET payload = $2
-WHERE id = $1;
+WHERE id = $1
+AND deleted_at IS NULL;
 
 
 -- name: CreateSubscription :exec
@@ -26,7 +29,8 @@ VALUES ($1, $2, $3, $4, NOW());
 SELECT *
 FROM subscriptions s
 LEFT JOIN charges c on s.charge_id = c.id
-WHERE s.lc_organization_id = $1;
+WHERE s.lc_organization_id = $1
+AND s.deleted_at IS NULL;
 
 -- name: DeleteSubscriptionByOrganizationID :exec
 UPDATE subscriptions

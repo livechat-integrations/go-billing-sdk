@@ -125,3 +125,24 @@ func (s *Service) CreateSubscription(ctx context.Context, lcOrganizationID strin
 
 	return nil
 }
+
+func (s *Service) DeleteSubscription(ctx context.Context, lcOrganizationID string) error {
+	sub, err := s.storage.GetSubscriptionByOrganizationID(ctx, lcOrganizationID)
+	if err != nil {
+		return fmt.Errorf("failed to get subscription: %w", err)
+	}
+
+	if err = s.storage.DeleteSubscriptionByOrganizationID(ctx, lcOrganizationID); err != nil {
+		return fmt.Errorf("failed to delete subscription: %w", err)
+	}
+
+	if sub.Charge == nil {
+		return nil
+	}
+
+	if err = s.storage.DeleteCharge(ctx, sub.Charge.ID); err != nil {
+		return fmt.Errorf("failed to delete charge: %w", err)
+	}
+
+	return nil
+}
