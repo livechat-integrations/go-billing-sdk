@@ -93,8 +93,8 @@ func (r *PostgresqlPGX) CreateSubscription(ctx context.Context, subscription bil
 	return nil
 }
 
-func (r *PostgresqlPGX) GetSubscriptionByOrganizationID(ctx context.Context, lcID string) (*billing.Subscription, error) {
-	row, err := r.queries.GetSubscriptionByOrganizationID(ctx, lcID)
+func (r *PostgresqlPGX) GetSubscriptionsByOrganizationID(ctx context.Context, lcID string) ([]billing.Subscription, error) {
+	rows, err := r.queries.GetSubscriptionsByOrganizationID(ctx, lcID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
@@ -102,13 +102,17 @@ func (r *PostgresqlPGX) GetSubscriptionByOrganizationID(ctx context.Context, lcI
 		return nil, err
 	}
 
-	return row.ToBillingSubscription(), nil
+	var subscriptions []billing.Subscription
+	for _, row := range rows {
+		subscriptions = append(subscriptions, *row.ToBillingSubscription())
+	}
+	return subscriptions, nil
 }
 
 func (r *PostgresqlPGX) DeleteCharge(ctx context.Context, id string) error {
 	return r.queries.DeleteCharge(ctx, id)
 }
 
-func (r *PostgresqlPGX) DeleteSubscriptionByOrganizationID(ctx context.Context, id string) error {
-	return r.queries.DeleteSubscriptionByOrganizationID(ctx, id)
+func (r *PostgresqlPGX) DeleteSubscriptionByChargeID(ctx context.Context, id string) error {
+	return r.queries.DeleteSubscriptionByChargeID(ctx, pgtype.Text{String: id, Valid: true})
 }

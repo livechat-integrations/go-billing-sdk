@@ -25,17 +25,23 @@ AND deleted_at IS NULL;
 INSERT INTO subscriptions(id, lc_organization_id, plan_name, charge_id, created_at)
 VALUES ($1, $2, $3, $4, NOW());
 
--- name: GetSubscriptionByOrganizationID :one
+-- name: GetSubscriptionsByOrganizationID :many
 SELECT *
 FROM subscriptions s
 LEFT JOIN charges c on s.charge_id = c.id
 WHERE s.lc_organization_id = $1
 AND s.deleted_at IS NULL;
 
--- name: DeleteSubscriptionByOrganizationID :exec
+-- name: GetSubscriptionByChargeID :one
+SELECT *
+FROM subscriptions
+WHERE charge_id = $1
+AND deleted_at IS NULL;
+
+-- name: DeleteSubscriptionByChargeID :exec
 UPDATE subscriptions
 SET deleted_at = now()
-WHERE lc_organization_id = $1;
+WHERE charge_id = $1;
 
 -- name: DeleteCharge :exec
 UPDATE charges

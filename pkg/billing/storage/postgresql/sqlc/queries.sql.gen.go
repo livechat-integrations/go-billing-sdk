@@ -66,14 +66,14 @@ func (q *Queries) DeleteCharge(ctx context.Context, id string) error {
 	return err
 }
 
-const deleteSubscriptionByOrganizationID = `-- name: DeleteSubscriptionByOrganizationID :exec
+const deleteSubscriptionByChargeID = `-- name: DeleteSubscriptionByChargeID :exec
 UPDATE subscriptions
 SET deleted_at = now()
-WHERE lc_organization_id = $1
+WHERE charge_id = $1
 `
 
-func (q *Queries) DeleteSubscriptionByOrganizationID(ctx context.Context, lcOrganizationID string) error {
-	_, err := q.db.Exec(ctx, deleteSubscriptionByOrganizationID, lcOrganizationID)
+func (q *Queries) DeleteSubscriptionByChargeID(ctx context.Context, chargeID pgtype.Text) error {
+	_, err := q.db.Exec(ctx, deleteSubscriptionByChargeID, chargeID)
 	return err
 }
 
@@ -119,7 +119,28 @@ func (q *Queries) GetChargeByOrganizationID(ctx context.Context, lcOrganizationI
 	return i, err
 }
 
-const getSubscriptionByOrganizationID = `-- name: GetSubscriptionByOrganizationID :one
+const getSubscriptionByChargeID = `-- name: GetSubscriptionByChargeID :one
+SELECT id, lc_organization_id, plan_name, charge_id, created_at, deleted_at
+FROM subscriptions
+WHERE charge_id = $1
+AND deleted_at IS NULL
+`
+
+func (q *Queries) GetSubscriptionByChargeID(ctx context.Context, chargeID pgtype.Text) (Subscription, error) {
+	row := q.db.QueryRow(ctx, getSubscriptionByChargeID, chargeID)
+	var i Subscription
+	err := row.Scan(
+		&i.ID,
+		&i.LcOrganizationID,
+		&i.PlanName,
+		&i.ChargeID,
+		&i.CreatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
+const getSubscriptionsByOrganizationID = `-- name: GetSubscriptionsByOrganizationID :many
 SELECT s.id, s.lc_organization_id, plan_name, charge_id, s.created_at, s.deleted_at, c.id, c.lc_organization_id, type, payload, c.created_at, c.deleted_at
 FROM subscriptions s
 LEFT JOIN charges c on s.charge_id = c.id
@@ -127,7 +148,7 @@ WHERE s.lc_organization_id = $1
 AND s.deleted_at IS NULL
 `
 
-type GetSubscriptionByOrganizationIDRow struct {
+type GetSubscriptionsByOrganizationIDRow struct {
 	ID                 string
 	LcOrganizationID   string
 	PlanName           string
@@ -142,24 +163,37 @@ type GetSubscriptionByOrganizationIDRow struct {
 	DeletedAt_2        pgtype.Timestamptz
 }
 
-func (q *Queries) GetSubscriptionByOrganizationID(ctx context.Context, lcOrganizationID string) (GetSubscriptionByOrganizationIDRow, error) {
-	row := q.db.QueryRow(ctx, getSubscriptionByOrganizationID, lcOrganizationID)
-	var i GetSubscriptionByOrganizationIDRow
-	err := row.Scan(
-		&i.ID,
-		&i.LcOrganizationID,
-		&i.PlanName,
-		&i.ChargeID,
-		&i.CreatedAt,
-		&i.DeletedAt,
-		&i.ID_2,
-		&i.LcOrganizationID_2,
-		&i.Type,
-		&i.Payload,
-		&i.CreatedAt_2,
-		&i.DeletedAt_2,
-	)
-	return i, err
+func (q *Queries) GetSubscriptionsByOrganizationID(ctx context.Context, lcOrganizationID string) ([]GetSubscriptionsByOrganizationIDRow, error) {
+	rows, err := q.db.Query(ctx, getSubscriptionsByOrganizationID, lcOrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetSubscriptionsByOrganizationIDRow
+	for rows.Next() {
+		var i GetSubscriptionsByOrganizationIDRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.LcOrganizationID,
+			&i.PlanName,
+			&i.ChargeID,
+			&i.CreatedAt,
+			&i.DeletedAt,
+			&i.ID_2,
+			&i.LcOrganizationID_2,
+			&i.Type,
+			&i.Payload,
+			&i.CreatedAt_2,
+			&i.DeletedAt_2,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const updateCharge = `-- name: UpdateCharge :exec

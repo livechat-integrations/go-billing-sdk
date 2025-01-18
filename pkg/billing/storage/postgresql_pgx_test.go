@@ -255,7 +255,7 @@ func TestPostgresqlPGX_DeleteCharge(t *testing.T) {
 	})
 }
 
-func TestPostgresqlPGX_DeleteSubscriptionByOrganizationID(t *testing.T) {
+func TestPostgresqlPGX_DeleteSubscriptionByChargeID(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		dbMock.ExpectExec("UPDATE subscriptions SET deleted_at = now()").
 			WithArgs("1").

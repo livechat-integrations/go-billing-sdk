@@ -91,21 +91,22 @@ func (s *Service) GetCharge(ctx context.Context, id string) (*Charge, error) {
 }
 
 func (s *Service) IsPremium(ctx context.Context, id string) (bool, error) {
-	sub, err := s.storage.GetSubscriptionByOrganizationID(ctx, id)
+	sub, err := s.storage.GetSubscriptionsByOrganizationID(ctx, id)
 	if err != nil {
 		return false, fmt.Errorf("failed to get charge by installation id: %w", err)
 	}
 
-	return sub != nil && sub.IsActive(), nil
+	//TODO: Refactor when we have multiple subscriptions
+	return len(sub) > 0 && sub[0].IsActive(), nil
 }
 
-func (s *Service) CreateSubscription(ctx context.Context, lcOrganizationID string, planName string) error {
+func (s *Service) CreateSubscription(ctx context.Context, lcOrganizationID string, chargeID string, planName string) error {
 	plan := s.plans.GetPlan(planName)
 	if plan == nil {
 		return fmt.Errorf("plan not found")
 	}
 
-	charge, err := s.storage.GetChargeByOrganizationID(ctx, lcOrganizationID)
+	charge, err := s.storage.GetCharge(ctx, chargeID)
 	if err != nil {
 		return fmt.Errorf("failed to get charge by organization id: %w", err)
 	}
@@ -126,21 +127,12 @@ func (s *Service) CreateSubscription(ctx context.Context, lcOrganizationID strin
 	return nil
 }
 
-func (s *Service) DeleteSubscription(ctx context.Context, lcOrganizationID string) error {
-	sub, err := s.storage.GetSubscriptionByOrganizationID(ctx, lcOrganizationID)
-	if err != nil {
-		return fmt.Errorf("failed to get subscription: %w", err)
-	}
-
-	if err = s.storage.DeleteSubscriptionByOrganizationID(ctx, lcOrganizationID); err != nil {
+func (s *Service) DeleteSubscriptionWithCharge(ctx context.Context, chargeID string) error {
+	if err := s.storage.DeleteSubscriptionByChargeID(ctx, chargeID); err != nil {
 		return fmt.Errorf("failed to delete subscription: %w", err)
 	}
 
-	if sub.Charge == nil {
-		return nil
-	}
-
-	if err = s.storage.DeleteCharge(ctx, sub.Charge.ID); err != nil {
+	if err := s.storage.DeleteCharge(ctx, chargeID); err != nil {
 		return fmt.Errorf("failed to delete charge: %w", err)
 	}
 

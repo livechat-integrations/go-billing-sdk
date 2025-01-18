@@ -23,7 +23,7 @@ func (c *Charge) ToBillingCharge() *billing.Charge {
 	}
 }
 
-func (r *GetSubscriptionByOrganizationIDRow) ToBillingSubscription() *billing.Subscription {
+func (r *GetSubscriptionsByOrganizationIDRow) ToBillingSubscription() *billing.Subscription {
 	var deletedAt *time.Time
 	if r.DeletedAt.Valid {
 		deletedAt = &r.DeletedAt.Time
