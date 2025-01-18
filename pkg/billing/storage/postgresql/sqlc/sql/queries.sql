@@ -27,3 +27,13 @@ SELECT *
 FROM subscriptions s
 LEFT JOIN charges c on s.charge_id = c.id
 WHERE s.lc_organization_id = $1;
+
+-- name: DeleteSubscriptionByOrganizationID :exec
+UPDATE subscriptions
+SET deleted_at = now()
+WHERE lc_organization_id = $1;
+
+-- name: DeleteCharge :exec
+UPDATE charges
+SET deleted_at = now()
+WHERE id = $1;

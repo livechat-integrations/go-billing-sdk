@@ -232,3 +232,47 @@ func TestPostgresqlSQLC_UpdateChargePayload(t *testing.T) {
 		assert.NoError(t, dbMock.ExpectationsWereMet())
 	})
 }
+
+func TestPostgresqlPGX_DeleteCharge(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
+		dbMock.ExpectExec("UPDATE charges SET deleted_at").
+			WithArgs("1").
+			WillReturnResult(pgxmock.NewResult("UPDATE", 1)).Times(1)
+
+		err := s.DeleteCharge(context.Background(), "1")
+		assert.NoError(t, err)
+		assert.NoError(t, dbMock.ExpectationsWereMet())
+	})
+
+	t.Run("error", func(t *testing.T) {
+		dbMock.ExpectExec("UPDATE charges SET deleted_at").
+			WithArgs("1").Times(1).
+			WillReturnError(assert.AnError)
+
+		err := s.DeleteCharge(context.Background(), "1")
+		assert.Error(t, err)
+		assert.NoError(t, dbMock.ExpectationsWereMet())
+	})
+}
+
+func TestPostgresqlPGX_DeleteSubscriptionByOrganizationID(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
+		dbMock.ExpectExec("UPDATE subscriptions SET deleted_at = now()").
+			WithArgs("1").
+			WillReturnResult(pgxmock.NewResult("UPDATE", 1)).Times(1)
+
+		err := s.DeleteSubscriptionByOrganizationID(context.Background(), "1")
+		assert.NoError(t, err)
+		assert.NoError(t, dbMock.ExpectationsWereMet())
+	})
+
+	t.Run("error", func(t *testing.T) {
+		dbMock.ExpectExec("UPDATE subscriptions SET deleted_at = now()").
+			WithArgs("1").Times(1).
+			WillReturnError(assert.AnError)
+
+		err := s.DeleteSubscriptionByOrganizationID(context.Background(), "1")
+		assert.Error(t, err)
+		assert.NoError(t, dbMock.ExpectationsWereMet())
+	})
+}

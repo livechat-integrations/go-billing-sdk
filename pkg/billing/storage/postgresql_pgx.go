@@ -104,3 +104,11 @@ func (r *PostgresqlPGX) GetSubscriptionByOrganizationID(ctx context.Context, lcI
 
 	return row.ToBillingSubscription(), nil
 }
+
+func (r *PostgresqlPGX) DeleteCharge(ctx context.Context, id string) error {
+	return r.queries.DeleteCharge(ctx, id)
+}
+
+func (r *PostgresqlPGX) DeleteSubscriptionByOrganizationID(ctx context.Context, id string) error {
+	return r.queries.DeleteSubscriptionByOrganizationID(ctx, id)
+}

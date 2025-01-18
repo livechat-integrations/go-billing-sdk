@@ -55,6 +55,28 @@ func (q *Queries) CreateSubscription(ctx context.Context, arg CreateSubscription
 	return err
 }
 
+const deleteCharge = `-- name: DeleteCharge :exec
+UPDATE charges
+SET deleted_at = now()
+WHERE id = $1
+`
+
+func (q *Queries) DeleteCharge(ctx context.Context, id string) error {
+	_, err := q.db.Exec(ctx, deleteCharge, id)
+	return err
+}
+
+const deleteSubscriptionByOrganizationID = `-- name: DeleteSubscriptionByOrganizationID :exec
+UPDATE subscriptions
+SET deleted_at = now()
+WHERE lc_organization_id = $1
+`
+
+func (q *Queries) DeleteSubscriptionByOrganizationID(ctx context.Context, lcOrganizationID string) error {
+	_, err := q.db.Exec(ctx, deleteSubscriptionByOrganizationID, lcOrganizationID)
+	return err
+}
+
 const getChargeByID = `-- name: GetChargeByID :one
 SELECT id, lc_organization_id, type, payload, created_at, deleted_at
 FROM charges
