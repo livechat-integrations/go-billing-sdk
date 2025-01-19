@@ -121,14 +121,13 @@ func (q *Queries) GetChargeByOrganizationID(ctx context.Context, lcOrganizationI
 
 const getSubscriptionByChargeID = `-- name: GetSubscriptionByChargeID :one
 SELECT id, lc_organization_id, plan_name, charge_id, created_at, deleted_at
-FROM subscriptions
+FROM active_subscriptions
 WHERE charge_id = $1
-AND deleted_at IS NULL
 `
 
-func (q *Queries) GetSubscriptionByChargeID(ctx context.Context, chargeID pgtype.Text) (Subscription, error) {
+func (q *Queries) GetSubscriptionByChargeID(ctx context.Context, chargeID pgtype.Text) (ActiveSubscription, error) {
 	row := q.db.QueryRow(ctx, getSubscriptionByChargeID, chargeID)
-	var i Subscription
+	var i ActiveSubscription
 	err := row.Scan(
 		&i.ID,
 		&i.LcOrganizationID,
@@ -142,10 +141,9 @@ func (q *Queries) GetSubscriptionByChargeID(ctx context.Context, chargeID pgtype
 
 const getSubscriptionsByOrganizationID = `-- name: GetSubscriptionsByOrganizationID :many
 SELECT s.id, s.lc_organization_id, plan_name, charge_id, s.created_at, s.deleted_at, c.id, c.lc_organization_id, type, payload, c.created_at, c.deleted_at
-FROM subscriptions s
+FROM active_subscriptions s
 LEFT JOIN charges c on s.charge_id = c.id
 WHERE s.lc_organization_id = $1
-AND s.deleted_at IS NULL
 `
 
 type GetSubscriptionsByOrganizationIDRow struct {

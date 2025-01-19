@@ -171,39 +171,39 @@ func TestPostgresqlSQLC_GetChargeByOrganizationID(t *testing.T) {
 	})
 }
 
-func TestPostgresqlSQLC_GetSubscriptionByOrganizationID(t *testing.T) {
+func TestPostgresqlSQLC_GetSubscriptionsByOrganizationID(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
-		dbMock.ExpectQuery("SELECT s.id, s.lc_organization_id, plan_name, charge_id, s.created_at, s.deleted_at, c.id, c.lc_organization_id, type, payload, c.created_at, c.deleted_at FROM subscriptions s LEFT JOIN charges c on s.charge_id = c.id").
+		dbMock.ExpectQuery("SELECT s.id, s.lc_organization_id, plan_name, charge_id, s.created_at, s.deleted_at, c.id, c.lc_organization_id, type, payload, c.created_at, c.deleted_at FROM active_subscriptions s LEFT JOIN charges c on s.charge_id = c.id").
 			WithArgs("lcOrganizationID").
 			WillReturnRows(pgxmock.NewRows([]string{"id", "lc_organization_id", "plan_name", "charge_id", "created_at", "deleted_at", "id", "lc_organization_id", "type", "payload", "created_at", "deleted_at"}).
 				AddRow("1", "lcOrganizationID", "planName", "chargeID", nil, nil, "chargeID", "lcOrganizationID", "recurring", []byte("{}"), nil, nil)).Times(1)
 
-		c, err := s.GetSubscriptionByOrganizationID(context.Background(), "lcOrganizationID")
+		c, err := s.GetSubscriptionsByOrganizationID(context.Background(), "lcOrganizationID")
 		assert.NoError(t, err)
 		assert.NoError(t, dbMock.ExpectationsWereMet())
-		assert.Equal(t, "1", c.ID)
-		assert.Equal(t, "lcOrganizationID", c.LCOrganizationID)
-		assert.Equal(t, "planName", c.PlanName)
-		assert.Equal(t, "chargeID", c.Charge.ID)
+		assert.Equal(t, "1", c[0].ID)
+		assert.Equal(t, "lcOrganizationID", c[0].LCOrganizationID)
+		assert.Equal(t, "planName", c[0].PlanName)
+		assert.Equal(t, "chargeID", c[0].Charge.ID)
 	})
 
 	t.Run("no rows", func(t *testing.T) {
-		dbMock.ExpectQuery("SELECT s.id, s.lc_organization_id, plan_name, charge_id, s.created_at, s.deleted_at, c.id, c.lc_organization_id, type, payload, c.created_at, c.deleted_at FROM subscriptions s LEFT JOIN charges c on s.charge_id = c.id").
+		dbMock.ExpectQuery("SELECT s.id, s.lc_organization_id, plan_name, charge_id, s.created_at, s.deleted_at, c.id, c.lc_organization_id, type, payload, c.created_at, c.deleted_at FROM active_subscriptions s LEFT JOIN charges c on s.charge_id = c.id").
 			WithArgs("lcOrganizationID").Times(1).
 			WillReturnError(pgx.ErrNoRows)
 
-		c, err := s.GetSubscriptionByOrganizationID(context.Background(), "lcOrganizationID")
+		c, err := s.GetSubscriptionsByOrganizationID(context.Background(), "lcOrganizationID")
 		assert.NoError(t, err)
 		assert.Nil(t, c)
 		assert.NoError(t, dbMock.ExpectationsWereMet())
 	})
 
 	t.Run("error", func(t *testing.T) {
-		dbMock.ExpectQuery("SELECT s.id, s.lc_organization_id, plan_name, charge_id, s.created_at, s.deleted_at, c.id, c.lc_organization_id, type, payload, c.created_at, c.deleted_at FROM subscriptions").
+		dbMock.ExpectQuery("SELECT s.id, s.lc_organization_id, plan_name, charge_id, s.created_at, s.deleted_at, c.id, c.lc_organization_id, type, payload, c.created_at, c.deleted_at FROM active_subscriptions s LEFT JOIN charges c on s.charge_id = c.id").
 			WithArgs("lcOrganizationID").Times(1).
 			WillReturnError(assert.AnError)
 
-		_, err := s.GetSubscriptionByOrganizationID(context.Background(), "lcOrganizationID")
+		_, err := s.GetSubscriptionsByOrganizationID(context.Background(), "lcOrganizationID")
 		assert.ErrorIs(t, err, assert.AnError)
 		assert.NoError(t, dbMock.ExpectationsWereMet())
 	})
@@ -258,20 +258,20 @@ func TestPostgresqlPGX_DeleteCharge(t *testing.T) {
 func TestPostgresqlPGX_DeleteSubscriptionByChargeID(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		dbMock.ExpectExec("UPDATE subscriptions SET deleted_at = now()").
-			WithArgs("1").
+			WithArgs(pgtype.Text{String: "1", Valid: true}).
 			WillReturnResult(pgxmock.NewResult("UPDATE", 1)).Times(1)
 
-		err := s.DeleteSubscriptionByOrganizationID(context.Background(), "1")
+		err := s.DeleteSubscriptionByChargeID(context.Background(), "1")
 		assert.NoError(t, err)
 		assert.NoError(t, dbMock.ExpectationsWereMet())
 	})
 
 	t.Run("error", func(t *testing.T) {
 		dbMock.ExpectExec("UPDATE subscriptions SET deleted_at = now()").
-			WithArgs("1").Times(1).
+			WithArgs(pgtype.Text{String: "1", Valid: true}).Times(1).
 			WillReturnError(assert.AnError)
 
-		err := s.DeleteSubscriptionByOrganizationID(context.Background(), "1")
+		err := s.DeleteSubscriptionByChargeID(context.Background(), "1")
 		assert.Error(t, err)
 		assert.NoError(t, dbMock.ExpectationsWereMet())
 	})

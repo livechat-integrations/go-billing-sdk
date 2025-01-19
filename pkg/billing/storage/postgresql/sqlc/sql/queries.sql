@@ -27,16 +27,14 @@ VALUES ($1, $2, $3, $4, NOW());
 
 -- name: GetSubscriptionsByOrganizationID :many
 SELECT *
-FROM subscriptions s
+FROM active_subscriptions s
 LEFT JOIN charges c on s.charge_id = c.id
-WHERE s.lc_organization_id = $1
-AND s.deleted_at IS NULL;
+WHERE s.lc_organization_id = $1;
 
 -- name: GetSubscriptionByChargeID :one
 SELECT *
-FROM subscriptions
-WHERE charge_id = $1
-AND deleted_at IS NULL;
+FROM active_subscriptions
+WHERE charge_id = $1;
 
 -- name: DeleteSubscriptionByChargeID :exec
 UPDATE subscriptions
