@@ -41,12 +41,12 @@ func (m *apiMock) CreateDirectCharge(ctx context.Context, params livechat.Create
 	panic("implement me")
 }
 
-func (m *apiMock) CreateRecurrentChargeV2(ctx context.Context, params livechat.CreateRecurrentChargeV2Params) (*livechat.RecurrentCharge, error) {
+func (m *apiMock) CreateRecurrentChargeV2(ctx context.Context, params livechat.CreateRecurrentChargeV2Params) (*livechat.RecurrentChargeV2, error) {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (m *apiMock) CancelRecurrentCharge(ctx context.Context, id string) (*livechat.RecurrentCharge, error) {
+func (m *apiMock) CancelRecurrentCharge(ctx context.Context, id string) (*livechat.RecurrentChargeV2, error) {
 	//TODO implement me
 	panic("implement me")
 }
