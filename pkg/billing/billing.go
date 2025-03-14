@@ -4,23 +4,27 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/rs/xid"
 	"net/http"
+
+	"github.com/rs/xid"
+
+	"github.com/livechat-integrations/go-billing-sdk/pkg/common"
+	"github.com/livechat-integrations/go-billing-sdk/pkg/common/livechat"
 )
 
 type Service struct {
-	billingAPI  apiInterface
+	billingAPI  livechat.ApiInterface
 	storage     Storage
 	plans       Plans
 	returnURL   string
 	masterOrgID string
 }
 
-func NewService(httpClient *http.Client, livechatEnvironment string, tokenFn TokenFn, storage Storage, plans Plans, returnUrl, masterOrgID string) *Service {
-	a := &api{
-		httpClient: httpClient,
-		apiBaseURL: EnvURL(billingAPIBaseURL, livechatEnvironment),
-		tokenFn:    tokenFn,
+func NewService(httpClient *http.Client, livechatEnvironment string, tokenFn livechat.TokenFn, storage Storage, plans Plans, returnUrl, masterOrgID string) *Service {
+	a := &livechat.Api{
+		HttpClient: httpClient,
+		ApiBaseURL: common.EnvURL(livechat.BillingAPIBaseURL, livechatEnvironment),
+		TokenFn:    tokenFn,
 	}
 
 	return &Service{
@@ -33,7 +37,7 @@ func NewService(httpClient *http.Client, livechatEnvironment string, tokenFn Tok
 }
 
 func (s *Service) CreateRecurrentCharge(ctx context.Context, name string, price int, lcOrganizationID string) (string, error) {
-	lcCharge, err := s.billingAPI.CreateRecurrentCharge(ctx, createRecurrentChargeParams{
+	lcCharge, err := s.billingAPI.CreateRecurrentCharge(ctx, livechat.CreateRecurrentChargeParams{
 		Name:      name,
 		ReturnURL: s.returnURL,
 		Price:     price,

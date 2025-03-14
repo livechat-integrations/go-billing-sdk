@@ -1,23 +1,24 @@
-package billing
+package livechat
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 	"io"
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 )
 
 var hm = new(httpMock)
 
-var a = api{
-	httpClient: hm,
-	apiBaseURL: "https://api.livechatinc.com",
-	tokenFn: func(ctx context.Context) (string, error) {
+var a = Api{
+	HttpClient: hm,
+	ApiBaseURL: "https://api.livechatinc.com",
+	TokenFn: func(ctx context.Context) (string, error) {
 		return "token", nil
 	},
 }
@@ -38,7 +39,7 @@ func TestAPI_CreateRecurrentCharge(t *testing.T) {
 			Body:       io.NopCloser(strings.NewReader(`{"id":"1"}`)),
 		}, nil).Once()
 
-		charge, err := a.CreateRecurrentCharge(context.Background(), createRecurrentChargeParams{})
+		charge, err := a.CreateRecurrentCharge(context.Background(), CreateRecurrentChargeParams{})
 		assert.NoError(t, err)
 		assert.Equal(t, "1", charge.ID)
 	})
@@ -49,7 +50,7 @@ func TestAPI_CreateRecurrentCharge(t *testing.T) {
 			Body:       io.NopCloser(strings.NewReader(``)),
 		}, nil).Once()
 
-		charge, err := a.CreateRecurrentCharge(context.Background(), createRecurrentChargeParams{})
+		charge, err := a.CreateRecurrentCharge(context.Background(), CreateRecurrentChargeParams{})
 		assert.Error(t, err)
 		assert.Nil(t, charge)
 	})
@@ -101,7 +102,7 @@ func TestAPI_call(t *testing.T) {
 	})
 
 	t.Run("empty token", func(t *testing.T) {
-		a.tokenFn = func(ctx context.Context) (string, error) {
+		a.TokenFn = func(ctx context.Context) (string, error) {
 			return "", nil
 		}
 		_, err := a.call(context.Background(), "GET", "/", nil)
@@ -109,7 +110,7 @@ func TestAPI_call(t *testing.T) {
 	})
 
 	t.Run("error get token", func(t *testing.T) {
-		a.tokenFn = func(ctx context.Context) (string, error) {
+		a.TokenFn = func(ctx context.Context) (string, error) {
 			return "", fmt.Errorf("error")
 		}
 		_, err := a.call(context.Background(), "GET", "/", nil)
@@ -117,7 +118,7 @@ func TestAPI_call(t *testing.T) {
 	})
 
 	t.Run("error send request", func(t *testing.T) {
-		a.tokenFn = func(ctx context.Context) (string, error) {
+		a.TokenFn = func(ctx context.Context) (string, error) {
 			return "token", nil
 		}
 		hm.On("Do", mock.Anything).Return(&http.Response{}, fmt.Errorf("error")).Once()

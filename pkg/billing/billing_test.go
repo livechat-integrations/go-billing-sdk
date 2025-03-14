@@ -3,9 +3,12 @@ package billing
 import (
 	"context"
 	"encoding/json"
+	"testing"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
-	"testing"
+
+	"github.com/livechat-integrations/go-billing-sdk/pkg/common/livechat"
 )
 
 var am = new(apiMock)
@@ -33,26 +36,51 @@ type apiMock struct {
 	mock.Mock
 }
 
-func (m *apiMock) GetRecurrentCharge(ctx context.Context, id string) (*RecurrentCharge, error) {
+func (m *apiMock) CreateDirectCharge(ctx context.Context, params livechat.CreateDirectChargeParams) (*livechat.DirectCharge, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (m *apiMock) CreateRecurrentChargeV2(ctx context.Context, params livechat.CreateRecurrentChargeV2Params) (*livechat.RecurrentCharge, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (m *apiMock) CancelRecurrentCharge(ctx context.Context, id string) (*livechat.RecurrentCharge, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (m *apiMock) GetRecurrentCharge(ctx context.Context, id string) (*livechat.RecurrentCharge, error) {
 	args := m.Called(ctx, id)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 
-	return args.Get(0).(*RecurrentCharge), args.Error(1)
+	return args.Get(0).(*livechat.RecurrentCharge), args.Error(1)
 }
 
-func (m *apiMock) CreateRecurrentCharge(ctx context.Context, params createRecurrentChargeParams) (*RecurrentCharge, error) {
+func (m *apiMock) CreateRecurrentCharge(ctx context.Context, params livechat.CreateRecurrentChargeParams) (*livechat.RecurrentCharge, error) {
 	args := m.Called(ctx, params)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 
-	return args.Get(0).(*RecurrentCharge), args.Error(1)
+	return args.Get(0).(*livechat.RecurrentCharge), args.Error(1)
 }
 
 type storageMock struct {
 	mock.Mock
+}
+
+func (m *storageMock) DeleteCharge(ctx context.Context, id string) error {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (m *storageMock) DeleteSubscriptionByChargeID(ctx context.Context, id string) error {
+	//TODO implement me
+	panic("implement me")
 }
 
 func (m *storageMock) CreateCharge(ctx context.Context, c Charge) error {
@@ -69,7 +97,7 @@ func (m *storageMock) GetCharge(ctx context.Context, id string) (*Charge, error)
 	return args.Get(0).(*Charge), args.Error(1)
 }
 
-func (m *storageMock) UpdateChargePayload(ctx context.Context, id string, payload BaseCharge) error {
+func (m *storageMock) UpdateChargePayload(ctx context.Context, id string, payload livechat.BaseCharge) error {
 	args := m.Called(ctx, id, payload)
 	return args.Error(0)
 }
@@ -88,13 +116,13 @@ func (m *storageMock) CreateSubscription(ctx context.Context, subscription Subsc
 	return args.Error(0)
 }
 
-func (m *storageMock) GetSubscriptionByOrganizationID(ctx context.Context, lcID string) (*Subscription, error) {
+func (m *storageMock) GetSubscriptionsByOrganizationID(ctx context.Context, lcID string) ([]Subscription, error) {
 	args := m.Called(ctx, lcID)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 
-	return args.Get(0).(*Subscription), args.Error(1)
+	return args.Get(0).([]Subscription), args.Error(1)
 }
 
 func TestNewService(t *testing.T) {
@@ -107,8 +135,8 @@ func TestNewService(t *testing.T) {
 
 func TestService_CreateRecurrentCharge(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
-		rc := &RecurrentCharge{
-			BaseCharge: BaseCharge{
+		rc := &livechat.RecurrentCharge{
+			BaseCharge: livechat.BaseCharge{
 				ID:    "id",
 				Name:  "name",
 				Test:  false,
@@ -125,7 +153,7 @@ func TestService_CreateRecurrentCharge(t *testing.T) {
 			Payload:          rawRC,
 			LCOrganizationID: "lcOrganizationID",
 		}
-		am.On("CreateRecurrentCharge", ctx, createRecurrentChargeParams{
+		am.On("CreateRecurrentCharge", ctx, livechat.CreateRecurrentChargeParams{
 			Name:      "name",
 			ReturnURL: "returnURL",
 			Price:     10,
@@ -144,8 +172,8 @@ func TestService_CreateRecurrentCharge(t *testing.T) {
 	})
 
 	t.Run("success with test", func(t *testing.T) {
-		rc := &RecurrentCharge{
-			BaseCharge: BaseCharge{
+		rc := &livechat.RecurrentCharge{
+			BaseCharge: livechat.BaseCharge{
 				ID:    "id",
 				Name:  "name",
 				Test:  true,
@@ -162,7 +190,7 @@ func TestService_CreateRecurrentCharge(t *testing.T) {
 			Payload:          rawRC,
 			LCOrganizationID: "masterOrgID",
 		}
-		am.On("CreateRecurrentCharge", ctx, createRecurrentChargeParams{
+		am.On("CreateRecurrentCharge", ctx, livechat.CreateRecurrentChargeParams{
 			Name:      "name",
 			ReturnURL: "returnURL",
 			Price:     10,
@@ -181,7 +209,7 @@ func TestService_CreateRecurrentCharge(t *testing.T) {
 	})
 
 	t.Run("error creating recurrent charge", func(t *testing.T) {
-		am.On("CreateRecurrentCharge", ctx, createRecurrentChargeParams{
+		am.On("CreateRecurrentCharge", ctx, livechat.CreateRecurrentChargeParams{
 			Name:      "name",
 			ReturnURL: "returnURL",
 			Price:     10,
@@ -199,7 +227,7 @@ func TestService_CreateRecurrentCharge(t *testing.T) {
 	})
 
 	t.Run("error charge is nil", func(t *testing.T) {
-		am.On("CreateRecurrentCharge", ctx, createRecurrentChargeParams{
+		am.On("CreateRecurrentCharge", ctx, livechat.CreateRecurrentChargeParams{
 			Name:      "name",
 			ReturnURL: "returnURL",
 			Price:     10,
@@ -217,8 +245,8 @@ func TestService_CreateRecurrentCharge(t *testing.T) {
 	})
 
 	t.Run("error creating charge", func(t *testing.T) {
-		rc := &RecurrentCharge{
-			BaseCharge: BaseCharge{
+		rc := &livechat.RecurrentCharge{
+			BaseCharge: livechat.BaseCharge{
 				ID:    "id",
 				Name:  "name",
 				Test:  false,
@@ -236,7 +264,7 @@ func TestService_CreateRecurrentCharge(t *testing.T) {
 			LCOrganizationID: "lcOrganizationID",
 		}
 
-		am.On("CreateRecurrentCharge", ctx, createRecurrentChargeParams{
+		am.On("CreateRecurrentCharge", ctx, livechat.CreateRecurrentChargeParams{
 			Name:      "name",
 			ReturnURL: "returnURL",
 			Price:     10,
@@ -258,7 +286,7 @@ func TestService_CreateRecurrentCharge(t *testing.T) {
 
 func TestService_CreateSubscription(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
-		sm.On("GetChargeByOrganizationID", ctx, "lcOrganizationID").Return(&Charge{
+		sm.On("GetCharge", ctx, "id").Return(&Charge{
 			ID: "id",
 		}, nil).Once()
 		sm.On("CreateSubscription", ctx, mock.Anything).Run(func(args mock.Arguments) {
@@ -270,7 +298,7 @@ func TestService_CreateSubscription(t *testing.T) {
 			assert.NotNil(t, argsSub.ID)
 		}).Return(nil).Once()
 
-		err := s.CreateSubscription(context.Background(), "lcOrganizationID", "super")
+		err := s.CreateSubscription(context.Background(), "lcOrganizationID", "id", "super")
 
 		assert.Nil(t, err)
 
@@ -278,7 +306,7 @@ func TestService_CreateSubscription(t *testing.T) {
 	})
 
 	t.Run("error plan not found", func(t *testing.T) {
-		err := s.CreateSubscription(context.Background(), "lcOrganizationID", "notFound")
+		err := s.CreateSubscription(context.Background(), "lcOrganizationID", "xyz", "notFound")
 
 		assert.ErrorContains(t, err, "plan not found")
 
@@ -286,9 +314,9 @@ func TestService_CreateSubscription(t *testing.T) {
 	})
 
 	t.Run("error getting charge", func(t *testing.T) {
-		sm.On("GetChargeByOrganizationID", ctx, "lcOrganizationID").Return(nil, assert.AnError).Once()
+		sm.On("GetCharge", ctx, "id").Return(nil, assert.AnError).Once()
 
-		err := s.CreateSubscription(context.Background(), "lcOrganizationID", "super")
+		err := s.CreateSubscription(context.Background(), "lcOrganizationID", "id", "super")
 
 		assert.Error(t, err)
 
@@ -296,9 +324,9 @@ func TestService_CreateSubscription(t *testing.T) {
 	})
 
 	t.Run("error charge is nil", func(t *testing.T) {
-		sm.On("GetChargeByOrganizationID", ctx, "lcOrganizationID").Return(nil, nil).Once()
+		sm.On("GetCharge", ctx, "id").Return(nil, nil).Once()
 
-		err := s.CreateSubscription(context.Background(), "lcOrganizationID", "super")
+		err := s.CreateSubscription(context.Background(), "lcOrganizationID", "id", "super")
 
 		assert.ErrorContains(t, err, "charge not found")
 
@@ -306,12 +334,12 @@ func TestService_CreateSubscription(t *testing.T) {
 	})
 
 	t.Run("error creating subscription", func(t *testing.T) {
-		sm.On("GetChargeByOrganizationID", ctx, "lcOrganizationID").Return(&Charge{
+		sm.On("GetCharge", ctx, "id").Return(&Charge{
 			ID: "id",
 		}, nil).Once()
 		sm.On("CreateSubscription", ctx, mock.Anything).Return(assert.AnError).Once()
 
-		err := s.CreateSubscription(context.Background(), "lcOrganizationID", "super")
+		err := s.CreateSubscription(context.Background(), "lcOrganizationID", "id", "super")
 
 		assert.Error(t, err)
 
@@ -348,9 +376,9 @@ func TestService_GetCharge(t *testing.T) {
 
 func TestService_IsPremium(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
-		sm.On("GetSubscriptionByOrganizationID", ctx, "id").Return(&Subscription{
+		sm.On("GetSubscriptionsByOrganizationID", ctx, "id").Return([]Subscription{{
 			ID: "id",
-		}, nil).Once()
+		}}, nil).Once()
 
 		premium, err := s.IsPremium(context.Background(), "id")
 
@@ -361,7 +389,7 @@ func TestService_IsPremium(t *testing.T) {
 	})
 
 	t.Run("error", func(t *testing.T) {
-		sm.On("GetSubscriptionByOrganizationID", ctx, "id").Return(nil, assert.AnError).Once()
+		sm.On("GetSubscriptionsByOrganizationID", ctx, "id").Return(nil, assert.AnError).Once()
 
 		premium, err := s.IsPremium(context.Background(), "id")
 
@@ -372,7 +400,7 @@ func TestService_IsPremium(t *testing.T) {
 	})
 
 	t.Run("not premium", func(t *testing.T) {
-		sm.On("GetSubscriptionByOrganizationID", ctx, "id").Return(nil, nil).Once()
+		sm.On("GetSubscriptionsByOrganizationID", ctx, "id").Return(nil, nil).Once()
 
 		premium, err := s.IsPremium(context.Background(), "id")
 
@@ -388,8 +416,8 @@ func TestService_SyncRecurrentCharge(t *testing.T) {
 		sm.On("GetCharge", ctx, "id").Return(&Charge{
 			ID: "id",
 		}, nil).Once()
-		am.On("GetRecurrentCharge", ctx, "id").Return(&RecurrentCharge{
-			BaseCharge: BaseCharge{
+		am.On("GetRecurrentCharge", ctx, "id").Return(&livechat.RecurrentCharge{
+			BaseCharge: livechat.BaseCharge{
 				ID:    "id",
 				Name:  "name",
 				Test:  false,
@@ -399,7 +427,7 @@ func TestService_SyncRecurrentCharge(t *testing.T) {
 			Months:    1,
 		}, nil).Once()
 		sm.On("UpdateChargePayload", ctx, "id", mock.Anything).Run(func(args mock.Arguments) {
-			payload := args.Get(2).(BaseCharge)
+			payload := args.Get(2).(livechat.BaseCharge)
 			assert.NotNil(t, payload)
 			assert.Equal(t, "name", payload.Name)
 			assert.Equal(t, 10, payload.Price)
@@ -449,8 +477,8 @@ func TestService_SyncRecurrentCharge(t *testing.T) {
 		sm.On("GetCharge", ctx, "id").Return(&Charge{
 			ID: "id",
 		}, nil).Once()
-		am.On("GetRecurrentCharge", ctx, "id").Return(&RecurrentCharge{
-			BaseCharge: BaseCharge{
+		am.On("GetRecurrentCharge", ctx, "id").Return(&livechat.RecurrentCharge{
+			BaseCharge: livechat.BaseCharge{
 				ID:    "id",
 				Name:  "name",
 				Test:  false,

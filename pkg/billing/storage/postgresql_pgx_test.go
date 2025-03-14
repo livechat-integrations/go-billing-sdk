@@ -3,12 +3,16 @@ package storage
 import (
 	"context"
 	"encoding/json"
+	"testing"
+
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+
 	"github.com/livechat-integrations/go-billing-sdk/pkg/billing"
+	"github.com/livechat-integrations/go-billing-sdk/pkg/common/livechat"
+
 	"github.com/pashagolub/pgxmock/v4"
 	"github.com/stretchr/testify/assert"
-	"testing"
 )
 
 var dbMock, _ = pgxmock.NewConn()
@@ -211,23 +215,23 @@ func TestPostgresqlSQLC_GetSubscriptionsByOrganizationID(t *testing.T) {
 
 func TestPostgresqlSQLC_UpdateChargePayload(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
-		emptyRawPayload, _ := json.Marshal(billing.BaseCharge{})
+		emptyRawPayload, _ := json.Marshal(livechat.BaseCharge{})
 		dbMock.ExpectExec("UPDATE charges SET payload").
 			WithArgs("1", emptyRawPayload).
 			WillReturnResult(pgxmock.NewResult("UPDATE", 1)).Times(1)
 
-		err := s.UpdateChargePayload(context.Background(), "1", billing.BaseCharge{})
+		err := s.UpdateChargePayload(context.Background(), "1", livechat.BaseCharge{})
 		assert.NoError(t, err)
 		assert.NoError(t, dbMock.ExpectationsWereMet())
 	})
 
 	t.Run("error", func(t *testing.T) {
-		emptyRawPayload, _ := json.Marshal(billing.BaseCharge{})
+		emptyRawPayload, _ := json.Marshal(livechat.BaseCharge{})
 		dbMock.ExpectExec("UPDATE charges SET payload").
 			WithArgs("1", emptyRawPayload).Times(1).
 			WillReturnError(assert.AnError)
 
-		err := s.UpdateChargePayload(context.Background(), "1", billing.BaseCharge{})
+		err := s.UpdateChargePayload(context.Background(), "1", livechat.BaseCharge{})
 		assert.Error(t, err)
 		assert.NoError(t, dbMock.ExpectationsWereMet())
 	})
