@@ -11,13 +11,11 @@ import (
 	"github.com/livechat-integrations/go-billing-sdk/pkg/common/livechat"
 )
 
-var cm = new(cacheMock)
 var am = new(apiMock)
 var sm = new(storageMock)
 var xm = new(xIdMock)
 
 var s = Service{
-	cache:       cm,
 	xIdProvider: xm,
 	billingAPI:  am,
 	storage:     sm,
@@ -33,20 +31,6 @@ var assertExpectations = func(t *testing.T) {
 
 	am.ExpectedCalls = nil
 	sm.ExpectedCalls = nil
-}
-
-type cacheMock struct {
-	mock.Mock
-}
-
-func (c *cacheMock) Get(k string) (float32, bool) {
-	args := c.Called(k)
-	return args.Get(0).(float32), args.Bool(1)
-}
-
-func (c *cacheMock) Set(k string, v float32) bool {
-	args := c.Called(k, v)
-	return args.Bool(0)
 }
 
 type xIdMock struct {
@@ -155,7 +139,7 @@ func (m *storageMock) CreateCharge(ctx context.Context, c Charge) error {
 
 func TestNewService(t *testing.T) {
 	t.Run("NewService", func(t *testing.T) {
-		newService := NewService(nil, nil, nil, "labs", func(ctx context.Context) (string, error) { return "", nil }, &storageMock{}, "returnURL", "masterOrgID")
+		newService := NewService(nil, nil, "labs", func(ctx context.Context) (string, error) { return "", nil }, &storageMock{}, "returnURL", "masterOrgID")
 
 		assert.NotNil(t, newService)
 	})
@@ -568,12 +552,9 @@ func TestService_CreateTopUpRequest(t *testing.T) {
 }
 
 func TestService_GetBalance(t *testing.T) {
-	t.Run("success no cache", func(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
 		amount := float32(5.234)
 		lcoid := "lcOrganizationID"
-
-		call := cm.On("Get", "balance-lcOrganizationID").Return(float32(0), false)
-		cm.On("Set", "balance-lcOrganizationID", amount).Return(true)
 
 		sm.On("GetBalance", ctx, lcoid).Return(amount, nil).Once()
 
@@ -583,28 +564,10 @@ func TestService_GetBalance(t *testing.T) {
 		assert.Nil(t, err)
 
 		assertExpectations(t)
-		call.Unset()
 	})
 
-	t.Run("success from cache", func(t *testing.T) {
-		amount := float32(5.234)
+	t.Run("error", func(t *testing.T) {
 		lcoid := "lcOrganizationID"
-
-		call := cm.On("Get", "balance-lcOrganizationID").Return(amount, true)
-
-		balance, err := s.GetBalance(context.Background(), lcoid)
-
-		assert.Equal(t, amount, balance)
-		assert.Nil(t, err)
-
-		assertExpectations(t)
-		call.Unset()
-	})
-
-	t.Run("error no cache", func(t *testing.T) {
-		lcoid := "lcOrganizationID"
-
-		call := cm.On("Get", "balance-lcOrganizationID").Return(float32(0), false)
 
 		sm.On("GetBalance", ctx, lcoid).Return(float32(0), assert.AnError).Once()
 
@@ -614,7 +577,6 @@ func TestService_GetBalance(t *testing.T) {
 		assert.ErrorIs(t, err, assert.AnError)
 
 		assertExpectations(t)
-		call.Unset()
 	})
 }
 

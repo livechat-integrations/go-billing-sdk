@@ -28,7 +28,6 @@ var (
 )
 
 type Service struct {
-	cache       Cache
 	xIdProvider common.XIdProviderInterface
 	billingAPI  livechat.ApiInterface
 	storage     Storage
@@ -36,7 +35,7 @@ type Service struct {
 	masterOrgID string
 }
 
-func NewService(cache Cache, xIdProvider common.XIdProviderInterface, httpClient *http.Client, livechatEnvironment string, tokenFn livechat.TokenFn, storage Storage, returnUrl, masterOrgID string) *Service {
+func NewService(xIdProvider common.XIdProviderInterface, httpClient *http.Client, livechatEnvironment string, tokenFn livechat.TokenFn, storage Storage, returnUrl, masterOrgID string) *Service {
 	a := &livechat.Api{
 		HttpClient: httpClient,
 		ApiBaseURL: common.EnvURL(livechat.BillingAPIBaseURL, livechatEnvironment),
@@ -44,7 +43,6 @@ func NewService(cache Cache, xIdProvider common.XIdProviderInterface, httpClient
 	}
 
 	return &Service{
-		cache:       cache,
 		xIdProvider: xIdProvider,
 		billingAPI:  a,
 		storage:     storage,
@@ -165,18 +163,10 @@ func (s *Service) CreateTopUpRequest(ctx context.Context, params CreateTopUpRequ
 }
 
 func (s *Service) GetBalance(ctx context.Context, organizationID string) (float32, error) {
-	key := fmt.Sprintf("balance-%s", organizationID)
-
-	value, ok := s.cache.Get(key)
-	if ok {
-		return value, nil
-	}
-
 	balance, err := s.storage.GetBalance(ctx, organizationID)
 	if err != nil {
 		return float32(0), fmt.Errorf("failed to get balance: %w", err)
 	}
-	s.cache.Set(key, balance)
 
 	return balance, nil
 }
