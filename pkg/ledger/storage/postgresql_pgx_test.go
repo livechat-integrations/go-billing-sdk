@@ -27,25 +27,21 @@ func TestNewPostgresqlSQLC(t *testing.T) {
 
 func TestPostgresqlSQLC_CreateCharge(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
-		emptyRawPayload, _ := json.Marshal(json.RawMessage("{}"))
 		id := "1"
 		lcoid := "lcOrganizationID"
 		amount := float32(3.14)
-		status := ledger.ChargeStatusPending
-		chargeType := ledger.ChargeTypeRecurrent
+		status := ledger.ChargeStatusActive
 		v := pgtype.Numeric{}
 		_ = v.Scan(fmt.Sprintf("%f", amount))
 
 		dbMock.ExpectExec("INSERT INTO charges").
-			WithArgs(id, v, string(chargeType), string(status), emptyRawPayload, lcoid).
+			WithArgs(id, v, string(status), lcoid).
 			WillReturnResult(pgxmock.NewResult("INSERT", 1)).Times(1)
 
 		err := s.CreateCharge(context.Background(), ledger.Charge{
 			ID:               id,
 			Amount:           amount,
-			Type:             chargeType,
 			Status:           status,
-			LCCharge:         json.RawMessage("{}"),
 			LCOrganizationID: lcoid,
 		})
 		assert.NoError(t, err)
@@ -53,25 +49,21 @@ func TestPostgresqlSQLC_CreateCharge(t *testing.T) {
 	})
 
 	t.Run("error", func(t *testing.T) {
-		emptyRawPayload, _ := json.Marshal(json.RawMessage("{}"))
 		id := "1"
 		lcoid := "lcOrganizationID"
 		amount := float32(3.14)
-		status := ledger.ChargeStatusPending
-		chargeType := ledger.ChargeTypeRecurrent
+		status := ledger.ChargeStatusActive
 		v := pgtype.Numeric{}
 		_ = v.Scan(fmt.Sprintf("%f", amount))
 		dbMock.
 			ExpectExec("INSERT INTO charges").
-			WithArgs(id, v, string(chargeType), string(status), emptyRawPayload, lcoid).Times(1).
+			WithArgs(id, v, string(status), lcoid).Times(1).
 			WillReturnError(assert.AnError)
 
 		err := s.CreateCharge(context.Background(), ledger.Charge{
 			ID:               id,
 			Amount:           amount,
-			Type:             chargeType,
 			Status:           status,
-			LCCharge:         json.RawMessage("{}"),
 			LCOrganizationID: lcoid,
 		})
 		assert.ErrorIs(t, err, assert.AnError)
@@ -82,69 +74,74 @@ func TestPostgresqlSQLC_CreateCharge(t *testing.T) {
 func TestPostgresqlSQLC_UpdateChargeStatus(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		dbMock.ExpectExec("UPDATE charges SET status").
-			WithArgs(string(ledger.ChargeStatusPending), "1").
+			WithArgs(string(ledger.ChargeStatusCancelled), "1").
 			WillReturnResult(pgxmock.NewResult("UPDATE", 1)).Times(1)
 
-		err := s.UpdateChargeStatus(context.Background(), "1", ledger.ChargeStatusPending)
+		err := s.UpdateChargeStatus(context.Background(), "1", ledger.ChargeStatusCancelled)
 		assert.NoError(t, err)
 		assert.NoError(t, dbMock.ExpectationsWereMet())
 	})
 
 	t.Run("error", func(t *testing.T) {
 		dbMock.ExpectExec("UPDATE charges SET status").
-			WithArgs(string(ledger.ChargeStatusPending), "1").Times(1).
+			WithArgs(string(ledger.ChargeStatusCancelled), "1").Times(1).
 			WillReturnError(assert.AnError)
 
-		err := s.UpdateChargeStatus(context.Background(), "1", ledger.ChargeStatusPending)
+		err := s.UpdateChargeStatus(context.Background(), "1", ledger.ChargeStatusCancelled)
 		assert.Error(t, err)
+		assert.NoError(t, dbMock.ExpectationsWereMet())
+	})
+
+	t.Run("not found", func(t *testing.T) {
+		dbMock.ExpectExec("UPDATE charges SET status").
+			WithArgs(string(ledger.ChargeStatusCancelled), "1").Times(1).
+			WillReturnError(pgx.ErrNoRows)
+
+		err := s.UpdateChargeStatus(context.Background(), "1", ledger.ChargeStatusCancelled)
+		assert.ErrorIs(t, err, ledger.ErrNotFound)
 		assert.NoError(t, dbMock.ExpectationsWereMet())
 	})
 }
 
-func TestPostgresqlSQLC_GetChargeByIdAndType(t *testing.T) {
+func TestPostgresqlSQLC_GetChargeById(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		amount := float32(3.14)
-		status := ledger.ChargeStatusPending
-		chargeType := ledger.ChargeTypeRecurrent
+		status := ledger.ChargeStatusActive
 		v := pgtype.Numeric{}
 		_ = v.Scan(fmt.Sprintf("%f", amount))
-		dbMock.ExpectQuery("SELECT id, amount, lc_organization_id, type, status, lc_charge, created_at, updated_at FROM charges").
-			WithArgs("1", string(chargeType), string(ledger.ChargeStatusCancelled)).
+		dbMock.ExpectQuery("SELECT id, amount, lc_organization_id, status, created_at, updated_at FROM charges").
+			WithArgs("1", string(ledger.ChargeStatusCancelled)).
 			WillReturnRows(
-				pgxmock.NewRows([]string{"id", "amount", "lc_organization_id", "type", "status", "lc_charge", "created_at", "updated_at"}).
-					AddRow("1", v, "lcOrganizationID", string(chargeType), string(status), []byte("{}"), nil, nil)).Times(1)
+				pgxmock.NewRows([]string{"id", "amount", "lc_organization_id", "status", "created_at", "updated_at"}).
+					AddRow("1", v, "lcOrganizationID", string(status), nil, nil)).Times(1)
 
-		c, err := s.GetChargeByIdAndType(context.Background(), "1", chargeType)
+		c, err := s.GetChargeById(context.Background(), "1")
 		assert.NoError(t, err)
 		assert.Equal(t, "1", c.ID)
 		assert.Equal(t, amount, c.Amount)
 		assert.Equal(t, "lcOrganizationID", c.LCOrganizationID)
-		assert.Equal(t, chargeType, c.Type)
 		assert.Equal(t, status, c.Status)
-		assert.Equal(t, json.RawMessage("{}"), c.LCCharge)
 
 		assert.NoError(t, dbMock.ExpectationsWereMet())
 	})
 
 	t.Run("no rows", func(t *testing.T) {
-		chargeType := ledger.ChargeTypeRecurrent
-		dbMock.ExpectQuery("SELECT id, amount, lc_organization_id, type, status, lc_charge, created_at, updated_at FROM charges").
-			WithArgs("1", string(chargeType), string(ledger.ChargeStatusCancelled)).Times(1).
+		dbMock.ExpectQuery("SELECT id, amount, lc_organization_id, status, created_at, updated_at FROM charges").
+			WithArgs("1", string(ledger.ChargeStatusCancelled)).Times(1).
 			WillReturnError(pgx.ErrNoRows)
 
-		c, err := s.GetChargeByIdAndType(context.Background(), "1", chargeType)
+		c, err := s.GetChargeById(context.Background(), "1")
 		assert.NoError(t, err)
 		assert.Nil(t, c)
 		assert.NoError(t, dbMock.ExpectationsWereMet())
 	})
 
 	t.Run("error", func(t *testing.T) {
-		chargeType := ledger.ChargeTypeRecurrent
-		dbMock.ExpectQuery("SELECT id, amount, lc_organization_id, type, status, lc_charge, created_at, updated_at FROM charges").
-			WithArgs("1", string(chargeType), string(ledger.ChargeStatusCancelled)).Times(1).
+		dbMock.ExpectQuery("SELECT id, amount, lc_organization_id, status, created_at, updated_at FROM charges").
+			WithArgs("1", string(ledger.ChargeStatusCancelled)).Times(1).
 			WillReturnError(assert.AnError)
 
-		_, err := s.GetChargeByIdAndType(context.Background(), "1", chargeType)
+		_, err := s.GetChargeById(context.Background(), "1")
 		assert.ErrorIs(t, err, assert.AnError)
 		assert.NoError(t, dbMock.ExpectationsWereMet())
 	})
@@ -341,6 +338,16 @@ func TestPostgresqlSQLC_UpdateTopUpStatus(t *testing.T) {
 		assert.Error(t, err)
 		assert.NoError(t, dbMock.ExpectationsWereMet())
 	})
+
+	t.Run("not found", func(t *testing.T) {
+		dbMock.ExpectExec("UPDATE top_ups SET status").
+			WithArgs(string(ledger.TopUpStatusPending), "1").Times(1).
+			WillReturnError(pgx.ErrNoRows)
+
+		err := s.UpdateTopUpStatus(context.Background(), "1", ledger.TopUpStatusPending)
+		assert.ErrorIs(t, err, ledger.ErrNotFound)
+		assert.NoError(t, dbMock.ExpectationsWereMet())
+	})
 }
 
 func TestPostgresqlSQLC_GetTopUpByIdAndType(t *testing.T) {
@@ -403,7 +410,7 @@ func TestPostgresqlSQLC_CreateEvent(t *testing.T) {
 		emptyRawPayload, _ := json.Marshal(json.RawMessage("{}"))
 		id := "1"
 		lcoid := "lcOrganizationID"
-		action := ledger.EventActionUpdateChargeStatus
+		action := ledger.EventActionCancelCharge
 		eventType := ledger.EventTypeError
 		dbMock.ExpectExec("INSERT INTO events").
 			WithArgs(id, lcoid, string(eventType), string(action), emptyRawPayload).
@@ -424,7 +431,7 @@ func TestPostgresqlSQLC_CreateEvent(t *testing.T) {
 		emptyRawPayload, _ := json.Marshal(json.RawMessage("{}"))
 		id := "1"
 		lcoid := "lcOrganizationID"
-		action := ledger.EventActionUpdateChargeStatus
+		action := ledger.EventActionCancelCharge
 		eventType := ledger.EventTypeError
 		dbMock.ExpectExec("INSERT INTO events").
 			WithArgs(id, lcoid, string(eventType), string(action), emptyRawPayload).Times(1).

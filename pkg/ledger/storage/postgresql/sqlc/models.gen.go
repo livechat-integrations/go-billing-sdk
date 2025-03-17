@@ -12,9 +12,7 @@ type Charge struct {
 	ID               string
 	Amount           pgtype.Numeric
 	LcOrganizationID string
-	Type             string
 	Status           string
-	LcCharge         []byte
 	CreatedAt        pgtype.Timestamptz
 	UpdatedAt        pgtype.Timestamptz
 }

@@ -16,9 +16,7 @@ func (c *Charge) ToLedgerCharge() (*ledger.Charge, error) {
 		ID:               c.ID,
 		LCOrganizationID: c.LcOrganizationID,
 		Amount:           float32(v.Float64),
-		Type:             ledger.ChargeType(c.Type),
 		Status:           ledger.ChargeStatus(c.Status),
-		LCCharge:         c.LcCharge,
 		CreatedAt:        c.CreatedAt.Time,
 		UpdatedAt:        c.UpdatedAt.Time,
 	}, nil

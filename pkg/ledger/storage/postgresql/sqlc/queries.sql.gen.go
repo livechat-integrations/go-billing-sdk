@@ -12,16 +12,14 @@ import (
 )
 
 const createCharge = `-- name: CreateCharge :exec
-INSERT INTO charges(id, amount, type, status, lc_charge, lc_organization_id, created_at, updated_at)
-VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+INSERT INTO charges(id, amount, status, lc_organization_id, created_at, updated_at)
+VALUES ($1, $2, $3, $4, NOW(), NOW())
 `
 
 type CreateChargeParams struct {
 	ID               string
 	Amount           pgtype.Numeric
-	Type             string
 	Status           string
-	LcCharge         []byte
 	LcOrganizationID string
 }
 
@@ -29,9 +27,7 @@ func (q *Queries) CreateCharge(ctx context.Context, arg CreateChargeParams) erro
 	_, err := q.db.Exec(ctx, createCharge,
 		arg.ID,
 		arg.Amount,
-		arg.Type,
 		arg.Status,
-		arg.LcCharge,
 		arg.LcOrganizationID,
 	)
 	return err
@@ -93,30 +89,26 @@ func (q *Queries) CreateTopUp(ctx context.Context, arg CreateTopUpParams) error 
 	return err
 }
 
-const getChargeByIDAndTypeWhereStatusIsNot = `-- name: GetChargeByIDAndTypeWhereStatusIsNot :one
-SELECT id, amount, lc_organization_id, type, status, lc_charge, created_at, updated_at
+const getChargeByIDWhereStatusIsNot = `-- name: GetChargeByIDWhereStatusIsNot :one
+SELECT id, amount, lc_organization_id, status, created_at, updated_at
 FROM charges
 WHERE id = $1
-  AND type = $2
-  AND status != $3
+  AND status != $2
 `
 
-type GetChargeByIDAndTypeWhereStatusIsNotParams struct {
+type GetChargeByIDWhereStatusIsNotParams struct {
 	ID     string
-	Type   string
 	Status string
 }
 
-func (q *Queries) GetChargeByIDAndTypeWhereStatusIsNot(ctx context.Context, arg GetChargeByIDAndTypeWhereStatusIsNotParams) (Charge, error) {
-	row := q.db.QueryRow(ctx, getChargeByIDAndTypeWhereStatusIsNot, arg.ID, arg.Type, arg.Status)
+func (q *Queries) GetChargeByIDWhereStatusIsNot(ctx context.Context, arg GetChargeByIDWhereStatusIsNotParams) (Charge, error) {
+	row := q.db.QueryRow(ctx, getChargeByIDWhereStatusIsNot, arg.ID, arg.Status)
 	var i Charge
 	err := row.Scan(
 		&i.ID,
 		&i.Amount,
 		&i.LcOrganizationID,
-		&i.Type,
 		&i.Status,
-		&i.LcCharge,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

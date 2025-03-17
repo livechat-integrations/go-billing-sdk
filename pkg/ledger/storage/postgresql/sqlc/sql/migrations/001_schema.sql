@@ -3,9 +3,7 @@ CREATE TABLE IF NOT EXISTS charges
     id                 varchar(36) PRIMARY KEY,
     amount             numeric(9,3) NOT NULL,
     lc_organization_id varchar(36) NOT NULL,
-    type               varchar(255) NOT NULL,
     status             varchar(255) NOT NULL,
-    lc_charge          jsonb,
     created_at         TIMESTAMPTZ  NOT NULL DEFAULT now(),
     updated_at         TIMESTAMPTZ
 );

@@ -29,17 +29,10 @@ func NewPostgresqlPGX(conn PGXConn) *PostgresqlPGX {
 }
 
 func (r *PostgresqlPGX) CreateCharge(ctx context.Context, c ledger.Charge) error {
-	rawLCCharge, err := json.Marshal(c.LCCharge)
-	if err != nil {
-		return err
-	}
-
-	if err = r.queries.CreateCharge(ctx, sqlc.CreateChargeParams{
+	if err := r.queries.CreateCharge(ctx, sqlc.CreateChargeParams{
 		ID:               c.ID,
 		Amount:           ToPGNumeric(&c.Amount),
-		Type:             string(c.Type),
 		Status:           string(c.Status),
-		LcCharge:         rawLCCharge,
 		LcOrganizationID: c.LCOrganizationID,
 	}); err != nil {
 		return err
@@ -55,7 +48,7 @@ func (r *PostgresqlPGX) UpdateChargeStatus(ctx context.Context, ID string, statu
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil
+			return ledger.ErrNotFound
 		}
 		return err
 	}
@@ -63,10 +56,9 @@ func (r *PostgresqlPGX) UpdateChargeStatus(ctx context.Context, ID string, statu
 	return nil
 }
 
-func (r *PostgresqlPGX) GetChargeByIdAndType(ctx context.Context, ID string, chargeType ledger.ChargeType) (*ledger.Charge, error) {
-	t, err := r.queries.GetChargeByIDAndTypeWhereStatusIsNot(ctx, sqlc.GetChargeByIDAndTypeWhereStatusIsNotParams{
+func (r *PostgresqlPGX) GetChargeById(ctx context.Context, ID string) (*ledger.Charge, error) {
+	t, err := r.queries.GetChargeByIDWhereStatusIsNot(ctx, sqlc.GetChargeByIDWhereStatusIsNotParams{
 		ID:     ID,
-		Type:   string(chargeType),
 		Status: string(ledger.ChargeStatusCancelled),
 	})
 	if err != nil {
@@ -113,11 +105,11 @@ func (r *PostgresqlPGX) GetBalance(ctx context.Context, organizationID string) (
 		Status_2:         string(ledger.ChargeStatusActive),
 	})
 	if err != nil {
-		return 0, err
+		return float32(0), err
 	}
 	v, err := b.Float64Value()
 	if err != nil {
-		return 0, err
+		return float32(0), err
 	}
 
 	return float32(v.Float64), nil
@@ -149,7 +141,7 @@ func (r *PostgresqlPGX) UpdateTopUpStatus(ctx context.Context, ID string, status
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil
+			return ledger.ErrNotFound
 		}
 		return err
 	}

@@ -15,12 +15,11 @@ const (
 type EventAction string
 
 const (
-	EventActionCreateCharge       EventAction = "create_charge"
-	EventActionCreateTopUp        EventAction = "create_top_up"
-	EventActionCancelTopUp        EventAction = "cancel_top_up"
-	EventActionUpdateTopUpStatus  EventAction = "update_top_up_status"
-	EventActionCancelCharge       EventAction = "cancel_charge_event"
-	EventActionUpdateChargeStatus EventAction = "update_charge_status"
+	EventActionCreateCharge     EventAction = "create_charge"
+	EventActionCreateTopUp      EventAction = "create_top_up"
+	EventActionCancelTopUp      EventAction = "cancel_top_up"
+	EventActionForceCancelTopUp EventAction = "force_cancel_top_up"
+	EventActionCancelCharge     EventAction = "cancel_charge_event"
 )
 
 type Event struct {

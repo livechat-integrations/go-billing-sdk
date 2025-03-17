@@ -3,15 +3,14 @@ INSERT INTO events(id, lc_organization_id, type, action, payload, created_at)
 VALUES ($1, $2, $3, $4, $5, NOW());
 
 -- name: CreateCharge :exec
-INSERT INTO charges(id, amount, type, status, lc_charge, lc_organization_id, created_at, updated_at)
-VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW());
+INSERT INTO charges(id, amount, status, lc_organization_id, created_at, updated_at)
+VALUES ($1, $2, $3, $4, NOW(), NOW());
 
--- name: GetChargeByIDAndTypeWhereStatusIsNot :one
+-- name: GetChargeByIDWhereStatusIsNot :one
 SELECT *
 FROM charges
 WHERE id = $1
-  AND type = $2
-  AND status != $3
+  AND status != $2
 ;
 
 -- name: UpdateChargeStatus :exec

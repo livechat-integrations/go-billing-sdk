@@ -3,11 +3,10 @@ package ledger
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
-
-	"github.com/maypok86/otter"
 
 	"github.com/livechat-integrations/go-billing-sdk/pkg/common"
 	"github.com/livechat-integrations/go-billing-sdk/pkg/common/livechat"
@@ -19,12 +18,17 @@ type LedgerInterface interface {
 	GetBalance(ctx context.Context, organizationID string) (float32, error)
 	GetTopUps(ctx context.Context, organizationID string) ([]TopUp, error)
 	CancelTopUpRequest(ctx context.Context, organizationID string, ID string) error
-	UpdateTopUpStatus(ctx context.Context, organizationID string, ID string) error
+	ForceCancelTopUp(ctx context.Context, organizationID string, ID string) error
 	CancelCharge(ctx context.Context, organizationID string, ID string) error
-	UpdateChargeStatus(ctx context.Context, organizationID string, ID string) error
 }
 
+var (
+	ErrChargeNotFound = fmt.Errorf("charge not found")
+	ErrTopUpNotFound  = fmt.Errorf("top up not found")
+)
+
 type Service struct {
+	cache       Cache
 	xIdProvider common.XIdProviderInterface
 	billingAPI  livechat.ApiInterface
 	storage     Storage
@@ -32,7 +36,7 @@ type Service struct {
 	masterOrgID string
 }
 
-func NewService(xIdProvider common.XIdProviderInterface, httpClient *http.Client, livechatEnvironment string, tokenFn livechat.TokenFn, storage Storage, returnUrl, masterOrgID string) *Service {
+func NewService(cache Cache, xIdProvider common.XIdProviderInterface, httpClient *http.Client, livechatEnvironment string, tokenFn livechat.TokenFn, storage Storage, returnUrl, masterOrgID string) *Service {
 	a := &livechat.Api{
 		HttpClient: httpClient,
 		ApiBaseURL: common.EnvURL(livechat.BillingAPIBaseURL, livechatEnvironment),
@@ -40,6 +44,7 @@ func NewService(xIdProvider common.XIdProviderInterface, httpClient *http.Client
 	}
 
 	return &Service{
+		cache:       cache,
 		xIdProvider: xIdProvider,
 		billingAPI:  a,
 		storage:     storage,
@@ -49,52 +54,19 @@ func NewService(xIdProvider common.XIdProviderInterface, httpClient *http.Client
 }
 
 type CreateChargeParams struct {
-	Test           bool         `json:"test"`
-	Name           string       `json:"name"`
-	Amount         float32      `json:"amount"`
-	OrganizationID string       `json:"organizationId"`
-	Type           ChargeType   `json:"type"`
-	Config         ChargeConfig `json:"config"`
-}
-
-type ChargeConfig struct {
-	TrialDays *int    `json:"trialDays"`
-	Months    *int    `json:"months"`
-	ReturnUrl *string `json:"returnUrl"`
+	Test           bool    `json:"test"`
+	Name           string  `json:"name"`
+	Amount         float32 `json:"amount"`
+	OrganizationID string  `json:"organizationId"`
 }
 
 func (s *Service) CreateCharge(ctx context.Context, params CreateChargeParams) (string, error) {
 	event := toEvent(s.getUniqueID(), params.OrganizationID, EventActionCreateCharge, EventTypeInfo, params)
-	chargeID, rawCharge, err := s.createBillingCharge(ctx, createBillingChargeParams{
-		Test:           params.Test,
-		Name:           params.Name,
-		Amount:         params.Amount,
-		OrganizationID: params.OrganizationID,
-		Type:           params.Type,
-		Config:         params.Config,
-	})
-	if err != nil {
-		event.Type = EventTypeError
-		return "", s.toError(ctx, toErrorParams{
-			event: event,
-			err:   fmt.Errorf("failed to create billing charge: %w", err),
-		})
-	}
-	if rawCharge == nil || chargeID == nil {
-		event.Type = EventTypeError
-		return "", s.toError(ctx, toErrorParams{
-			event: event,
-			err:   fmt.Errorf("failed to create billing charge: empty charge id"),
-		})
-	}
-
 	charge := Charge{
-		ID:               *chargeID,
+		ID:               s.getUniqueID(),
 		Amount:           params.Amount,
-		Type:             params.Type,
-		Status:           ChargeStatusPending,
+		Status:           ChargeStatusActive,
 		LCOrganizationID: params.OrganizationID,
-		LCCharge:         *rawCharge,
 	}
 	if err := s.storage.CreateCharge(ctx, charge); err != nil {
 		event.Type = EventTypeError
@@ -107,7 +79,7 @@ func (s *Service) CreateCharge(ctx context.Context, params CreateChargeParams) (
 	event.SetPayload(charge)
 	_ = s.createEvent(ctx, event)
 
-	return *chargeID, nil
+	return charge.ID, nil
 }
 
 type CreateTopUpRequestParams struct {
@@ -120,34 +92,36 @@ type CreateTopUpRequestParams struct {
 }
 
 type TopUpConfig struct {
-	ConfirmationUrl string
-	ReturnUrl       *string
+	ConfirmationUrl string  `json:"confirmationUrl"`
+	TrialDays       *int    `json:"trialDays"`
+	Months          *int    `json:"months"`
+	ReturnUrl       *string `json:"returnUrl"`
 }
 
 func (s *Service) CreateTopUpRequest(ctx context.Context, params CreateTopUpRequestParams) (string, error) {
 	event := toEvent(s.getUniqueID(), params.OrganizationID, EventActionCreateTopUp, EventTypeInfo, params)
 	isTest := params.Test || params.OrganizationID == s.masterOrgID
-	returnUrl := s.returnURL
+	config := ChargeConfig{
+		ReturnUrl: &s.returnURL,
+	}
+
 	if params.Config.ReturnUrl != nil {
-		returnUrl = *params.Config.ReturnUrl
+		config.ReturnUrl = params.Config.ReturnUrl
 	}
-	chargeType, err := mapTopUpTypeToChargeType(params.Type)
-	if err != nil {
-		event.Type = EventTypeError
-		return "", s.toError(ctx, toErrorParams{
-			event: event,
-			err:   fmt.Errorf("failed to map charge type: %w", err),
-		})
+	if params.Config.TrialDays != nil {
+		config.TrialDays = params.Config.TrialDays
 	}
+	if params.Config.Months != nil {
+		config.Months = params.Config.Months
+	}
+
 	chargeID, rawCharge, err := s.createBillingCharge(ctx, createBillingChargeParams{
 		Test:           isTest,
 		OrganizationID: params.OrganizationID,
 		Name:           params.Name,
 		Amount:         params.Amount,
-		Type:           *chargeType,
-		Config: ChargeConfig{
-			ReturnUrl: &returnUrl,
-		},
+		Type:           params.Type,
+		Config:         config,
 	})
 	if err != nil {
 		event.Type = EventTypeError
@@ -192,22 +166,17 @@ func (s *Service) CreateTopUpRequest(ctx context.Context, params CreateTopUpRequ
 
 func (s *Service) GetBalance(ctx context.Context, organizationID string) (float32, error) {
 	key := fmt.Sprintf("balance-%s", organizationID)
-	// TODO is this capacity ok?
-	cache, err := otter.MustBuilder[string, float32](100000).
-		CollectStats().
-		WithTTL(time.Minute).
-		Build()
-	if err != nil {
-		return 0, fmt.Errorf("failed to build cache: %w", err)
-	}
 
-	value, ok := cache.Get(key)
+	value, ok := s.cache.Get(key)
 	if ok {
 		return value, nil
 	}
 
 	balance, err := s.storage.GetBalance(ctx, organizationID)
-	cache.Set(key, balance)
+	if err != nil {
+		return float32(0), fmt.Errorf("failed to get balance: %w", err)
+	}
+	s.cache.Set(key, balance)
 
 	return balance, nil
 }
@@ -229,7 +198,7 @@ func (s *Service) CancelTopUpRequest(ctx context.Context, organizationID string,
 	if topUp == nil {
 		event.SetPayload(map[string]interface{}{"id": ID, "result": "top up not found"})
 		_ = s.createEvent(ctx, event)
-		return nil
+		return ErrTopUpNotFound
 	}
 
 	_, err = s.billingAPI.CancelRecurrentCharge(ctx, ID)
@@ -243,6 +212,12 @@ func (s *Service) CancelTopUpRequest(ctx context.Context, organizationID string,
 
 	err = s.storage.UpdateTopUpStatus(ctx, ID, TopUpStatusCancelled)
 	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			event.SetPayload(map[string]interface{}{"id": ID, "result": "top up not found"})
+			_ = s.createEvent(ctx, event)
+			return ErrTopUpNotFound
+		}
+
 		event.Type = EventTypeError
 		return s.toError(ctx, toErrorParams{
 			event: event,
@@ -255,10 +230,16 @@ func (s *Service) CancelTopUpRequest(ctx context.Context, organizationID string,
 	return nil
 }
 
-func (s *Service) UpdateTopUpStatus(ctx context.Context, organizationID string, ID string) error {
-	event := toEvent(s.getUniqueID(), organizationID, EventActionUpdateTopUpStatus, EventTypeInfo, map[string]interface{}{"id": ID, "status": TopUpStatusCancelled})
+func (s *Service) ForceCancelTopUp(ctx context.Context, organizationID string, ID string) error {
+	event := toEvent(s.getUniqueID(), organizationID, EventActionForceCancelTopUp, EventTypeInfo, map[string]interface{}{"id": ID, "status": TopUpStatusCancelled})
 	err := s.storage.UpdateTopUpStatus(ctx, ID, TopUpStatusCancelled)
 	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			event.SetPayload(map[string]interface{}{"id": ID, "result": "top up not found"})
+			_ = s.createEvent(ctx, event)
+			return ErrTopUpNotFound
+		}
+
 		event.Type = EventTypeError
 		return s.toError(ctx, toErrorParams{
 			event: event,
@@ -271,31 +252,13 @@ func (s *Service) UpdateTopUpStatus(ctx context.Context, organizationID string, 
 
 func (s *Service) CancelCharge(ctx context.Context, organizationID string, ID string) error {
 	event := toEvent(s.getUniqueID(), organizationID, EventActionCancelCharge, EventTypeInfo, map[string]interface{}{"id": ID})
-	charge, err := s.storage.GetChargeByIdAndType(ctx, ID, ChargeTypeRecurrent)
+	err := s.storage.UpdateChargeStatus(ctx, ID, ChargeStatusCancelled)
 	if err != nil {
-		event.Type = EventTypeError
-		return s.toError(ctx, toErrorParams{
-			event: event,
-			err:   err,
-		})
-	}
-	if charge == nil {
-		event.SetPayload(map[string]interface{}{"id": ID, "result": "charge not found"})
-		_ = s.createEvent(ctx, event)
-		return nil
-	}
-
-	_, err = s.billingAPI.CancelRecurrentCharge(ctx, ID)
-	if err != nil {
-		event.Type = EventTypeError
-		return s.toError(ctx, toErrorParams{
-			event: event,
-			err:   err,
-		})
-	}
-
-	err = s.storage.UpdateChargeStatus(ctx, ID, ChargeStatusCancelled)
-	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			event.SetPayload(map[string]interface{}{"id": ID, "result": "charge not found"})
+			_ = s.createEvent(ctx, event)
+			return ErrChargeNotFound
+		}
 		event.Type = EventTypeError
 		return s.toError(ctx, toErrorParams{
 			event: event,
@@ -308,27 +271,19 @@ func (s *Service) CancelCharge(ctx context.Context, organizationID string, ID st
 	return nil
 }
 
-func (s *Service) UpdateChargeStatus(ctx context.Context, organizationID string, ID string) error {
-	event := toEvent(s.getUniqueID(), organizationID, EventActionUpdateChargeStatus, EventTypeInfo, map[string]interface{}{"id": ID, "status": ChargeStatusCancelled})
-	err := s.storage.UpdateChargeStatus(ctx, ID, ChargeStatusCancelled)
-	if err != nil {
-		event.Type = EventTypeError
-		return s.toError(ctx, toErrorParams{
-			event: event,
-			err:   err,
-		})
-	}
-	_ = s.createEvent(ctx, event)
-	return nil
-}
-
 type createBillingChargeParams struct {
 	Test           bool
 	Name           string
 	Amount         float32
 	OrganizationID string
-	Type           ChargeType
+	Type           TopUpType
 	Config         ChargeConfig
+}
+
+type ChargeConfig struct {
+	TrialDays *int    `json:"trialDays"`
+	Months    *int    `json:"months"`
+	ReturnUrl *string `json:"returnUrl"`
 }
 
 func (s *Service) createBillingCharge(ctx context.Context, params createBillingChargeParams) (*string, *json.RawMessage, error) {
@@ -341,7 +296,7 @@ func (s *Service) createBillingCharge(ctx context.Context, params createBillingC
 	var rawCharge json.RawMessage
 	var chargeID string
 	switch params.Type {
-	case ChargeTypeDirect:
+	case TopUpTypeDirect:
 		lcCharge, err := s.billingAPI.CreateDirectCharge(ctx, livechat.CreateDirectChargeParams{
 			Name:      params.Name,
 			ReturnURL: returnUrl,
@@ -362,7 +317,7 @@ func (s *Service) createBillingCharge(ctx context.Context, params createBillingC
 			return nil, nil, fmt.Errorf("failed to marshal lc direct charge: %w", err)
 		}
 		chargeID = lcCharge.ID
-	case ChargeTypeRecurrent:
+	case TopUpTypeRecurrent:
 		if params.Config.Months == nil {
 			return nil, nil, fmt.Errorf("failed to create recurrent charge v2 via lc: charge config months is nil")
 		}
@@ -412,22 +367,6 @@ type toErrorParams struct {
 func (s *Service) toError(ctx context.Context, params toErrorParams) error {
 	_ = s.createEvent(ctx, params.event)
 	return fmt.Errorf("%s: %w", params.event.ID, params.err)
-}
-
-func mapTopUpTypeToChargeType(topUpType TopUpType) (*ChargeType, error) {
-	var ct ChargeType
-	switch topUpType {
-	case TopUpTypeDirect:
-		ct = ChargeTypeDirect
-	case TopUpTypeRecurrent:
-		ct = ChargeTypeRecurrent
-	}
-
-	if len(ct) > 0 {
-		return &ct, nil
-	}
-
-	return nil, fmt.Errorf("cannot map top up type: '%s' to charge type", topUpType)
 }
 
 func toEvent(id string, organizationID string, action EventAction, eventType EventType, payload any) Event {
