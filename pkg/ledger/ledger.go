@@ -28,14 +28,14 @@ var (
 )
 
 type Service struct {
-	xIdProvider common.XIdProviderInterface
+	idProvider  common.IdProviderInterface
 	billingAPI  livechat.ApiInterface
 	storage     Storage
 	returnURL   string
 	masterOrgID string
 }
 
-func NewService(xIdProvider common.XIdProviderInterface, httpClient *http.Client, livechatEnvironment string, tokenFn livechat.TokenFn, storage Storage, returnUrl, masterOrgID string) *Service {
+func NewService(idProvider common.IdProviderInterface, httpClient *http.Client, livechatEnvironment string, tokenFn livechat.TokenFn, storage Storage, returnUrl, masterOrgID string) *Service {
 	a := &livechat.Api{
 		HttpClient: httpClient,
 		ApiBaseURL: common.EnvURL(livechat.BillingAPIBaseURL, livechatEnvironment),
@@ -43,7 +43,7 @@ func NewService(xIdProvider common.XIdProviderInterface, httpClient *http.Client
 	}
 
 	return &Service{
-		xIdProvider: xIdProvider,
+		idProvider:  idProvider,
 		billingAPI:  a,
 		storage:     storage,
 		returnURL:   returnUrl,
@@ -376,5 +376,5 @@ func toEvent(id string, organizationID string, action EventAction, eventType Eve
 }
 
 func (s *Service) getUniqueID() string {
-	return s.xIdProvider.GenerateXId()
+	return s.idProvider.GenerateId()
 }

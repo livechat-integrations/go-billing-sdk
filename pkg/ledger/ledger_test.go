@@ -16,7 +16,7 @@ var sm = new(storageMock)
 var xm = new(xIdMock)
 
 var s = Service{
-	xIdProvider: xm,
+	idProvider:  xm,
 	billingAPI:  am,
 	storage:     sm,
 	returnURL:   "returnURL",
@@ -37,7 +37,7 @@ type xIdMock struct {
 	mock.Mock
 }
 
-func (x *xIdMock) GenerateXId() string {
+func (x *xIdMock) GenerateId() string {
 	args := x.Called()
 	return args.Get(0).(string)
 }
@@ -151,7 +151,7 @@ func TestService_CreateCharge(t *testing.T) {
 		lcoid := "lcOrganizationID"
 		xid := "2341"
 
-		xm.On("GenerateXId").Return(xid, nil)
+		xm.On("GenerateId").Return(xid, nil)
 		domainCharge := Charge{
 			ID:               xid,
 			LCOrganizationID: lcoid,
@@ -195,7 +195,7 @@ func TestService_CreateCharge(t *testing.T) {
 			OrganizationID: lcoid,
 		}
 
-		xm.On("GenerateXId").Return(xid, nil)
+		xm.On("GenerateId").Return(xid, nil)
 		domainCharge := Charge{
 			ID:               xid,
 			LCOrganizationID: lcoid,
@@ -241,7 +241,7 @@ func TestService_CreateTopUpRequest(t *testing.T) {
 			Months:    months,
 		}
 
-		xm.On("GenerateXId").Return(xid, nil)
+		xm.On("GenerateId").Return(xid, nil)
 
 		rawRC, _ := json.Marshal(rc)
 		topUp := TopUp{
@@ -302,7 +302,7 @@ func TestService_CreateTopUpRequest(t *testing.T) {
 			Config:         TopUpConfig{},
 		}
 
-		xm.On("GenerateXId").Return(xid, nil)
+		xm.On("GenerateId").Return(xid, nil)
 
 		sc, _ := json.Marshal(params)
 
@@ -338,7 +338,7 @@ func TestService_CreateTopUpRequest(t *testing.T) {
 			},
 		}
 
-		xm.On("GenerateXId").Return(xid, nil)
+		xm.On("GenerateId").Return(xid, nil)
 
 		am.On("CreateRecurrentChargeV2", ctx, livechat.CreateRecurrentChargeV2Params{
 			Name:      "name",
@@ -383,7 +383,7 @@ func TestService_CreateTopUpRequest(t *testing.T) {
 			},
 		}
 
-		xm.On("GenerateXId").Return(xid, nil)
+		xm.On("GenerateId").Return(xid, nil)
 
 		am.On("CreateRecurrentChargeV2", ctx, livechat.CreateRecurrentChargeV2Params{
 			Name:      "name",
@@ -426,7 +426,7 @@ func TestService_CreateTopUpRequest(t *testing.T) {
 			Quantity: 1,
 		}
 
-		xm.On("GenerateXId").Return(xid, nil)
+		xm.On("GenerateId").Return(xid, nil)
 
 		rawRC, _ := json.Marshal(rc)
 		topUp := TopUp{
@@ -483,7 +483,7 @@ func TestService_CreateTopUpRequest(t *testing.T) {
 			Config:         TopUpConfig{},
 		}
 
-		xm.On("GenerateXId").Return(xid, nil)
+		xm.On("GenerateId").Return(xid, nil)
 
 		am.On("CreateDirectCharge", ctx, livechat.CreateDirectChargeParams{
 			Name:      "name",
@@ -523,7 +523,7 @@ func TestService_CreateTopUpRequest(t *testing.T) {
 			Config:         TopUpConfig{},
 		}
 
-		xm.On("GenerateXId").Return(xid, nil)
+		xm.On("GenerateId").Return(xid, nil)
 
 		am.On("CreateDirectCharge", ctx, livechat.CreateDirectChargeParams{
 			Name:      "name",
@@ -597,7 +597,7 @@ func TestService_CancelTopUpRequest(t *testing.T) {
 			Months:    months,
 		}
 
-		xm.On("GenerateXId").Return(xid, nil)
+		xm.On("GenerateId").Return(xid, nil)
 
 		rawRC, _ := json.Marshal(rc)
 		topUp := TopUp{
@@ -633,7 +633,7 @@ func TestService_CancelTopUpRequest(t *testing.T) {
 		lcoid := "lcOrganizationID"
 		xid := "2341"
 
-		xm.On("GenerateXId").Return(xid, nil)
+		xm.On("GenerateId").Return(xid, nil)
 
 		sm.On("GetTopUpByIdAndType", ctx, "id", TopUpTypeRecurrent).Return(nil, nil).Once()
 
@@ -658,7 +658,7 @@ func TestService_CancelTopUpRequest(t *testing.T) {
 		lcoid := "lcOrganizationID"
 		xid := "2341"
 
-		xm.On("GenerateXId").Return(xid, nil)
+		xm.On("GenerateId").Return(xid, nil)
 
 		sm.On("GetTopUpByIdAndType", ctx, "id", TopUpTypeRecurrent).Return(nil, assert.AnError).Once()
 
@@ -695,7 +695,7 @@ func TestService_CancelTopUpRequest(t *testing.T) {
 			Months:    months,
 		}
 
-		xm.On("GenerateXId").Return(xid, nil)
+		xm.On("GenerateId").Return(xid, nil)
 
 		rawRC, _ := json.Marshal(rc)
 		topUp := TopUp{
@@ -742,7 +742,7 @@ func TestService_CancelTopUpRequest(t *testing.T) {
 			Months:    months,
 		}
 
-		xm.On("GenerateXId").Return(xid, nil)
+		xm.On("GenerateId").Return(xid, nil)
 
 		rawRC, _ := json.Marshal(rc)
 		topUp := TopUp{
@@ -790,7 +790,7 @@ func TestService_CancelTopUpRequest(t *testing.T) {
 			Months:    months,
 		}
 
-		xm.On("GenerateXId").Return(xid, nil)
+		xm.On("GenerateId").Return(xid, nil)
 
 		rawRC, _ := json.Marshal(rc)
 		topUp := TopUp{
@@ -828,7 +828,7 @@ func TestService_ForceCancelTopUp(t *testing.T) {
 		lcoid := "lcOrganizationID"
 		xid := "2341"
 
-		xm.On("GenerateXId").Return(xid, nil)
+		xm.On("GenerateId").Return(xid, nil)
 
 		sm.On("UpdateTopUpStatus", ctx, "id", TopUpStatusCancelled).Return(nil).Once()
 
@@ -853,7 +853,7 @@ func TestService_ForceCancelTopUp(t *testing.T) {
 		lcoid := "lcOrganizationID"
 		xid := "2341"
 
-		xm.On("GenerateXId").Return(xid, nil)
+		xm.On("GenerateId").Return(xid, nil)
 
 		sm.On("UpdateTopUpStatus", ctx, "id", TopUpStatusCancelled).Return(ErrNotFound).Once()
 
@@ -878,7 +878,7 @@ func TestService_ForceCancelTopUp(t *testing.T) {
 		lcoid := "lcOrganizationID"
 		xid := "2341"
 
-		xm.On("GenerateXId").Return(xid, nil)
+		xm.On("GenerateId").Return(xid, nil)
 
 		sm.On("UpdateTopUpStatus", ctx, "id", TopUpStatusCancelled).Return(assert.AnError).Once()
 
@@ -905,7 +905,7 @@ func TestService_CancelCharge(t *testing.T) {
 		lcoid := "lcOrganizationID"
 		xid := "2341"
 
-		xm.On("GenerateXId").Return(xid, nil)
+		xm.On("GenerateId").Return(xid, nil)
 		sm.On("UpdateChargeStatus", ctx, "id", ChargeStatusCancelled).Return(nil).Once()
 
 		sc, _ := json.Marshal(map[string]interface{}{"id": "id", "result": "success"})
@@ -929,7 +929,7 @@ func TestService_CancelCharge(t *testing.T) {
 		lcoid := "lcOrganizationID"
 		xid := "2341"
 
-		xm.On("GenerateXId").Return(xid, nil)
+		xm.On("GenerateId").Return(xid, nil)
 		sm.On("UpdateChargeStatus", ctx, "id", ChargeStatusCancelled).Return(ErrNotFound).Once()
 
 		sc, _ := json.Marshal(map[string]interface{}{"id": "id", "result": "charge not found"})
@@ -953,7 +953,7 @@ func TestService_CancelCharge(t *testing.T) {
 		lcoid := "lcOrganizationID"
 		xid := "2341"
 
-		xm.On("GenerateXId").Return(xid, nil)
+		xm.On("GenerateId").Return(xid, nil)
 
 		sm.On("UpdateChargeStatus", ctx, "id", ChargeStatusCancelled).Return(assert.AnError).Once()
 

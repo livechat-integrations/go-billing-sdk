@@ -17,13 +17,13 @@ func EnvURL(url, lcEnv string) string {
 	return url
 }
 
-type XIdProviderInterface interface {
-	GenerateXId() string
+type IdProviderInterface interface {
+	GenerateId() string
 }
 
-type XIdProvider struct {
+type IdProvider struct {
 }
 
-func (XIdProvider) GenerateXId() string {
+func (IdProvider) GenerateId() string {
 	return xid.New().String()
 }
