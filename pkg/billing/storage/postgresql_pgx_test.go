@@ -17,7 +17,6 @@ import (
 
 var dbMock, _ = pgxmock.NewConn()
 var s = NewPostgresqlPGX(dbMock)
-var ctx = context.Background()
 
 func TestNewPostgresqlSQLC(t *testing.T) {
 	t.Run("success", func(t *testing.T) {

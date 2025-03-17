@@ -97,7 +97,7 @@ func TestAPI_call(t *testing.T) {
 	})
 
 	t.Run("error create request", func(t *testing.T) {
-		_, err := a.call(nil, "GET", "/", nil)
+		_, err := a.call(nil, "GET", "/", nil) //nolint:staticcheck
 		assert.ErrorContains(t, err, "create request")
 	})
 
