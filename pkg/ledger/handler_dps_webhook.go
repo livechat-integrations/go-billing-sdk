@@ -29,8 +29,7 @@ func NewHandler(ledger LedgerInterface) *Handler {
 }
 
 func (h *Handler) HandleDPSWebhook(ctx context.Context, req DPSWebhookRequest) error {
-	event := h.ledger.ToEvent(h.ledger.GetUniqueID(), req.LCOrganizationID, EventActionDPSWebhook, EventTypeInfo, map[string]interface{}{})
-	event.SetPayload(req)
+	event := h.ledger.ToEvent(h.ledger.GetUniqueID(), req.LCOrganizationID, EventActionDPSWebhook, EventTypeInfo, req)
 	switch req.Event {
 	case "application_uninstalled":
 		topUps, err := h.ledger.GetTopUpsByOrganizationIDAndStatus(ctx, req.LCOrganizationID, TopUpStatusActive)
