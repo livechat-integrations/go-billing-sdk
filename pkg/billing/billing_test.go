@@ -36,6 +36,16 @@ type apiMock struct {
 	mock.Mock
 }
 
+func (m *apiMock) GetDirectCharge(ctx context.Context, id string) (*livechat.DirectCharge, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (m *apiMock) GetRecurrentChargeV2(ctx context.Context, id string) (*livechat.RecurrentChargeV2, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
 func (m *apiMock) CreateDirectCharge(ctx context.Context, params livechat.CreateDirectChargeParams) (*livechat.DirectCharge, error) {
 	//TODO implement me
 	panic("implement me")

@@ -80,9 +80,11 @@ type RecurrentChargeV2 struct {
 
 type ApiInterface interface {
 	CreateDirectCharge(ctx context.Context, params CreateDirectChargeParams) (*DirectCharge, error)
+	GetDirectCharge(ctx context.Context, id string) (*DirectCharge, error)
 	CreateRecurrentCharge(ctx context.Context, params CreateRecurrentChargeParams) (*RecurrentCharge, error)
 	CreateRecurrentChargeV2(ctx context.Context, params CreateRecurrentChargeV2Params) (*RecurrentChargeV2, error)
 	GetRecurrentCharge(ctx context.Context, id string) (*RecurrentCharge, error)
+	GetRecurrentChargeV2(ctx context.Context, id string) (*RecurrentChargeV2, error)
 	CancelRecurrentCharge(ctx context.Context, id string) (*RecurrentChargeV2, error)
 }
 
@@ -127,6 +129,15 @@ func (a *Api) CreateDirectCharge(ctx context.Context, params CreateDirectChargeP
 		CommissionPercent: params.CommissionPercent,
 		Payload:           params.Payload,
 	})
+	if err != nil {
+		return nil, err
+	}
+
+	return asDirectCharge(resp)
+}
+
+func (a *Api) GetDirectCharge(ctx context.Context, id string) (*DirectCharge, error) {
+	resp, err := a.call(ctx, "GET", "/v1/direct_charge/"+id, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -213,6 +224,15 @@ func (a *Api) GetRecurrentCharge(ctx context.Context, id string) (*RecurrentChar
 	}
 
 	return asRecurrentCharge(resp)
+}
+
+func (a *Api) GetRecurrentChargeV2(ctx context.Context, id string) (*RecurrentChargeV2, error) {
+	resp, err := a.call(ctx, "GET", "/v1/recurrent_charge/"+id, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return asRecurrentChargeV2(resp)
 }
 
 func (a *Api) CancelRecurrentCharge(ctx context.Context, id string) (*RecurrentChargeV2, error) {

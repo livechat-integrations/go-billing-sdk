@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS events
     type               varchar(255) NOT NULL,
     action             varchar(255) NOT NULL,
     payload            jsonb,
+    error              varchar(255),
     created_at         TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
 CREATE INDEX ON events (lc_organization_id);

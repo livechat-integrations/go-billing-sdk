@@ -102,45 +102,54 @@ func TestPostgresqlSQLC_UpdateChargeStatus(t *testing.T) {
 	})
 }
 
-func TestPostgresqlSQLC_GetChargeById(t *testing.T) {
+func TestPostgresqlSQLC_GetTopUpByID(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		amount := float32(3.14)
-		status := ledger.ChargeStatusActive
+		status := ledger.TopUpStatusActive
+		topUpType := ledger.TopUpTypeDirect
 		v := pgtype.Numeric{}
 		_ = v.Scan(fmt.Sprintf("%f", amount))
-		dbMock.ExpectQuery("SELECT id, amount, lc_organization_id, status, created_at, updated_at FROM charges").
-			WithArgs("1", string(ledger.ChargeStatusCancelled)).
+		url := "some_url"
+		someDate, _ := time.Parse(time.DateTime, "2025-03-14 12:31:56")
+		someDate2, _ := time.Parse(time.DateTime, "2025-06-14 12:31:56")
+		dbMock.ExpectQuery("name: GetTopUpByID :one SELECT id, amount, lc_organization_id, type, status, lc_charge, confirmation_url, current_topped_up_at, next_top_up_at, created_at, updated_at FROM top_ups").
+			WithArgs("1").
 			WillReturnRows(
-				pgxmock.NewRows([]string{"id", "amount", "lc_organization_id", "status", "created_at", "updated_at"}).
-					AddRow("1", v, "lcOrganizationID", string(status), nil, nil)).Times(1)
+				pgxmock.NewRows([]string{"id", "amount", "lc_organization_id", "type", "status", "lc_charge", "confirmation_url", "current_topped_up_at", "next_top_up_at", "created_at", "updated_at"}).
+					AddRow("1", v, "lcOrganizationID", string(topUpType), string(status), []byte("{}"), url, pgtype.Timestamptz{Time: someDate, Valid: true}, pgtype.Timestamptz{Time: someDate2, Valid: true}, nil, nil)).Times(1)
 
-		c, err := s.GetChargeById(context.Background(), "1")
+		c, err := s.GetTopUpByID(context.Background(), "1")
 		assert.NoError(t, err)
 		assert.Equal(t, "1", c.ID)
-		assert.Equal(t, amount, c.Amount)
-		assert.Equal(t, "lcOrganizationID", c.LCOrganizationID)
 		assert.Equal(t, status, c.Status)
+		assert.Equal(t, amount, c.Amount)
+		assert.Equal(t, topUpType, c.Type)
+		assert.Equal(t, "lcOrganizationID", c.LCOrganizationID)
+		assert.Equal(t, json.RawMessage("{}"), c.LCCharge)
+		assert.Equal(t, url, c.ConfirmationUrl)
+		assert.Equal(t, someDate, c.CurrentToppedUpAt)
+		assert.Equal(t, someDate2, c.NextTopUpAt)
 
 		assert.NoError(t, dbMock.ExpectationsWereMet())
 	})
 
 	t.Run("no rows", func(t *testing.T) {
-		dbMock.ExpectQuery("SELECT id, amount, lc_organization_id, status, created_at, updated_at FROM charges").
-			WithArgs("1", string(ledger.ChargeStatusCancelled)).Times(1).
+		dbMock.ExpectQuery("name: GetTopUpByID :one SELECT id, amount, lc_organization_id, type, status, lc_charge, confirmation_url, current_topped_up_at, next_top_up_at, created_at, updated_at FROM top_ups").
+			WithArgs("1").Times(1).
 			WillReturnError(pgx.ErrNoRows)
 
-		c, err := s.GetChargeById(context.Background(), "1")
+		c, err := s.GetTopUpByID(context.Background(), "1")
 		assert.NoError(t, err)
 		assert.Nil(t, c)
 		assert.NoError(t, dbMock.ExpectationsWereMet())
 	})
 
 	t.Run("error", func(t *testing.T) {
-		dbMock.ExpectQuery("SELECT id, amount, lc_organization_id, status, created_at, updated_at FROM charges").
-			WithArgs("1", string(ledger.ChargeStatusCancelled)).Times(1).
+		dbMock.ExpectQuery("name: GetTopUpByID :one SELECT id, amount, lc_organization_id, type, status, lc_charge, confirmation_url, current_topped_up_at, next_top_up_at, created_at, updated_at FROM top_ups").
+			WithArgs("1").Times(1).
 			WillReturnError(assert.AnError)
 
-		_, err := s.GetChargeById(context.Background(), "1")
+		_, err := s.GetTopUpByID(context.Background(), "1")
 		assert.ErrorIs(t, err, assert.AnError)
 		assert.NoError(t, dbMock.ExpectationsWereMet())
 	})
@@ -208,6 +217,79 @@ func TestPostgresqlSQLC_CreateTopUp(t *testing.T) {
 			LCCharge:          json.RawMessage("{}"),
 		})
 		assert.ErrorIs(t, err, assert.AnError)
+		assert.NoError(t, dbMock.ExpectationsWereMet())
+	})
+}
+
+func TestPostgresqlSQLC_UpsertTopUp(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
+		emptyRawPayload, _ := json.Marshal(json.RawMessage("{}"))
+		id := "1"
+		lcoid := "lcOrganizationID"
+		amount := float32(3.14)
+		status := ledger.TopUpStatusPending
+		topUpType := ledger.TopUpTypeRecurrent
+		v := pgtype.Numeric{}
+		_ = v.Scan(fmt.Sprintf("%f", amount))
+		url := "some_url"
+		someDate, _ := time.Parse(time.DateTime, "2025-03-14 12:31:56")
+		someDate2, _ := time.Parse(time.DateTime, "2025-06-14 12:31:56")
+
+		dbMock.ExpectQuery("UpsertTopUp :one INSERT INTO top_ups").
+			WithArgs(id, string(status), v, string(topUpType), lcoid, emptyRawPayload, url, pgtype.Timestamptz{Time: someDate, Valid: true}, pgtype.Timestamptz{Time: someDate2, Valid: true}).
+			WillReturnRows(
+				pgxmock.NewRows([]string{"id", "amount", "lc_organization_id", "type", "status", "lc_charge", "confirmation_url", "current_topped_up_at", "next_top_up_at", "created_at", "updated_at"}).
+					AddRow("1", v, "lcOrganizationID", string(topUpType), string(status), []byte("{}"), url, pgtype.Timestamptz{Time: someDate, Valid: true}, pgtype.Timestamptz{Time: someDate2, Valid: true}, nil, nil)).Times(1)
+
+		ut, err := s.UpsertTopUp(context.Background(), ledger.TopUp{
+			ID:                id,
+			LCOrganizationID:  lcoid,
+			Status:            status,
+			Amount:            amount,
+			Type:              topUpType,
+			ConfirmationUrl:   url,
+			CurrentToppedUpAt: someDate,
+			NextTopUpAt:       someDate2,
+			LCCharge:          json.RawMessage("{}"),
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, id, ut.ID)
+		assert.Equal(t, status, ut.Status)
+		assert.Equal(t, amount, ut.Amount)
+		assert.Equal(t, lcoid, ut.LCOrganizationID)
+		assert.Equal(t, url, ut.ConfirmationUrl)
+		assert.NoError(t, dbMock.ExpectationsWereMet())
+	})
+
+	t.Run("error not found", func(t *testing.T) {
+		emptyRawPayload, _ := json.Marshal(json.RawMessage("{}"))
+		id := "1"
+		lcoid := "lcOrganizationID"
+		amount := float32(3.14)
+		status := ledger.TopUpStatusPending
+		topUpType := ledger.TopUpTypeRecurrent
+		v := pgtype.Numeric{}
+		_ = v.Scan(fmt.Sprintf("%f", amount))
+		url := "some_url"
+		someDate, _ := time.Parse(time.DateTime, "2025-03-14 12:31:56")
+		someDate2, _ := time.Parse(time.DateTime, "2025-06-14 12:31:56")
+
+		dbMock.ExpectQuery("UpsertTopUp :one INSERT INTO top_ups").
+			WithArgs(id, string(status), v, string(topUpType), lcoid, emptyRawPayload, url, pgtype.Timestamptz{Time: someDate, Valid: true}, pgtype.Timestamptz{Time: someDate2, Valid: true}).
+			Times(1).WillReturnError(pgx.ErrNoRows)
+
+		_, err := s.UpsertTopUp(context.Background(), ledger.TopUp{
+			ID:                id,
+			LCOrganizationID:  lcoid,
+			Status:            status,
+			Amount:            amount,
+			Type:              topUpType,
+			ConfirmationUrl:   url,
+			CurrentToppedUpAt: someDate,
+			NextTopUpAt:       someDate2,
+			LCCharge:          json.RawMessage("{}"),
+		})
+		assert.ErrorIs(t, err, ledger.ErrNotFound)
 		assert.NoError(t, dbMock.ExpectationsWereMet())
 	})
 }
@@ -317,6 +399,69 @@ func TestPostgresqlSQLC_GetTopUpsByOrganizationID(t *testing.T) {
 	})
 }
 
+func TestPostgresqlSQLC_GetTopUpsByOrganizationIDAndStatus(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
+		amount := float32(3.14)
+		status := ledger.TopUpStatusActive
+		topUpType := ledger.TopUpTypeDirect
+		v := pgtype.Numeric{}
+		_ = v.Scan(fmt.Sprintf("%f", amount))
+		url := "some_url"
+		someDate, _ := time.Parse(time.DateTime, "2025-03-14 12:31:56")
+		someDate2, _ := time.Parse(time.DateTime, "2025-06-14 12:31:56")
+		dbMock.ExpectQuery("GetTopUpsByOrganizationIDAndStatus :many SELECT id, amount, lc_organization_id, type, status, lc_charge, confirmation_url, current_topped_up_at, next_top_up_at, created_at, updated_at FROM top_ups WHERE lc_organization_id").
+			WithArgs("lcOrganizationID", string(status)).
+			WillReturnRows(
+				pgxmock.NewRows([]string{"id", "amount", "lc_organization_id", "type", "status", "lc_charge", "confirmation_url", "current_topped_up_at", "next_top_up_at", "created_at", "updated_at"}).
+					AddRow("1", v, "lcOrganizationID", string(topUpType), string(status), []byte("{}"), url, pgtype.Timestamptz{Time: someDate, Valid: true}, pgtype.Timestamptz{Time: someDate2, Valid: true}, nil, nil)).Times(1)
+
+		c, err := s.GetTopUpsByOrganizationIDAndStatus(context.Background(), "lcOrganizationID", status)
+		assert.NoError(t, err)
+		assert.Len(t, c, 1)
+		assert.Equal(t, "1", c[0].ID)
+		assert.Equal(t, status, c[0].Status)
+		assert.Equal(t, amount, c[0].Amount)
+		assert.Equal(t, topUpType, c[0].Type)
+		assert.Equal(t, "lcOrganizationID", c[0].LCOrganizationID)
+		assert.Equal(t, json.RawMessage("{}"), c[0].LCCharge)
+		assert.Equal(t, url, c[0].ConfirmationUrl)
+		assert.Equal(t, someDate, c[0].CurrentToppedUpAt)
+		assert.Equal(t, someDate2, c[0].NextTopUpAt)
+
+		assert.NoError(t, dbMock.ExpectationsWereMet())
+	})
+
+	t.Run("no rows", func(t *testing.T) {
+		amount := float32(3.14)
+		status := ledger.TopUpStatusActive
+		v := pgtype.Numeric{}
+		_ = v.Scan(fmt.Sprintf("%f", amount))
+		dbMock.ExpectQuery("GetTopUpsByOrganizationIDAndStatus :many SELECT id, amount, lc_organization_id, type, status, lc_charge, confirmation_url, current_topped_up_at, next_top_up_at, created_at, updated_at FROM top_ups WHERE lc_organization_id").
+			WithArgs("lcOrganizationID", string(status)).Times(1).
+			WillReturnError(pgx.ErrNoRows)
+
+		topUps, err := s.GetTopUpsByOrganizationIDAndStatus(context.Background(), "lcOrganizationID", status)
+		assert.NoError(t, err)
+		assert.Len(t, topUps, 0)
+		assert.NoError(t, dbMock.ExpectationsWereMet())
+	})
+
+	t.Run("error", func(t *testing.T) {
+		amount := float32(3.14)
+		status := ledger.TopUpStatusActive
+		v := pgtype.Numeric{}
+		_ = v.Scan(fmt.Sprintf("%f", amount))
+		dbMock.ExpectQuery("GetTopUpsByOrganizationIDAndStatus :many SELECT id, amount, lc_organization_id, type, status, lc_charge, confirmation_url, current_topped_up_at, next_top_up_at, created_at, updated_at FROM top_ups WHERE lc_organization_id").
+			WithArgs("lcOrganizationID", string(status)).Times(1).
+			WillReturnError(assert.AnError)
+
+		topUps, err := s.GetTopUpsByOrganizationIDAndStatus(context.Background(), "lcOrganizationID", status)
+		assert.ErrorIs(t, err, assert.AnError)
+		assert.Len(t, topUps, 0)
+		assert.NoError(t, dbMock.ExpectationsWereMet())
+	})
+}
+
 func TestPostgresqlSQLC_UpdateTopUpStatus(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		dbMock.ExpectExec("UPDATE top_ups SET status").
@@ -349,7 +494,7 @@ func TestPostgresqlSQLC_UpdateTopUpStatus(t *testing.T) {
 	})
 }
 
-func TestPostgresqlSQLC_GetTopUpByIdAndType(t *testing.T) {
+func TestPostgresqlSQLC_GetTopUpByIDAndType(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		amount := float32(3.14)
 		status := ledger.TopUpStatusActive
@@ -365,7 +510,7 @@ func TestPostgresqlSQLC_GetTopUpByIdAndType(t *testing.T) {
 				pgxmock.NewRows([]string{"id", "amount", "lc_organization_id", "type", "status", "lc_charge", "confirmation_url", "current_topped_up_at", "next_top_up_at", "created_at", "updated_at"}).
 					AddRow("1", v, "lcOrganizationID", string(topUpType), string(status), []byte("{}"), url, pgtype.Timestamptz{Time: someDate, Valid: true}, pgtype.Timestamptz{Time: someDate2, Valid: true}, nil, nil)).Times(1)
 
-		c, err := s.GetTopUpByIdAndType(context.Background(), "1", topUpType)
+		c, err := s.GetTopUpByIDAndType(context.Background(), "1", topUpType)
 		assert.NoError(t, err)
 		assert.Equal(t, "1", c.ID)
 		assert.Equal(t, status, c.Status)
@@ -386,7 +531,7 @@ func TestPostgresqlSQLC_GetTopUpByIdAndType(t *testing.T) {
 			WithArgs("1", string(topUpType), string(ledger.TopUpStatusCancelled)).Times(1).
 			WillReturnError(pgx.ErrNoRows)
 
-		c, err := s.GetTopUpByIdAndType(context.Background(), "1", topUpType)
+		c, err := s.GetTopUpByIDAndType(context.Background(), "1", topUpType)
 		assert.NoError(t, err)
 		assert.Nil(t, c)
 		assert.NoError(t, dbMock.ExpectationsWereMet())
@@ -398,7 +543,7 @@ func TestPostgresqlSQLC_GetTopUpByIdAndType(t *testing.T) {
 			WithArgs("1", string(topUpType), string(ledger.TopUpStatusCancelled)).Times(1).
 			WillReturnError(assert.AnError)
 
-		_, err := s.GetTopUpByIdAndType(context.Background(), "1", topUpType)
+		_, err := s.GetTopUpByIDAndType(context.Background(), "1", topUpType)
 		assert.ErrorIs(t, err, assert.AnError)
 		assert.NoError(t, dbMock.ExpectationsWereMet())
 	})
@@ -411,8 +556,12 @@ func TestPostgresqlSQLC_CreateEvent(t *testing.T) {
 		lcoid := "lcOrganizationID"
 		action := ledger.EventActionCancelCharge
 		eventType := ledger.EventTypeError
+		em := "lorem ipsum"
 		dbMock.ExpectExec("INSERT INTO events").
-			WithArgs(id, lcoid, string(eventType), string(action), emptyRawPayload).
+			WithArgs(id, lcoid, string(eventType), string(action), emptyRawPayload, pgtype.Text{
+				String: em,
+				Valid:  true,
+			}).
 			WillReturnResult(pgxmock.NewResult("INSERT", 1)).Times(1)
 
 		err := s.CreateEvent(context.Background(), ledger.Event{
@@ -421,6 +570,7 @@ func TestPostgresqlSQLC_CreateEvent(t *testing.T) {
 			Type:             eventType,
 			Action:           action,
 			Payload:          json.RawMessage("{}"),
+			Error:            em,
 		})
 		assert.NoError(t, err)
 		assert.NoError(t, dbMock.ExpectationsWereMet())
@@ -432,8 +582,12 @@ func TestPostgresqlSQLC_CreateEvent(t *testing.T) {
 		lcoid := "lcOrganizationID"
 		action := ledger.EventActionCancelCharge
 		eventType := ledger.EventTypeError
+		em := ""
 		dbMock.ExpectExec("INSERT INTO events").
-			WithArgs(id, lcoid, string(eventType), string(action), emptyRawPayload).Times(1).
+			WithArgs(id, lcoid, string(eventType), string(action), emptyRawPayload, pgtype.Text{
+				String: em,
+				Valid:  true,
+			}).Times(1).
 			WillReturnError(assert.AnError)
 
 		err := s.CreateEvent(context.Background(), ledger.Event{

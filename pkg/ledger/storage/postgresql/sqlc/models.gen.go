@@ -23,6 +23,7 @@ type Event struct {
 	Type             string
 	Action           string
 	Payload          []byte
+	Error            pgtype.Text
 	CreatedAt        pgtype.Timestamptz
 }
 

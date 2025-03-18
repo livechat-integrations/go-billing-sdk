@@ -34,8 +34,8 @@ func (q *Queries) CreateCharge(ctx context.Context, arg CreateChargeParams) erro
 }
 
 const createEvent = `-- name: CreateEvent :exec
-INSERT INTO events(id, lc_organization_id, type, action, payload, created_at)
-VALUES ($1, $2, $3, $4, $5, NOW())
+INSERT INTO events(id, lc_organization_id, type, action, payload, error, created_at)
+VALUES ($1, $2, $3, $4, $5, $6, NOW())
 `
 
 type CreateEventParams struct {
@@ -44,6 +44,7 @@ type CreateEventParams struct {
 	Type             string
 	Action           string
 	Payload          []byte
+	Error            pgtype.Text
 }
 
 func (q *Queries) CreateEvent(ctx context.Context, arg CreateEventParams) error {
@@ -53,6 +54,7 @@ func (q *Queries) CreateEvent(ctx context.Context, arg CreateEventParams) error 
 		arg.Type,
 		arg.Action,
 		arg.Payload,
+		arg.Error,
 	)
 	return err
 }
@@ -89,32 +91,6 @@ func (q *Queries) CreateTopUp(ctx context.Context, arg CreateTopUpParams) error 
 	return err
 }
 
-const getChargeByIDWhereStatusIsNot = `-- name: GetChargeByIDWhereStatusIsNot :one
-SELECT id, amount, lc_organization_id, status, created_at, updated_at
-FROM charges
-WHERE id = $1
-  AND status != $2
-`
-
-type GetChargeByIDWhereStatusIsNotParams struct {
-	ID     string
-	Status string
-}
-
-func (q *Queries) GetChargeByIDWhereStatusIsNot(ctx context.Context, arg GetChargeByIDWhereStatusIsNotParams) (Charge, error) {
-	row := q.db.QueryRow(ctx, getChargeByIDWhereStatusIsNot, arg.ID, arg.Status)
-	var i Charge
-	err := row.Scan(
-		&i.ID,
-		&i.Amount,
-		&i.LcOrganizationID,
-		&i.Status,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
 const getOrganizationBalance = `-- name: GetOrganizationBalance :one
 SELECT b.amount::numeric FROM (SELECT (
     SELECT SUM(tu.amount)
@@ -140,6 +116,31 @@ func (q *Queries) GetOrganizationBalance(ctx context.Context, arg GetOrganizatio
 	var b_amount pgtype.Numeric
 	err := row.Scan(&b_amount)
 	return b_amount, err
+}
+
+const getTopUpByID = `-- name: GetTopUpByID :one
+SELECT id, amount, lc_organization_id, type, status, lc_charge, confirmation_url, current_topped_up_at, next_top_up_at, created_at, updated_at
+FROM top_ups
+WHERE id = $1
+`
+
+func (q *Queries) GetTopUpByID(ctx context.Context, id string) (TopUp, error) {
+	row := q.db.QueryRow(ctx, getTopUpByID, id)
+	var i TopUp
+	err := row.Scan(
+		&i.ID,
+		&i.Amount,
+		&i.LcOrganizationID,
+		&i.Type,
+		&i.Status,
+		&i.LcCharge,
+		&i.ConfirmationUrl,
+		&i.CurrentToppedUpAt,
+		&i.NextTopUpAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const getTopUpByIDAndTypeWhereStatusIsNot = `-- name: GetTopUpByIDAndTypeWhereStatusIsNot :one
@@ -213,6 +214,50 @@ func (q *Queries) GetTopUpsByOrganizationID(ctx context.Context, lcOrganizationI
 	return items, nil
 }
 
+const getTopUpsByOrganizationIDAndStatus = `-- name: GetTopUpsByOrganizationIDAndStatus :many
+SELECT id, amount, lc_organization_id, type, status, lc_charge, confirmation_url, current_topped_up_at, next_top_up_at, created_at, updated_at
+FROM top_ups
+WHERE lc_organization_id = $1
+  AND status = $2
+`
+
+type GetTopUpsByOrganizationIDAndStatusParams struct {
+	LcOrganizationID string
+	Status           string
+}
+
+func (q *Queries) GetTopUpsByOrganizationIDAndStatus(ctx context.Context, arg GetTopUpsByOrganizationIDAndStatusParams) ([]TopUp, error) {
+	rows, err := q.db.Query(ctx, getTopUpsByOrganizationIDAndStatus, arg.LcOrganizationID, arg.Status)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []TopUp
+	for rows.Next() {
+		var i TopUp
+		if err := rows.Scan(
+			&i.ID,
+			&i.Amount,
+			&i.LcOrganizationID,
+			&i.Type,
+			&i.Status,
+			&i.LcCharge,
+			&i.ConfirmationUrl,
+			&i.CurrentToppedUpAt,
+			&i.NextTopUpAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateChargeStatus = `-- name: UpdateChargeStatus :exec
 UPDATE charges
 SET status = $1, updated_at = now()
@@ -243,4 +288,52 @@ type UpdateTopUpRequestStatusParams struct {
 func (q *Queries) UpdateTopUpRequestStatus(ctx context.Context, arg UpdateTopUpRequestStatusParams) error {
 	_, err := q.db.Exec(ctx, updateTopUpRequestStatus, arg.Status, arg.ID)
 	return err
+}
+
+const upsertTopUp = `-- name: UpsertTopUp :one
+INSERT INTO top_ups(id, status, amount, type, lc_organization_id, lc_charge, confirmation_url, current_topped_up_at, next_top_up_at, created_at, updated_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
+ON CONFLICT (id, lc_organization_id) DO UPDATE SET lc_charge = EXCLUDED.lc_charge, status = EXCLUDED.status, confirmation_url = EXCLUDED.confirmation_url, current_topped_up_at = EXCLUDED.current_topped_up_at, next_top_up_at = EXCLUDED.next_top_up_at, updated_at = NOW()
+RETURNING id, amount, lc_organization_id, type, status, lc_charge, confirmation_url, current_topped_up_at, next_top_up_at, created_at, updated_at
+`
+
+type UpsertTopUpParams struct {
+	ID                string
+	Status            string
+	Amount            pgtype.Numeric
+	Type              string
+	LcOrganizationID  string
+	LcCharge          []byte
+	ConfirmationUrl   string
+	CurrentToppedUpAt pgtype.Timestamptz
+	NextTopUpAt       pgtype.Timestamptz
+}
+
+func (q *Queries) UpsertTopUp(ctx context.Context, arg UpsertTopUpParams) (TopUp, error) {
+	row := q.db.QueryRow(ctx, upsertTopUp,
+		arg.ID,
+		arg.Status,
+		arg.Amount,
+		arg.Type,
+		arg.LcOrganizationID,
+		arg.LcCharge,
+		arg.ConfirmationUrl,
+		arg.CurrentToppedUpAt,
+		arg.NextTopUpAt,
+	)
+	var i TopUp
+	err := row.Scan(
+		&i.ID,
+		&i.Amount,
+		&i.LcOrganizationID,
+		&i.Type,
+		&i.Status,
+		&i.LcCharge,
+		&i.ConfirmationUrl,
+		&i.CurrentToppedUpAt,
+		&i.NextTopUpAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }

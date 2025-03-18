@@ -56,11 +56,8 @@ func (r *PostgresqlPGX) UpdateChargeStatus(ctx context.Context, ID string, statu
 	return nil
 }
 
-func (r *PostgresqlPGX) GetChargeById(ctx context.Context, ID string) (*ledger.Charge, error) {
-	t, err := r.queries.GetChargeByIDWhereStatusIsNot(ctx, sqlc.GetChargeByIDWhereStatusIsNotParams{
-		ID:     ID,
-		Status: string(ledger.ChargeStatusCancelled),
-	})
+func (r *PostgresqlPGX) GetTopUpByID(ctx context.Context, ID string) (*ledger.TopUp, error) {
+	t, err := r.queries.GetTopUpByID(ctx, ID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
@@ -68,7 +65,7 @@ func (r *PostgresqlPGX) GetChargeById(ctx context.Context, ID string) (*ledger.C
 		return nil, err
 	}
 
-	return t.ToLedgerCharge()
+	return t.ToLedgerTopUp()
 }
 
 func (r *PostgresqlPGX) CreateTopUp(ctx context.Context, t ledger.TopUp) error {
@@ -149,7 +146,7 @@ func (r *PostgresqlPGX) UpdateTopUpStatus(ctx context.Context, ID string, status
 	return nil
 }
 
-func (r *PostgresqlPGX) GetTopUpByIdAndType(ctx context.Context, ID string, topUpType ledger.TopUpType) (*ledger.TopUp, error) {
+func (r *PostgresqlPGX) GetTopUpByIDAndType(ctx context.Context, ID string, topUpType ledger.TopUpType) (*ledger.TopUp, error) {
 	t, err := r.queries.GetTopUpByIDAndTypeWhereStatusIsNot(ctx, sqlc.GetTopUpByIDAndTypeWhereStatusIsNotParams{
 		ID:     ID,
 		Type:   string(topUpType),
@@ -172,11 +169,67 @@ func (r *PostgresqlPGX) CreateEvent(ctx context.Context, e ledger.Event) error {
 		Type:             string(e.Type),
 		Action:           string(e.Action),
 		Payload:          e.Payload,
+		Error: pgtype.Text{
+			String: e.Error,
+			Valid:  true,
+		},
 	})
 	if err != nil {
 		return err
 	}
 	return nil
+}
+
+func (r *PostgresqlPGX) GetTopUpsByOrganizationIDAndStatus(ctx context.Context, organizationID string, status ledger.TopUpStatus) ([]ledger.TopUp, error) {
+	rts, err := r.queries.GetTopUpsByOrganizationIDAndStatus(ctx, sqlc.GetTopUpsByOrganizationIDAndStatusParams{
+		LcOrganizationID: organizationID,
+		Status:           string(status),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return []ledger.TopUp{}, nil
+		}
+		return nil, err
+	}
+
+	var topUps []ledger.TopUp
+	for _, rt := range rts {
+		topUp, err := rt.ToLedgerTopUp()
+		if err != nil {
+			return nil, err
+		}
+		topUps = append(topUps, *topUp)
+	}
+
+	return topUps, nil
+}
+
+func (r *PostgresqlPGX) UpsertTopUp(ctx context.Context, topUp ledger.TopUp) (*ledger.TopUp, error) {
+	t, err := r.queries.UpsertTopUp(ctx, sqlc.UpsertTopUpParams{
+		ID:               topUp.ID,
+		Status:           string(topUp.Status),
+		Amount:           ToPGNumeric(&topUp.Amount),
+		Type:             string(topUp.Type),
+		LcOrganizationID: topUp.LCOrganizationID,
+		LcCharge:         topUp.LCCharge,
+		ConfirmationUrl:  topUp.ConfirmationUrl,
+		CurrentToppedUpAt: pgtype.Timestamptz{
+			Time:  topUp.CurrentToppedUpAt,
+			Valid: true,
+		},
+		NextTopUpAt: pgtype.Timestamptz{
+			Time:  topUp.NextTopUpAt,
+			Valid: true,
+		},
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ledger.ErrNotFound
+		}
+		return nil, err
+	}
+
+	return t.ToLedgerTopUp()
 }
 
 func ToPGNumeric(n *float32) pgtype.Numeric {
