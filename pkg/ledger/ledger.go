@@ -42,6 +42,8 @@ const (
 	queryChargeIDKey = "ext_charge_id"
 )
 
+type ledgerEventIDCtxKey struct{}
+
 type Service struct {
 	idProvider  common.IdProviderInterface
 	billingAPI  livechat.ApiInterface
@@ -74,7 +76,7 @@ type CreateChargeParams struct {
 }
 
 func (s *Service) CreateCharge(ctx context.Context, params CreateChargeParams) (string, error) {
-	event := s.ToEvent(s.GetUniqueID(), params.OrganizationID, EventActionCreateCharge, EventTypeInfo, params)
+	event := s.ToEvent(ctx, params.OrganizationID, EventActionCreateCharge, EventTypeInfo, params)
 	charge := Charge{
 		ID:               s.GetUniqueID(),
 		Amount:           params.Amount,
@@ -112,7 +114,7 @@ type TopUpConfig struct {
 }
 
 func (s *Service) CreateTopUpRequest(ctx context.Context, params CreateTopUpRequestParams) (string, error) {
-	event := s.ToEvent(s.GetUniqueID(), params.OrganizationID, EventActionCreateTopUp, EventTypeInfo, params)
+	event := s.ToEvent(ctx, params.OrganizationID, EventActionCreateTopUp, EventTypeInfo, params)
 	isTest := params.Test || params.OrganizationID == s.masterOrgID
 	config := ChargeConfig{
 		ReturnUrl: &s.returnURL,
@@ -191,7 +193,7 @@ func (s *Service) GetTopUpByID(ctx context.Context, ID string) (*TopUp, error) {
 }
 
 func (s *Service) CancelTopUpRequest(ctx context.Context, organizationID string, ID string) error {
-	event := s.ToEvent(s.GetUniqueID(), organizationID, EventActionCancelTopUp, EventTypeInfo, map[string]interface{}{"id": ID})
+	event := s.ToEvent(ctx, organizationID, EventActionCancelTopUp, EventTypeInfo, map[string]interface{}{"id": ID})
 	topUp, err := s.storage.GetTopUpByIDAndType(ctx, ID, TopUpTypeRecurrent)
 	if err != nil {
 		event.Type = EventTypeError
@@ -240,7 +242,7 @@ func (s *Service) ForceCancelTopUp(ctx context.Context, organizationID string, I
 }
 
 func (s *Service) UpdateTopUpStatus(ctx context.Context, organizationID string, ID string, status TopUpStatus) error {
-	event := s.ToEvent(s.GetUniqueID(), organizationID, EventActionUpdateTopUpStatus, EventTypeInfo, map[string]interface{}{"id": ID, "status": status})
+	event := s.ToEvent(ctx, organizationID, EventActionUpdateTopUpStatus, EventTypeInfo, map[string]interface{}{"id": ID, "status": status})
 	err := s.storage.UpdateTopUpStatus(ctx, ID, status)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
@@ -260,7 +262,7 @@ func (s *Service) UpdateTopUpStatus(ctx context.Context, organizationID string, 
 }
 
 func (s *Service) CancelCharge(ctx context.Context, organizationID string, ID string) error {
-	event := s.ToEvent(s.GetUniqueID(), organizationID, EventActionCancelCharge, EventTypeInfo, map[string]interface{}{"id": ID})
+	event := s.ToEvent(ctx, organizationID, EventActionCancelCharge, EventTypeInfo, map[string]interface{}{"id": ID})
 	err := s.storage.UpdateChargeStatus(ctx, ID, ChargeStatusCancelled)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
@@ -285,7 +287,7 @@ func (s *Service) GetTopUpsByOrganizationIDAndStatus(ctx context.Context, organi
 }
 
 func (s *Service) SyncTopUp(ctx context.Context, organizationID string, ID string) (*TopUp, error) {
-	event := s.ToEvent(s.GetUniqueID(), organizationID, EventActionSyncTopUp, EventTypeInfo, map[string]interface{}{"id": ID})
+	event := s.ToEvent(ctx, organizationID, EventActionSyncTopUp, EventTypeInfo, map[string]interface{}{"id": ID})
 	var baseCharge livechat.BaseChargeV2
 	var fullCharge any
 	var chargeType TopUpType
@@ -507,7 +509,12 @@ func (s *Service) ToError(ctx context.Context, params ToErrorParams) error {
 	return fmt.Errorf("%s: %w", params.event.ID, params.err)
 }
 
-func (s *Service) ToEvent(id string, organizationID string, action EventAction, eventType EventType, payload any) Event {
+func (s *Service) ToEvent(ctx context.Context, organizationID string, action EventAction, eventType EventType, payload any) Event {
+	id, ok := ctx.Value(ledgerEventIDCtxKey{}).(string)
+	if !ok {
+		id = s.idProvider.GenerateId()
+	}
+
 	event := Event{
 		ID:               id,
 		LCOrganizationID: organizationID,

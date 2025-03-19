@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"time"
+
+	"github.com/livechat-integrations/go-billing-sdk/pkg/common"
 )
 
 type DPSWebhookRequest struct {
@@ -19,19 +21,23 @@ type DPSWebhookRequest struct {
 }
 
 type Handler struct {
-	ledger LedgerInterface
+	ledger     LedgerInterface
+	idProvider common.IdProviderInterface
 }
 
-func NewHandler(ledger LedgerInterface) *Handler {
+func NewHandler(ledger LedgerInterface, idProvider common.IdProviderInterface) *Handler {
 	return &Handler{
-		ledger: ledger,
+		ledger:     ledger,
+		idProvider: idProvider,
 	}
 }
 
 func (h *Handler) HandleDPSWebhook(ctx context.Context, req DPSWebhookRequest) error {
-	event := h.ledger.ToEvent(h.ledger.GetUniqueID(), req.LCOrganizationID, EventActionDPSWebhook, EventTypeInfo, req)
+	ledgerEventID := h.idProvider.GenerateId()
+	ctx = context.WithValue(ctx, ledgerEventIDCtxKey{}, ledgerEventID)
 	switch req.Event {
 	case "application_uninstalled":
+		event := h.ledger.ToEvent(ledgerEventID, req.LCOrganizationID, EventActionDPSWebhookApplicationUninstalled, EventTypeInfo, req)
 		topUps, err := h.ledger.GetTopUpsByOrganizationIDAndStatus(ctx, req.LCOrganizationID, TopUpStatusActive)
 		if err != nil {
 			event.Type = EventTypeError
@@ -42,10 +48,16 @@ func (h *Handler) HandleDPSWebhook(ctx context.Context, req DPSWebhookRequest) e
 		}
 		for _, t := range topUps {
 			if err := h.ledger.ForceCancelTopUp(ctx, t.LCOrganizationID, t.ID); err != nil {
-				return err
+				event.Type = EventTypeError
+				return h.ledger.ToError(ctx, ToErrorParams{
+					event: event,
+					err:   err,
+				})
 			}
 		}
+		_ = h.ledger.CreateEvent(ctx, event)
 	case "payment_collected", "payment_activated", "payment_cancelled", "payment_declined":
+		event := h.ledger.ToEvent(ledgerEventID, req.LCOrganizationID, EventActionDPSWebhookPayment, EventTypeInfo, req)
 		paymentID, ok := req.Payload["paymentID"].(string)
 		if !ok {
 			event.Type = EventTypeError
@@ -54,19 +66,22 @@ func (h *Handler) HandleDPSWebhook(ctx context.Context, req DPSWebhookRequest) e
 				err:   fmt.Errorf("payment id field not found in payload"),
 			})
 		}
-
 		_, err := h.ledger.SyncTopUp(ctx, req.LCOrganizationID, paymentID)
 		if err != nil {
 			if req.Event == "payment_cancelled" {
 				if t, err := h.ledger.GetTopUpByID(ctx, paymentID); err == nil {
 					if err := h.ledger.ForceCancelTopUp(ctx, req.LCOrganizationID, t.ID); err != nil {
-						return err
+						event.Type = EventTypeError
+						return h.ledger.ToError(ctx, ToErrorParams{
+							event: event,
+							err:   fmt.Errorf("force cancell top up: %w", err),
+						})
 					}
 				} else {
 					event.Type = EventTypeError
 					return h.ledger.ToError(ctx, ToErrorParams{
 						event: event,
-						err:   fmt.Errorf("getting charge by lc_id: %w", err),
+						err:   fmt.Errorf("getting top up: %w", err),
 					})
 				}
 
@@ -74,12 +89,11 @@ func (h *Handler) HandleDPSWebhook(ctx context.Context, req DPSWebhookRequest) e
 			event.Type = EventTypeError
 			return h.ledger.ToError(ctx, ToErrorParams{
 				event: event,
-				err:   fmt.Errorf("syncing charge: %w", err),
+				err:   fmt.Errorf("syncing top up: %w", err),
 			})
 		}
+		_ = h.ledger.CreateEvent(ctx, event)
 	}
-
-	_ = h.ledger.CreateEvent(ctx, event)
 
 	return nil
 }
