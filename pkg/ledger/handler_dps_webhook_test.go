@@ -81,8 +81,8 @@ func (l *ledgerMock) ToError(ctx context.Context, params ToErrorParams) error {
 	return args.Error(0)
 }
 
-func (l *ledgerMock) ToEvent(id string, organizationID string, action EventAction, eventType EventType, payload any) Event {
-	args := l.Called(id, organizationID, action, eventType, payload)
+func (l *ledgerMock) ToEvent(ctx context.Context, organizationID string, action EventAction, eventType EventType, payload any) Event {
+	args := l.Called(ctx, organizationID, action, eventType, payload)
 	return args.Get(0).(Event)
 }
 
@@ -172,7 +172,7 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 		lm.On("GetTopUpsByOrganizationIDAndStatus", ledgerCtx, lcoid, TopUpStatusActive).Return([]TopUp{top1, top2}, nil).Once()
 		lm.On("ForceCancelTopUp", ledgerCtx, lcoid, top1.ID).Return(nil).Once()
 		lm.On("ForceCancelTopUp", ledgerCtx, lcoid, top2.ID).Return(nil).Once()
-		lm.On("ToEvent", xid, lcoid, EventActionDPSWebhookApplicationUninstalled, EventTypeInfo, req).Return(levent).Once()
+		lm.On("ToEvent", ledgerCtx, lcoid, EventActionDPSWebhookApplicationUninstalled, EventTypeInfo, req).Return(levent).Once()
 		lm.On("CreateEvent", ledgerCtx, levent).Return(nil).Once()
 
 		err := h.HandleDPSWebhook(context.Background(), req)
@@ -215,7 +215,7 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 		}
 
 		lm.On("GetTopUpsByOrganizationIDAndStatus", ledgerCtx, lcoid, TopUpStatusActive).Return([]TopUp{}, nil).Once()
-		lm.On("ToEvent", xid, lcoid, EventActionDPSWebhookApplicationUninstalled, EventTypeInfo, req).Return(levent).Once()
+		lm.On("ToEvent", ledgerCtx, lcoid, EventActionDPSWebhookApplicationUninstalled, EventTypeInfo, req).Return(levent).Once()
 		lm.On("CreateEvent", ledgerCtx, levent).Return(nil).Once()
 
 		err := h.HandleDPSWebhook(context.Background(), req)
@@ -258,7 +258,7 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 		}
 
 		lm.On("GetTopUpsByOrganizationIDAndStatus", ledgerCtx, lcoid, TopUpStatusActive).Return(nil, assert.AnError).Once()
-		lm.On("ToEvent", xid, lcoid, EventActionDPSWebhookApplicationUninstalled, EventTypeInfo, req).Return(levent).Once()
+		lm.On("ToEvent", ledgerCtx, lcoid, EventActionDPSWebhookApplicationUninstalled, EventTypeInfo, req).Return(levent).Once()
 		lm.On("CreateEvent", ledgerCtx, levent).Return(nil).Once()
 		lm.On("ToError", ledgerCtx, ToErrorParams{
 			event: levent,
@@ -326,7 +326,7 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 		lm.On("GetTopUpsByOrganizationIDAndStatus", ledgerCtx, lcoid, TopUpStatusActive).Return([]TopUp{top1, top2}, nil).Once()
 		lm.On("ForceCancelTopUp", ledgerCtx, lcoid, top1.ID).Return(nil).Once()
 		lm.On("ForceCancelTopUp", ledgerCtx, lcoid, top2.ID).Return(assert.AnError).Once()
-		lm.On("ToEvent", xid, lcoid, EventActionDPSWebhookApplicationUninstalled, EventTypeInfo, req).Return(levent).Once()
+		lm.On("ToEvent", ledgerCtx, lcoid, EventActionDPSWebhookApplicationUninstalled, EventTypeInfo, req).Return(levent).Once()
 		lm.On("CreateEvent", ledgerCtx, levent).Return(nil).Once()
 		lm.On("ToError", ledgerCtx, ToErrorParams{
 			event: levent,
@@ -381,7 +381,7 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 		}
 
 		lm.On("SyncTopUp", ledgerCtx, lcoid, paymentID).Return(&top1, nil).Once()
-		lm.On("ToEvent", xid, lcoid, EventActionDPSWebhookPayment, EventTypeInfo, req).Return(levent).Once()
+		lm.On("ToEvent", ledgerCtx, lcoid, EventActionDPSWebhookPayment, EventTypeInfo, req).Return(levent).Once()
 		lm.On("CreateEvent", ledgerCtx, levent).Return(nil).Once()
 
 		err := h.HandleDPSWebhook(context.Background(), req)
@@ -432,7 +432,7 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 		}
 
 		lm.On("SyncTopUp", ledgerCtx, lcoid, paymentID).Return(&top1, nil).Once()
-		lm.On("ToEvent", xid, lcoid, EventActionDPSWebhookPayment, EventTypeInfo, req).Return(levent).Once()
+		lm.On("ToEvent", ledgerCtx, lcoid, EventActionDPSWebhookPayment, EventTypeInfo, req).Return(levent).Once()
 		lm.On("CreateEvent", ledgerCtx, levent).Return(nil).Once()
 		lm.On("ToError", ledgerCtx, ToErrorParams{
 			event: levent,
@@ -478,7 +478,7 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 		}
 
 		lm.On("SyncTopUp", ledgerCtx, lcoid, paymentID).Return(nil, assert.AnError).Once()
-		lm.On("ToEvent", xid, lcoid, EventActionDPSWebhookPayment, EventTypeInfo, req).Return(levent).Once()
+		lm.On("ToEvent", ledgerCtx, lcoid, EventActionDPSWebhookPayment, EventTypeInfo, req).Return(levent).Once()
 		lm.On("CreateEvent", ledgerCtx, levent).Return(nil).Once()
 		lm.On("ToError", ledgerCtx, ToErrorParams{
 			event: levent,
@@ -533,7 +533,7 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 		}
 
 		lm.On("SyncTopUp", ledgerCtx, lcoid, paymentID).Return(&top1, nil).Once()
-		lm.On("ToEvent", xid, lcoid, EventActionDPSWebhookPayment, EventTypeInfo, req).Return(levent).Once()
+		lm.On("ToEvent", ledgerCtx, lcoid, EventActionDPSWebhookPayment, EventTypeInfo, req).Return(levent).Once()
 		lm.On("CreateEvent", ledgerCtx, levent).Return(nil).Once()
 
 		err := h.HandleDPSWebhook(context.Background(), req)
@@ -584,7 +584,7 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 		}
 
 		lm.On("SyncTopUp", ledgerCtx, lcoid, paymentID).Return(&top1, nil).Once()
-		lm.On("ToEvent", xid, lcoid, EventActionDPSWebhookPayment, EventTypeInfo, req).Return(levent).Once()
+		lm.On("ToEvent", ledgerCtx, lcoid, EventActionDPSWebhookPayment, EventTypeInfo, req).Return(levent).Once()
 		lm.On("CreateEvent", ledgerCtx, levent).Return(nil).Once()
 
 		err := h.HandleDPSWebhook(context.Background(), req)
@@ -635,7 +635,7 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 		}
 
 		lm.On("SyncTopUp", ledgerCtx, lcoid, paymentID).Return(&top1, nil).Once()
-		lm.On("ToEvent", xid, lcoid, EventActionDPSWebhookPayment, EventTypeInfo, req).Return(levent).Once()
+		lm.On("ToEvent", ledgerCtx, lcoid, EventActionDPSWebhookPayment, EventTypeInfo, req).Return(levent).Once()
 		lm.On("CreateEvent", ledgerCtx, levent).Return(nil).Once()
 
 		err := h.HandleDPSWebhook(context.Background(), req)
@@ -686,7 +686,7 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 		}
 
 		lm.On("SyncTopUp", ledgerCtx, lcoid, paymentID).Return(nil, assert.AnError).Once()
-		lm.On("ToEvent", xid, lcoid, EventActionDPSWebhookPayment, EventTypeInfo, req).Return(levent).Once()
+		lm.On("ToEvent", ledgerCtx, lcoid, EventActionDPSWebhookPayment, EventTypeInfo, req).Return(levent).Once()
 		lm.On("CreateEvent", ledgerCtx, levent).Return(nil).Once()
 		lm.On("GetTopUpByID", ledgerCtx, paymentID).Return(&top1, nil).Once()
 		lm.On("ForceCancelTopUp", ledgerCtx, lcoid, top1.ID).Return(nil).Once()
@@ -743,7 +743,7 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 		}
 
 		lm.On("SyncTopUp", ledgerCtx, lcoid, paymentID).Return(nil, assert.AnError).Once()
-		lm.On("ToEvent", xid, lcoid, EventActionDPSWebhookPayment, EventTypeInfo, req).Return(levent).Once()
+		lm.On("ToEvent", ledgerCtx, lcoid, EventActionDPSWebhookPayment, EventTypeInfo, req).Return(levent).Once()
 		lm.On("CreateEvent", ledgerCtx, levent).Return(nil).Once()
 		lm.On("GetTopUpByID", ledgerCtx, paymentID).Return(&top1, nil).Once()
 		lm.On("ForceCancelTopUp", ledgerCtx, lcoid, top1.ID).Return(assert.AnError).Once()
@@ -791,7 +791,7 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 		}
 
 		lm.On("SyncTopUp", ledgerCtx, lcoid, paymentID).Return(nil, assert.AnError).Once()
-		lm.On("ToEvent", xid, lcoid, EventActionDPSWebhookPayment, EventTypeInfo, req).Return(levent).Once()
+		lm.On("ToEvent", ledgerCtx, lcoid, EventActionDPSWebhookPayment, EventTypeInfo, req).Return(levent).Once()
 		lm.On("CreateEvent", ledgerCtx, levent).Return(nil).Once()
 		lm.On("GetTopUpByID", ledgerCtx, paymentID).Return(nil, assert.AnError).Once()
 		lm.On("ToError", ledgerCtx, ToErrorParams{

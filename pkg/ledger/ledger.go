@@ -26,7 +26,7 @@ type LedgerInterface interface {
 	CancelCharge(ctx context.Context, organizationID string, ID string) error
 	GetTopUpsByOrganizationIDAndStatus(ctx context.Context, organizationID string, status TopUpStatus) ([]TopUp, error)
 	ToError(ctx context.Context, params ToErrorParams) error
-	ToEvent(id string, organizationID string, action EventAction, eventType EventType, payload any) Event
+	ToEvent(ctx context.Context, organizationID string, action EventAction, eventType EventType, payload any) Event
 	GetUniqueID() string
 	CreateEvent(ctx context.Context, event Event) error
 	UpdateTopUpStatus(ctx context.Context, organizationID string, ID string, status TopUpStatus) error

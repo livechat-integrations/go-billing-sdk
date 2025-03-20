@@ -33,11 +33,10 @@ func NewHandler(ledger LedgerInterface, idProvider common.IdProviderInterface) *
 }
 
 func (h *Handler) HandleDPSWebhook(ctx context.Context, req DPSWebhookRequest) error {
-	ledgerEventID := h.idProvider.GenerateId()
-	ctx = context.WithValue(ctx, ledgerEventIDCtxKey{}, ledgerEventID)
+	ctx = context.WithValue(ctx, ledgerEventIDCtxKey{}, h.idProvider.GenerateId())
 	switch req.Event {
 	case "application_uninstalled":
-		event := h.ledger.ToEvent(ledgerEventID, req.LCOrganizationID, EventActionDPSWebhookApplicationUninstalled, EventTypeInfo, req)
+		event := h.ledger.ToEvent(ctx, req.LCOrganizationID, EventActionDPSWebhookApplicationUninstalled, EventTypeInfo, req)
 		topUps, err := h.ledger.GetTopUpsByOrganizationIDAndStatus(ctx, req.LCOrganizationID, TopUpStatusActive)
 		if err != nil {
 			event.Type = EventTypeError
@@ -57,7 +56,7 @@ func (h *Handler) HandleDPSWebhook(ctx context.Context, req DPSWebhookRequest) e
 		}
 		_ = h.ledger.CreateEvent(ctx, event)
 	case "payment_collected", "payment_activated", "payment_cancelled", "payment_declined":
-		event := h.ledger.ToEvent(ledgerEventID, req.LCOrganizationID, EventActionDPSWebhookPayment, EventTypeInfo, req)
+		event := h.ledger.ToEvent(ctx, req.LCOrganizationID, EventActionDPSWebhookPayment, EventTypeInfo, req)
 		paymentID, ok := req.Payload["paymentID"].(string)
 		if !ok {
 			event.Type = EventTypeError
