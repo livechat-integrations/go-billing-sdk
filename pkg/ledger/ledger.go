@@ -348,7 +348,7 @@ func (s *Service) SyncTopUp(ctx context.Context, organizationID string, ID strin
 		isRecurrent = true
 		return nil
 	})
-	if err := eg.Wait(); err != nil {
+	if err := eg.Wait(); err != nil && !isDirect && !isRecurrent {
 		event.Type = EventTypeError
 		return nil, s.ToError(ctx, ToErrorParams{
 			event: event,
