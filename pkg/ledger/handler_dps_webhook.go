@@ -25,6 +25,10 @@ type Handler struct {
 	idProvider common.IdProviderInterface
 }
 
+type HandlerInterface interface {
+	HandleDPSWebhook(ctx context.Context, req DPSWebhookRequest) error
+}
+
 func NewHandler(ledger LedgerInterface, idProvider common.IdProviderInterface) *Handler {
 	return &Handler{
 		ledger:     ledger,
