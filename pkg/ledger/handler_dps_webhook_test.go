@@ -18,8 +18,16 @@ var h = Handler{
 	idProvider: xm,
 }
 
+var lcoid = "lcOrganizationID"
 var xid = "2341"
-var ledgerCtx = context.WithValue(context.Background(), ledgerEventIDCtxKey{}, xid)
+var ledgerCtx = initCtx()
+
+func initCtx() context.Context {
+	ledgerCtx := context.WithValue(context.Background(), ledgerEventIDCtxKey{}, xid)
+	ledgerCtx = context.WithValue(ledgerCtx, ledgerOrganizationIDCtxKey{}, lcoid)
+
+	return ledgerCtx
+}
 
 type ledgerMock struct {
 	mock.Mock
@@ -121,7 +129,6 @@ func TestNewHandler(t *testing.T) {
 func TestService_HandleDPSWebhook(t *testing.T) {
 	t.Run("success application_uninstalled", func(t *testing.T) {
 		amount := float32(5.234)
-		lcoid := "lcOrganizationID"
 		eventType := "application_uninstalled"
 		someDate, _ := time.Parse(time.DateTime, "2025-03-14 12:31:56")
 		someDate2, _ := time.Parse(time.DateTime, "2025-06-14 12:31:56")
@@ -184,7 +191,6 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 	})
 
 	t.Run("success application_uninstalled no top ups", func(t *testing.T) {
-		lcoid := "lcOrganizationID"
 		eventType := "application_uninstalled"
 		someDate, _ := time.Parse(time.DateTime, "2025-03-14 12:31:56")
 		paymentID := "x1c2v3"
@@ -227,7 +233,6 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 	})
 
 	t.Run("application_uninstalled get top ups error", func(t *testing.T) {
-		lcoid := "lcOrganizationID"
 		eventType := "application_uninstalled"
 		someDate, _ := time.Parse(time.DateTime, "2025-03-14 12:31:56")
 		paymentID := "x1c2v3"
@@ -275,7 +280,6 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 
 	t.Run("application_uninstalled force cancel error", func(t *testing.T) {
 		amount := float32(5.234)
-		lcoid := "lcOrganizationID"
 		eventType := "application_uninstalled"
 		someDate, _ := time.Parse(time.DateTime, "2025-03-14 12:31:56")
 		someDate2, _ := time.Parse(time.DateTime, "2025-06-14 12:31:56")
@@ -343,7 +347,6 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 
 	t.Run("success payment_collected", func(t *testing.T) {
 		amount := float32(5.234)
-		lcoid := "lcOrganizationID"
 		eventType := "payment_collected"
 		someDate, _ := time.Parse(time.DateTime, "2025-03-14 12:31:56")
 		paymentID := "x1c2v3"
@@ -394,7 +397,6 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 
 	t.Run("payment_collected wrong payment id", func(t *testing.T) {
 		amount := float32(5.234)
-		lcoid := "lcOrganizationID"
 		eventType := "payment_collected"
 		someDate, _ := time.Parse(time.DateTime, "2025-03-14 12:31:56")
 		paymentID := float32(234.3)
@@ -448,7 +450,6 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 	})
 
 	t.Run("payment_collected sync error", func(t *testing.T) {
-		lcoid := "lcOrganizationID"
 		eventType := "payment_collected"
 		someDate, _ := time.Parse(time.DateTime, "2025-03-14 12:31:56")
 		paymentID := "x1c2v3"
@@ -495,7 +496,6 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 
 	t.Run("success payment_activated", func(t *testing.T) {
 		amount := float32(5.234)
-		lcoid := "lcOrganizationID"
 		eventType := "payment_activated"
 		someDate, _ := time.Parse(time.DateTime, "2025-03-14 12:31:56")
 		paymentID := "x1c2v3"
@@ -546,7 +546,6 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 
 	t.Run("success payment_declined", func(t *testing.T) {
 		amount := float32(5.234)
-		lcoid := "lcOrganizationID"
 		eventType := "payment_declined"
 		someDate, _ := time.Parse(time.DateTime, "2025-03-14 12:31:56")
 		paymentID := "x1c2v3"
@@ -597,7 +596,6 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 
 	t.Run("success payment_cancelled", func(t *testing.T) {
 		amount := float32(5.234)
-		lcoid := "lcOrganizationID"
 		eventType := "payment_cancelled"
 		someDate, _ := time.Parse(time.DateTime, "2025-03-14 12:31:56")
 		paymentID := "x1c2v3"
@@ -648,7 +646,6 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 
 	t.Run("success force cancel on payment_cancelled sync error", func(t *testing.T) {
 		amount := float32(5.234)
-		lcoid := "lcOrganizationID"
 		eventType := "payment_cancelled"
 		someDate, _ := time.Parse(time.DateTime, "2025-03-14 12:31:56")
 		paymentID := "x1c2v3"
@@ -705,7 +702,6 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 
 	t.Run("error force cancel on payment_cancelled sync error", func(t *testing.T) {
 		amount := float32(5.234)
-		lcoid := "lcOrganizationID"
 		eventType := "payment_cancelled"
 		someDate, _ := time.Parse(time.DateTime, "2025-03-14 12:31:56")
 		paymentID := "x1c2v3"
@@ -761,7 +757,6 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 	})
 
 	t.Run("error get top up on payment_cancelled sync error", func(t *testing.T) {
-		lcoid := "lcOrganizationID"
 		eventType := "payment_cancelled"
 		someDate, _ := time.Parse(time.DateTime, "2025-03-14 12:31:56")
 		paymentID := "x1c2v3"

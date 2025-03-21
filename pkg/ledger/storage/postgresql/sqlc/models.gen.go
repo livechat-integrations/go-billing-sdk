@@ -8,7 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type Charge struct {
+type LedgerCharge struct {
 	ID               string
 	Amount           pgtype.Numeric
 	LcOrganizationID string
@@ -17,7 +17,7 @@ type Charge struct {
 	UpdatedAt        pgtype.Timestamptz
 }
 
-type Event struct {
+type LedgerEvent struct {
 	ID               string
 	LcOrganizationID string
 	Type             string
@@ -27,7 +27,7 @@ type Event struct {
 	CreatedAt        pgtype.Timestamptz
 }
 
-type TopUp struct {
+type LedgerTopUp struct {
 	ID                string
 	Amount            pgtype.Numeric
 	LcOrganizationID  string

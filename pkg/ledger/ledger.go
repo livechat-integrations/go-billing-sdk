@@ -42,7 +42,10 @@ const (
 	queryChargeIDKey = "ext_charge_id"
 )
 
-type ledgerEventIDCtxKey struct{}
+type (
+	ledgerEventIDCtxKey        struct{}
+	ledgerOrganizationIDCtxKey struct{}
+)
 
 type Service struct {
 	idProvider  common.IdProviderInterface

@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS charges
+CREATE TABLE IF NOT EXISTS ledger_charges
 (
     id                 varchar(36) PRIMARY KEY,
     amount             numeric(9,3) NOT NULL,
@@ -7,10 +7,10 @@ CREATE TABLE IF NOT EXISTS charges
     created_at         TIMESTAMPTZ  NOT NULL DEFAULT now(),
     updated_at         TIMESTAMPTZ
 );
-CREATE INDEX ON charges (status);
-CREATE INDEX ON charges (lc_organization_id);
+CREATE INDEX ON ledger_charges (status);
+CREATE INDEX ON ledger_charges (lc_organization_id);
 
-CREATE TABLE IF NOT EXISTS top_ups
+CREATE TABLE IF NOT EXISTS ledger_top_ups
 (
     id                 varchar(36) PRIMARY KEY,
     amount             numeric(9,3) NOT NULL,
@@ -24,10 +24,10 @@ CREATE TABLE IF NOT EXISTS top_ups
     created_at         TIMESTAMPTZ  NOT NULL DEFAULT now(),
     updated_at         TIMESTAMPTZ
 );
-CREATE INDEX ON top_ups (status);
-CREATE INDEX ON top_ups (lc_organization_id);
+CREATE INDEX ON ledger_top_ups (status);
+CREATE INDEX ON ledger_top_ups (lc_organization_id);
 
-CREATE TABLE IF NOT EXISTS events
+CREATE TABLE IF NOT EXISTS ledger_events
 (
     id                 varchar(36) PRIMARY KEY,
     lc_organization_id varchar(36) NOT NULL,
@@ -37,4 +37,4 @@ CREATE TABLE IF NOT EXISTS events
     error              varchar(255),
     created_at         TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
-CREATE INDEX ON events (lc_organization_id);
+CREATE INDEX ON ledger_events (lc_organization_id);

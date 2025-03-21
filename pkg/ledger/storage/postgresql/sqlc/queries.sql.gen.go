@@ -12,7 +12,7 @@ import (
 )
 
 const createCharge = `-- name: CreateCharge :exec
-INSERT INTO charges(id, amount, status, lc_organization_id, created_at, updated_at)
+INSERT INTO ledger_charges(id, amount, status, lc_organization_id, created_at, updated_at)
 VALUES ($1, $2, $3, $4, NOW(), NOW())
 `
 
@@ -34,7 +34,7 @@ func (q *Queries) CreateCharge(ctx context.Context, arg CreateChargeParams) erro
 }
 
 const createEvent = `-- name: CreateEvent :exec
-INSERT INTO events(id, lc_organization_id, type, action, payload, error, created_at)
+INSERT INTO ledger_events(id, lc_organization_id, type, action, payload, error, created_at)
 VALUES ($1, $2, $3, $4, $5, $6, NOW())
 `
 
@@ -60,7 +60,7 @@ func (q *Queries) CreateEvent(ctx context.Context, arg CreateEventParams) error 
 }
 
 const createTopUp = `-- name: CreateTopUp :exec
-INSERT INTO top_ups(id, status, amount, type, lc_organization_id, lc_charge, confirmation_url, current_topped_up_at, next_top_up_at, created_at, updated_at)
+INSERT INTO ledger_top_ups(id, status, amount, type, lc_organization_id, lc_charge, confirmation_url, current_topped_up_at, next_top_up_at, created_at, updated_at)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
 `
 
@@ -94,12 +94,12 @@ func (q *Queries) CreateTopUp(ctx context.Context, arg CreateTopUpParams) error 
 const getOrganizationBalance = `-- name: GetOrganizationBalance :one
 SELECT b.amount::numeric FROM (SELECT (
     SELECT SUM(tu.amount)
-    FROM top_ups tu
+    FROM ledger_top_ups tu
     WHERE tu.lc_organization_id = $1
       AND tu.status = $2
 ) - (
     SELECT SUM(c.amount)
-    FROM charges c
+    FROM ledger_charges c
     WHERE c.lc_organization_id = $1
       AND c.status = $3
 ) AS amount) AS b
@@ -120,13 +120,13 @@ func (q *Queries) GetOrganizationBalance(ctx context.Context, arg GetOrganizatio
 
 const getTopUpByID = `-- name: GetTopUpByID :one
 SELECT id, amount, lc_organization_id, type, status, lc_charge, confirmation_url, current_topped_up_at, next_top_up_at, created_at, updated_at
-FROM top_ups
+FROM ledger_top_ups
 WHERE id = $1
 `
 
-func (q *Queries) GetTopUpByID(ctx context.Context, id string) (TopUp, error) {
+func (q *Queries) GetTopUpByID(ctx context.Context, id string) (LedgerTopUp, error) {
 	row := q.db.QueryRow(ctx, getTopUpByID, id)
-	var i TopUp
+	var i LedgerTopUp
 	err := row.Scan(
 		&i.ID,
 		&i.Amount,
@@ -145,7 +145,7 @@ func (q *Queries) GetTopUpByID(ctx context.Context, id string) (TopUp, error) {
 
 const getTopUpByIDAndTypeWhereStatusIsNot = `-- name: GetTopUpByIDAndTypeWhereStatusIsNot :one
 SELECT id, amount, lc_organization_id, type, status, lc_charge, confirmation_url, current_topped_up_at, next_top_up_at, created_at, updated_at
-FROM top_ups
+FROM ledger_top_ups
 WHERE id = $1
   AND type = $2
   AND status != $3
@@ -157,9 +157,9 @@ type GetTopUpByIDAndTypeWhereStatusIsNotParams struct {
 	Status string
 }
 
-func (q *Queries) GetTopUpByIDAndTypeWhereStatusIsNot(ctx context.Context, arg GetTopUpByIDAndTypeWhereStatusIsNotParams) (TopUp, error) {
+func (q *Queries) GetTopUpByIDAndTypeWhereStatusIsNot(ctx context.Context, arg GetTopUpByIDAndTypeWhereStatusIsNotParams) (LedgerTopUp, error) {
 	row := q.db.QueryRow(ctx, getTopUpByIDAndTypeWhereStatusIsNot, arg.ID, arg.Type, arg.Status)
-	var i TopUp
+	var i LedgerTopUp
 	err := row.Scan(
 		&i.ID,
 		&i.Amount,
@@ -178,19 +178,19 @@ func (q *Queries) GetTopUpByIDAndTypeWhereStatusIsNot(ctx context.Context, arg G
 
 const getTopUpsByOrganizationID = `-- name: GetTopUpsByOrganizationID :many
 SELECT id, amount, lc_organization_id, type, status, lc_charge, confirmation_url, current_topped_up_at, next_top_up_at, created_at, updated_at
-FROM top_ups
+FROM ledger_top_ups
 WHERE lc_organization_id = $1
 `
 
-func (q *Queries) GetTopUpsByOrganizationID(ctx context.Context, lcOrganizationID string) ([]TopUp, error) {
+func (q *Queries) GetTopUpsByOrganizationID(ctx context.Context, lcOrganizationID string) ([]LedgerTopUp, error) {
 	rows, err := q.db.Query(ctx, getTopUpsByOrganizationID, lcOrganizationID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []TopUp
+	var items []LedgerTopUp
 	for rows.Next() {
-		var i TopUp
+		var i LedgerTopUp
 		if err := rows.Scan(
 			&i.ID,
 			&i.Amount,
@@ -216,7 +216,7 @@ func (q *Queries) GetTopUpsByOrganizationID(ctx context.Context, lcOrganizationI
 
 const getTopUpsByOrganizationIDAndStatus = `-- name: GetTopUpsByOrganizationIDAndStatus :many
 SELECT id, amount, lc_organization_id, type, status, lc_charge, confirmation_url, current_topped_up_at, next_top_up_at, created_at, updated_at
-FROM top_ups
+FROM ledger_top_ups
 WHERE lc_organization_id = $1
   AND status = $2
 `
@@ -226,15 +226,15 @@ type GetTopUpsByOrganizationIDAndStatusParams struct {
 	Status           string
 }
 
-func (q *Queries) GetTopUpsByOrganizationIDAndStatus(ctx context.Context, arg GetTopUpsByOrganizationIDAndStatusParams) ([]TopUp, error) {
+func (q *Queries) GetTopUpsByOrganizationIDAndStatus(ctx context.Context, arg GetTopUpsByOrganizationIDAndStatusParams) ([]LedgerTopUp, error) {
 	rows, err := q.db.Query(ctx, getTopUpsByOrganizationIDAndStatus, arg.LcOrganizationID, arg.Status)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []TopUp
+	var items []LedgerTopUp
 	for rows.Next() {
-		var i TopUp
+		var i LedgerTopUp
 		if err := rows.Scan(
 			&i.ID,
 			&i.Amount,
@@ -259,7 +259,7 @@ func (q *Queries) GetTopUpsByOrganizationIDAndStatus(ctx context.Context, arg Ge
 }
 
 const updateChargeStatus = `-- name: UpdateChargeStatus :exec
-UPDATE charges
+UPDATE ledger_charges
 SET status = $1, updated_at = now()
 WHERE id = $2
 `
@@ -275,7 +275,7 @@ func (q *Queries) UpdateChargeStatus(ctx context.Context, arg UpdateChargeStatus
 }
 
 const updateTopUpRequestStatus = `-- name: UpdateTopUpRequestStatus :exec
-UPDATE top_ups
+UPDATE ledger_top_ups
 SET status = $1, updated_at = now()
 WHERE id = $2
 `
@@ -291,7 +291,7 @@ func (q *Queries) UpdateTopUpRequestStatus(ctx context.Context, arg UpdateTopUpR
 }
 
 const upsertTopUp = `-- name: UpsertTopUp :one
-INSERT INTO top_ups(id, status, amount, type, lc_organization_id, lc_charge, confirmation_url, current_topped_up_at, next_top_up_at, created_at, updated_at)
+INSERT INTO ledger_top_ups(id, status, amount, type, lc_organization_id, lc_charge, confirmation_url, current_topped_up_at, next_top_up_at, created_at, updated_at)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
 ON CONFLICT (id, lc_organization_id) DO UPDATE SET lc_charge = EXCLUDED.lc_charge, status = EXCLUDED.status, confirmation_url = EXCLUDED.confirmation_url, current_topped_up_at = EXCLUDED.current_topped_up_at, next_top_up_at = EXCLUDED.next_top_up_at, updated_at = NOW()
 RETURNING id, amount, lc_organization_id, type, status, lc_charge, confirmation_url, current_topped_up_at, next_top_up_at, created_at, updated_at
@@ -309,7 +309,7 @@ type UpsertTopUpParams struct {
 	NextTopUpAt       pgtype.Timestamptz
 }
 
-func (q *Queries) UpsertTopUp(ctx context.Context, arg UpsertTopUpParams) (TopUp, error) {
+func (q *Queries) UpsertTopUp(ctx context.Context, arg UpsertTopUpParams) (LedgerTopUp, error) {
 	row := q.db.QueryRow(ctx, upsertTopUp,
 		arg.ID,
 		arg.Status,
@@ -321,7 +321,7 @@ func (q *Queries) UpsertTopUp(ctx context.Context, arg UpsertTopUpParams) (TopUp
 		arg.CurrentToppedUpAt,
 		arg.NextTopUpAt,
 	)
-	var i TopUp
+	var i LedgerTopUp
 	err := row.Scan(
 		&i.ID,
 		&i.Amount,

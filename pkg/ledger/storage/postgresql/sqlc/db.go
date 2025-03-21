@@ -6,7 +6,7 @@ import (
 	"github.com/livechat-integrations/go-billing-sdk/pkg/ledger"
 )
 
-func (c *Charge) ToLedgerCharge() (*ledger.Charge, error) {
+func (c *LedgerCharge) ToLedgerCharge() (*ledger.Charge, error) {
 	v, err := c.Amount.Float64Value()
 	if err != nil {
 		return nil, err
@@ -22,7 +22,7 @@ func (c *Charge) ToLedgerCharge() (*ledger.Charge, error) {
 	}, nil
 }
 
-func (t *TopUp) ToLedgerTopUp() (*ledger.TopUp, error) {
+func (t *LedgerTopUp) ToLedgerTopUp() (*ledger.TopUp, error) {
 	v, err := t.Amount.Float64Value()
 	if err != nil {
 		return nil, err
