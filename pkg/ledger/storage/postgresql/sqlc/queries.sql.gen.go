@@ -293,7 +293,7 @@ func (q *Queries) UpdateTopUpRequestStatus(ctx context.Context, arg UpdateTopUpR
 const upsertTopUp = `-- name: UpsertTopUp :one
 INSERT INTO ledger_top_ups(id, status, amount, type, lc_organization_id, lc_charge, confirmation_url, current_topped_up_at, next_top_up_at, created_at, updated_at)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
-ON CONFLICT (id, lc_organization_id) DO UPDATE SET lc_charge = EXCLUDED.lc_charge, status = EXCLUDED.status, confirmation_url = EXCLUDED.confirmation_url, current_topped_up_at = EXCLUDED.current_topped_up_at, next_top_up_at = EXCLUDED.next_top_up_at, updated_at = NOW()
+ON CONFLICT (id) DO UPDATE SET lc_charge = EXCLUDED.lc_charge, status = EXCLUDED.status, confirmation_url = EXCLUDED.confirmation_url, current_topped_up_at = EXCLUDED.current_topped_up_at, next_top_up_at = EXCLUDED.next_top_up_at, updated_at = NOW()
 RETURNING id, amount, lc_organization_id, type, status, lc_charge, confirmation_url, current_topped_up_at, next_top_up_at, created_at, updated_at
 `
 
