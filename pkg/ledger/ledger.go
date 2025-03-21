@@ -43,8 +43,8 @@ const (
 )
 
 type (
-	ledgerEventIDCtxKey        struct{}
-	ledgerOrganizationIDCtxKey struct{}
+	LedgerEventIDCtxKey        struct{}
+	LedgerOrganizationIDCtxKey struct{}
 )
 
 type Service struct {
@@ -513,7 +513,7 @@ func (s *Service) ToError(ctx context.Context, params ToErrorParams) error {
 }
 
 func (s *Service) ToEvent(ctx context.Context, organizationID string, action EventAction, eventType EventType, payload any) Event {
-	id, ok := ctx.Value(ledgerEventIDCtxKey{}).(string)
+	id, ok := ctx.Value(LedgerEventIDCtxKey{}).(string)
 	if !ok {
 		id = s.idProvider.GenerateId()
 	}

@@ -33,8 +33,8 @@ func NewHandler(ledger LedgerInterface, idProvider common.IdProviderInterface) *
 }
 
 func (h *Handler) HandleDPSWebhook(ctx context.Context, req DPSWebhookRequest) error {
-	ctx = context.WithValue(ctx, ledgerEventIDCtxKey{}, h.idProvider.GenerateId())
-	ctx = context.WithValue(ctx, ledgerOrganizationIDCtxKey{}, req.LCOrganizationID)
+	ctx = context.WithValue(ctx, LedgerEventIDCtxKey{}, h.idProvider.GenerateId())
+	ctx = context.WithValue(ctx, LedgerOrganizationIDCtxKey{}, req.LCOrganizationID)
 	switch req.Event {
 	case "application_uninstalled":
 		event := h.ledger.ToEvent(ctx, req.LCOrganizationID, EventActionDPSWebhookApplicationUninstalled, EventTypeInfo, req)

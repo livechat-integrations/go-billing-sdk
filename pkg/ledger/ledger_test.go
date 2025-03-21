@@ -1873,7 +1873,7 @@ func TestService_SyncTopUp(t *testing.T) {
 func TestService_ToEvent(t *testing.T) {
 	t.Run("success id from context", func(t *testing.T) {
 		id := "id-from-context"
-		localCtx := context.WithValue(context.Background(), ledgerEventIDCtxKey{}, id)
+		localCtx := context.WithValue(context.Background(), LedgerEventIDCtxKey{}, id)
 		lcoid := "lcOrganizationID"
 		action := EventActionSyncTopUp
 		eventType := EventTypeInfo

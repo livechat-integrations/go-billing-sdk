@@ -23,8 +23,8 @@ var xid = "2341"
 var ledgerCtx = initCtx()
 
 func initCtx() context.Context {
-	ledgerCtx := context.WithValue(context.Background(), ledgerEventIDCtxKey{}, xid)
-	ledgerCtx = context.WithValue(ledgerCtx, ledgerOrganizationIDCtxKey{}, lcoid)
+	ledgerCtx := context.WithValue(context.Background(), LedgerEventIDCtxKey{}, xid)
+	ledgerCtx = context.WithValue(ledgerCtx, LedgerOrganizationIDCtxKey{}, lcoid)
 
 	return ledgerCtx
 }
