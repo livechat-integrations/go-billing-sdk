@@ -164,8 +164,8 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 			Amount:            amount,
 			Type:              TopUpTypeRecurrent,
 			ConfirmationUrl:   "url",
-			CurrentToppedUpAt: someDate,
-			NextTopUpAt:       someDate2,
+			CurrentToppedUpAt: &someDate,
+			NextTopUpAt:       &someDate2,
 		}
 		sc, _ := json.Marshal(req)
 		levent := Event{
@@ -315,8 +315,8 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 			Amount:            amount,
 			Type:              TopUpTypeRecurrent,
 			ConfirmationUrl:   "url",
-			CurrentToppedUpAt: someDate,
-			NextTopUpAt:       someDate2,
+			CurrentToppedUpAt: &someDate,
+			NextTopUpAt:       &someDate2,
 		}
 		sc, _ := json.Marshal(req)
 		levent := Event{

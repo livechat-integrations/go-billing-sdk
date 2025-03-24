@@ -19,8 +19,8 @@ CREATE TABLE IF NOT EXISTS ledger_top_ups
     status             varchar(255) NOT NULL,
     lc_charge          jsonb,
     confirmation_url   varchar(255) NOT NULL,
-    current_topped_up_at TIMESTAMPTZ,
-    next_top_up_at     TIMESTAMPTZ,
+    current_topped_up_at TIMESTAMPTZ DEFAULT NULL,
+    next_top_up_at     TIMESTAMPTZ DEFAULT NULL,
     created_at         TIMESTAMPTZ  NOT NULL DEFAULT now(),
     updated_at         TIMESTAMPTZ
     );

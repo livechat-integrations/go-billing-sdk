@@ -27,8 +27,8 @@ type TopUp struct {
 	Amount            float32         `json:"amount"`
 	Type              TopUpType       `json:"type"`
 	ConfirmationUrl   string          `json:"confirmation_url"`
-	CurrentToppedUpAt time.Time       `json:"current_topped_up_at"`
-	NextTopUpAt       time.Time       `json:"next_top_up_at"`
+	CurrentToppedUpAt *time.Time      `json:"current_topped_up_at"`
+	NextTopUpAt       *time.Time      `json:"next_top_up_at"`
 	LCCharge          json.RawMessage `json:"lc_charge"`
 	CreatedAt         time.Time       `json:"created_at"`
 	UpdatedAt         time.Time       `json:"updated_at"`

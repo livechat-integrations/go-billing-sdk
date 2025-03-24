@@ -73,7 +73,7 @@ func (r *PostgresqlPGX) CreateTopUp(ctx context.Context, t ledger.TopUp) error {
 	if err != nil {
 		return err
 	}
-	if err := r.queries.CreateTopUp(ctx, sqlc.CreateTopUpParams{
+	params := sqlc.CreateTopUpParams{
 		ID:               t.ID,
 		Status:           string(t.Status),
 		Amount:           ToPGNumeric(&t.Amount),
@@ -81,15 +81,22 @@ func (r *PostgresqlPGX) CreateTopUp(ctx context.Context, t ledger.TopUp) error {
 		LcOrganizationID: t.LCOrganizationID,
 		LcCharge:         rawLCCharge,
 		ConfirmationUrl:  t.ConfirmationUrl,
-		CurrentToppedUpAt: pgtype.Timestamptz{
-			Time:  t.CurrentToppedUpAt,
+	}
+
+	if t.CurrentToppedUpAt != nil {
+		params.CurrentToppedUpAt = pgtype.Timestamptz{
+			Time:  *t.CurrentToppedUpAt,
 			Valid: true,
-		},
-		NextTopUpAt: pgtype.Timestamptz{
-			Time:  t.NextTopUpAt,
+		}
+	}
+	if t.NextTopUpAt != nil {
+		params.NextTopUpAt = pgtype.Timestamptz{
+			Time:  *t.NextTopUpAt,
 			Valid: true,
-		},
-	}); err != nil {
+		}
+	}
+
+	if err := r.queries.CreateTopUp(ctx, params); err != nil {
 		return err
 	}
 	return nil
@@ -205,7 +212,7 @@ func (r *PostgresqlPGX) GetTopUpsByOrganizationIDAndStatus(ctx context.Context, 
 }
 
 func (r *PostgresqlPGX) UpsertTopUp(ctx context.Context, topUp ledger.TopUp) (*ledger.TopUp, error) {
-	t, err := r.queries.UpsertTopUp(ctx, sqlc.UpsertTopUpParams{
+	params := sqlc.UpsertTopUpParams{
 		ID:               topUp.ID,
 		Status:           string(topUp.Status),
 		Amount:           ToPGNumeric(&topUp.Amount),
@@ -213,15 +220,22 @@ func (r *PostgresqlPGX) UpsertTopUp(ctx context.Context, topUp ledger.TopUp) (*l
 		LcOrganizationID: topUp.LCOrganizationID,
 		LcCharge:         topUp.LCCharge,
 		ConfirmationUrl:  topUp.ConfirmationUrl,
-		CurrentToppedUpAt: pgtype.Timestamptz{
-			Time:  topUp.CurrentToppedUpAt,
+	}
+
+	if topUp.CurrentToppedUpAt != nil {
+		params.CurrentToppedUpAt = pgtype.Timestamptz{
+			Time:  *topUp.CurrentToppedUpAt,
 			Valid: true,
-		},
-		NextTopUpAt: pgtype.Timestamptz{
-			Time:  topUp.NextTopUpAt,
+		}
+	}
+	if topUp.NextTopUpAt != nil {
+		params.NextTopUpAt = pgtype.Timestamptz{
+			Time:  *topUp.NextTopUpAt,
 			Valid: true,
-		},
-	})
+		}
+	}
+
+	t, err := r.queries.UpsertTopUp(ctx, params)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ledger.ErrNotFound

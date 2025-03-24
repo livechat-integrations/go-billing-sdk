@@ -343,8 +343,8 @@ func (s *Service) SyncTopUp(ctx context.Context, organizationID string, ID strin
 		case "declined":
 			status = TopUpStatusCancelled
 		}
-		topUp.CurrentToppedUpAt = *c.CurrentChargeAt
-		topUp.NextTopUpAt = *c.NextChargeAt
+		topUp.CurrentToppedUpAt = c.CurrentChargeAt
+		topUp.NextTopUpAt = c.NextChargeAt
 		isRecurrent = true
 		return nil
 	})

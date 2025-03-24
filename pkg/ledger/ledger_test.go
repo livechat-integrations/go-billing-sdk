@@ -1302,8 +1302,8 @@ func TestService_SyncTopUp(t *testing.T) {
 			Type:              TopUpTypeRecurrent,
 			ConfirmationUrl:   confUrl,
 			LCCharge:          jrc,
-			CurrentToppedUpAt: someDate,
-			NextTopUpAt:       someDate2,
+			CurrentToppedUpAt: &someDate,
+			NextTopUpAt:       &someDate2,
 		}
 
 		call := xm.On("GenerateId").Return(xid, nil)
@@ -1377,8 +1377,8 @@ func TestService_SyncTopUp(t *testing.T) {
 			Type:              TopUpTypeRecurrent,
 			ConfirmationUrl:   confUrl,
 			LCCharge:          jrc,
-			CurrentToppedUpAt: someDate,
-			NextTopUpAt:       someDate2,
+			CurrentToppedUpAt: &someDate,
+			NextTopUpAt:       &someDate2,
 		}
 
 		call := xm.On("GenerateId").Return(xid, nil)
@@ -1452,8 +1452,8 @@ func TestService_SyncTopUp(t *testing.T) {
 			Type:              TopUpTypeRecurrent,
 			ConfirmationUrl:   confUrl,
 			LCCharge:          jrc,
-			CurrentToppedUpAt: someDate,
-			NextTopUpAt:       someDate2,
+			CurrentToppedUpAt: &someDate,
+			NextTopUpAt:       &someDate2,
 		}
 
 		call := xm.On("GenerateId").Return(xid, nil)
@@ -1527,8 +1527,8 @@ func TestService_SyncTopUp(t *testing.T) {
 			Type:              TopUpTypeRecurrent,
 			ConfirmationUrl:   confUrl,
 			LCCharge:          jrc,
-			CurrentToppedUpAt: someDate,
-			NextTopUpAt:       someDate2,
+			CurrentToppedUpAt: &someDate,
+			NextTopUpAt:       &someDate2,
 		}
 
 		call := xm.On("GenerateId").Return(xid, nil)
@@ -1677,8 +1677,8 @@ func TestService_SyncTopUp(t *testing.T) {
 			Type:              TopUpTypeRecurrent,
 			ConfirmationUrl:   confUrl,
 			LCCharge:          jrc,
-			CurrentToppedUpAt: someDate,
-			NextTopUpAt:       someDate2,
+			CurrentToppedUpAt: &someDate,
+			NextTopUpAt:       &someDate2,
 		}
 
 		call := xm.On("GenerateId").Return(xid, nil)

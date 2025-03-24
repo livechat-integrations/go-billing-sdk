@@ -127,8 +127,8 @@ func TestPostgresqlSQLC_GetTopUpByID(t *testing.T) {
 		assert.Equal(t, "lcOrganizationID", c.LCOrganizationID)
 		assert.Equal(t, json.RawMessage("{}"), c.LCCharge)
 		assert.Equal(t, url, c.ConfirmationUrl)
-		assert.Equal(t, someDate, c.CurrentToppedUpAt)
-		assert.Equal(t, someDate2, c.NextTopUpAt)
+		assert.Equal(t, someDate, *c.CurrentToppedUpAt)
+		assert.Equal(t, someDate2, *c.NextTopUpAt)
 
 		assert.NoError(t, dbMock.ExpectationsWereMet())
 	})
@@ -180,9 +180,37 @@ func TestPostgresqlSQLC_CreateTopUp(t *testing.T) {
 			Amount:            amount,
 			Type:              topUpType,
 			ConfirmationUrl:   url,
-			CurrentToppedUpAt: someDate,
-			NextTopUpAt:       someDate2,
+			CurrentToppedUpAt: &someDate,
+			NextTopUpAt:       &someDate2,
 			LCCharge:          json.RawMessage("{}"),
+		})
+		assert.NoError(t, err)
+		assert.NoError(t, dbMock.ExpectationsWereMet())
+	})
+
+	t.Run("success without optional dates", func(t *testing.T) {
+		emptyRawPayload, _ := json.Marshal(json.RawMessage("{}"))
+		id := "1"
+		lcoid := "lcOrganizationID"
+		amount := float32(3.14)
+		status := ledger.TopUpStatusPending
+		topUpType := ledger.TopUpTypeRecurrent
+		v := pgtype.Numeric{}
+		_ = v.Scan(fmt.Sprintf("%f", amount))
+		url := "some_url"
+
+		dbMock.ExpectExec("INSERT INTO ledger_top_ups").
+			WithArgs(id, string(status), v, string(topUpType), lcoid, emptyRawPayload, url, pgtype.Timestamptz{}, pgtype.Timestamptz{}).
+			WillReturnResult(pgxmock.NewResult("INSERT", 1)).Times(1)
+
+		err := s.CreateTopUp(context.Background(), ledger.TopUp{
+			ID:               id,
+			LCOrganizationID: lcoid,
+			Status:           status,
+			Amount:           amount,
+			Type:             topUpType,
+			ConfirmationUrl:  url,
+			LCCharge:         json.RawMessage("{}"),
 		})
 		assert.NoError(t, err)
 		assert.NoError(t, dbMock.ExpectationsWereMet())
@@ -212,8 +240,8 @@ func TestPostgresqlSQLC_CreateTopUp(t *testing.T) {
 			Amount:            amount,
 			Type:              topUpType,
 			ConfirmationUrl:   url,
-			CurrentToppedUpAt: someDate,
-			NextTopUpAt:       someDate2,
+			CurrentToppedUpAt: &someDate,
+			NextTopUpAt:       &someDate2,
 			LCCharge:          json.RawMessage("{}"),
 		})
 		assert.ErrorIs(t, err, assert.AnError)
@@ -248,8 +276,8 @@ func TestPostgresqlSQLC_UpsertTopUp(t *testing.T) {
 			Amount:            amount,
 			Type:              topUpType,
 			ConfirmationUrl:   url,
-			CurrentToppedUpAt: someDate,
-			NextTopUpAt:       someDate2,
+			CurrentToppedUpAt: &someDate,
+			NextTopUpAt:       &someDate2,
 			LCCharge:          json.RawMessage("{}"),
 		})
 		assert.NoError(t, err)
@@ -285,8 +313,8 @@ func TestPostgresqlSQLC_UpsertTopUp(t *testing.T) {
 			Amount:            amount,
 			Type:              topUpType,
 			ConfirmationUrl:   url,
-			CurrentToppedUpAt: someDate,
-			NextTopUpAt:       someDate2,
+			CurrentToppedUpAt: &someDate,
+			NextTopUpAt:       &someDate2,
 			LCCharge:          json.RawMessage("{}"),
 		})
 		assert.ErrorIs(t, err, ledger.ErrNotFound)
@@ -364,8 +392,8 @@ func TestPostgresqlSQLC_GetTopUpsByOrganizationID(t *testing.T) {
 		assert.Equal(t, "lcOrganizationID", c[0].LCOrganizationID)
 		assert.Equal(t, json.RawMessage("{}"), c[0].LCCharge)
 		assert.Equal(t, url, c[0].ConfirmationUrl)
-		assert.Equal(t, someDate, c[0].CurrentToppedUpAt)
-		assert.Equal(t, someDate2, c[0].NextTopUpAt)
+		assert.Equal(t, someDate, *c[0].CurrentToppedUpAt)
+		assert.Equal(t, someDate2, *c[0].NextTopUpAt)
 
 		assert.NoError(t, dbMock.ExpectationsWereMet())
 	})
@@ -425,8 +453,8 @@ func TestPostgresqlSQLC_GetTopUpsByOrganizationIDAndStatus(t *testing.T) {
 		assert.Equal(t, "lcOrganizationID", c[0].LCOrganizationID)
 		assert.Equal(t, json.RawMessage("{}"), c[0].LCCharge)
 		assert.Equal(t, url, c[0].ConfirmationUrl)
-		assert.Equal(t, someDate, c[0].CurrentToppedUpAt)
-		assert.Equal(t, someDate2, c[0].NextTopUpAt)
+		assert.Equal(t, someDate, *c[0].CurrentToppedUpAt)
+		assert.Equal(t, someDate2, *c[0].NextTopUpAt)
 
 		assert.NoError(t, dbMock.ExpectationsWereMet())
 	})
@@ -519,8 +547,8 @@ func TestPostgresqlSQLC_GetTopUpByIDAndType(t *testing.T) {
 		assert.Equal(t, "lcOrganizationID", c.LCOrganizationID)
 		assert.Equal(t, json.RawMessage("{}"), c.LCCharge)
 		assert.Equal(t, url, c.ConfirmationUrl)
-		assert.Equal(t, someDate, c.CurrentToppedUpAt)
-		assert.Equal(t, someDate2, c.NextTopUpAt)
+		assert.Equal(t, someDate, *c.CurrentToppedUpAt)
+		assert.Equal(t, someDate2, *c.NextTopUpAt)
 
 		assert.NoError(t, dbMock.ExpectationsWereMet())
 	})
