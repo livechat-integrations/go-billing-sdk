@@ -119,6 +119,39 @@ func (q *Queries) GetChargeByOrganizationID(ctx context.Context, lcOrganizationI
 	return i, err
 }
 
+const getChargesByOrganizationID = `-- name: GetChargesByOrganizationID :many
+SELECT id, lc_organization_id, type, payload, created_at, deleted_at
+FROM charges
+WHERE lc_organization_id = $1
+`
+
+func (q *Queries) GetChargesByOrganizationID(ctx context.Context, lcOrganizationID string) ([]Charge, error) {
+	rows, err := q.db.Query(ctx, getChargesByOrganizationID, lcOrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Charge
+	for rows.Next() {
+		var i Charge
+		if err := rows.Scan(
+			&i.ID,
+			&i.LcOrganizationID,
+			&i.Type,
+			&i.Payload,
+			&i.CreatedAt,
+			&i.DeletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getSubscriptionByChargeID = `-- name: GetSubscriptionByChargeID :one
 SELECT id, lc_organization_id, plan_name, charge_id, created_at, deleted_at
 FROM active_subscriptions

@@ -11,4 +11,5 @@ type Storage interface {
 	CreateSubscription(ctx context.Context, subscription Subscription) error
 	GetSubscriptionsByOrganizationID(ctx context.Context, lcID string) ([]Subscription, error)
 	DeleteSubscriptionByChargeID(ctx context.Context, id string) error
+	GetChargesByOrganizationID(ctx context.Context, lcID string) ([]Charge, error)
 }

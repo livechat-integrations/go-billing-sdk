@@ -18,7 +18,5 @@ CREATE TABLE IF NOT EXISTS subscriptions
     deleted_at      TIMESTAMPTZ
 );
 
-CREATE UNIQUE INDEX subscriptions_lc_organization_id_uq on subscriptions (lc_organization_id);
-
 CREATE VIEW active_subscriptions AS
 SELECT * FROM subscriptions WHERE deleted_at IS NULL;

@@ -116,3 +116,19 @@ func (r *PostgresqlPGX) DeleteCharge(ctx context.Context, id string) error {
 func (r *PostgresqlPGX) DeleteSubscriptionByChargeID(ctx context.Context, id string) error {
 	return r.queries.DeleteSubscriptionByChargeID(ctx, pgtype.Text{String: id, Valid: true})
 }
+
+func (r *PostgresqlPGX) GetChargesByOrganizationID(ctx context.Context, lcID string) ([]billing.Charge, error) {
+	rows, err := r.queries.GetChargesByOrganizationID(ctx, lcID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	var charges []billing.Charge
+	for _, row := range rows {
+		charges = append(charges, *row.ToBillingCharge())
+	}
+	return charges, nil
+}

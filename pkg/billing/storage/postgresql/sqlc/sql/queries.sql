@@ -45,3 +45,8 @@ WHERE charge_id = $1;
 UPDATE charges
 SET deleted_at = now()
 WHERE id = $1;
+
+-- name: GetChargesByOrganizationID :many
+SELECT *
+FROM charges
+WHERE lc_organization_id = $1;

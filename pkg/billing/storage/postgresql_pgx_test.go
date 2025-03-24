@@ -276,3 +276,42 @@ func TestPostgresqlPGX_DeleteSubscriptionByChargeID(t *testing.T) {
 		assert.NoError(t, dbMock.ExpectationsWereMet())
 	})
 }
+
+func TestPostgresqlPGX_GetChargesByOrganizationID(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
+		dbMock.ExpectQuery("SELECT id, lc_organization_id, type, payload, created_at, deleted_at FROM charges").
+			WithArgs("lcOrganizationID").
+			WillReturnRows(
+				pgxmock.NewRows([]string{"id", "lc_organization_id", "type", "payload", "created_at", "deleted_at"}).
+					AddRow("1", "lcOrganizationID", "recurring", []byte("{}"), nil, nil)).Times(1)
+
+		c, err := s.GetChargesByOrganizationID(context.Background(), "lcOrganizationID")
+		assert.NoError(t, err)
+		assert.NoError(t, dbMock.ExpectationsWereMet())
+		assert.Equal(t, "1", c[0].ID)
+		assert.Equal(t, "lcOrganizationID", c[0].LCOrganizationID)
+		assert.Equal(t, billing.ChargeTypeRecurring, c[0].Type)
+		assert.Equal(t, json.RawMessage("{}"), c[0].Payload)
+	})
+
+	t.Run("no rows", func(t *testing.T) {
+		dbMock.ExpectQuery("SELECT id, lc_organization_id, type, payload, created_at, deleted_at FROM charges").
+			WithArgs("lcOrganizationID").Times(1).
+			WillReturnError(pgx.ErrNoRows)
+
+		c, err := s.GetChargesByOrganizationID(context.Background(), "lcOrganizationID")
+		assert.NoError(t, err)
+		assert.Nil(t, c)
+		assert.NoError(t, dbMock.ExpectationsWereMet())
+	})
+
+	t.Run("error", func(t *testing.T) {
+		dbMock.ExpectQuery("SELECT id, lc_organization_id, type, payload, created_at, deleted_at FROM charges").
+			WithArgs("lcOrganizationID").Times(1).
+			WillReturnError(assert.AnError)
+
+		_, err := s.GetChargesByOrganizationID(context.Background(), "lcOrganizationID")
+		assert.ErrorIs(t, err, assert.AnError)
+		assert.NoError(t, dbMock.ExpectationsWereMet())
+	})
+}
