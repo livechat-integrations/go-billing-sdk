@@ -1,0 +1,8 @@
+name: Run Tests
+
+on: pull_request
+
+jobs:
+  tests:
+    name: Unit & Functional tests
+    uses: ./.github/workflows/workflow_tests.yml
