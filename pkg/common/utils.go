@@ -1,8 +1,10 @@
-package billing
+package common
 
 import (
 	"fmt"
 	"regexp"
+
+	"github.com/rs/xid"
 )
 
 var urlPattern = regexp.MustCompile(`^(.*)((?:livechat(?:inc)?|text)\.com)(/.*)?$`)
@@ -13,4 +15,15 @@ func EnvURL(url, lcEnv string) string {
 		url = urlPattern.ReplaceAllString(url, fmt.Sprintf(`${1}%s.${2}${3}`, lcEnv))
 	}
 	return url
+}
+
+type IdProviderInterface interface {
+	GenerateId() string
+}
+
+type IdProvider struct {
+}
+
+func (IdProvider) GenerateId() string {
+	return xid.New().String()
 }

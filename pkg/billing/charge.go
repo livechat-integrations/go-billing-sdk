@@ -3,6 +3,8 @@ package billing
 import (
 	"encoding/json"
 	"time"
+
+	"github.com/livechat-integrations/go-billing-sdk/pkg/common/livechat"
 )
 
 type ChargeType string
@@ -50,7 +52,7 @@ func (c Subscription) IsActive() bool {
 		return true
 	}
 
-	var p BaseCharge
+	var p livechat.BaseChargeV2
 	_ = json.Unmarshal(c.Charge.Payload, &p)
 	return c.Charge.CanceledAt == nil && (p.Status == "active" || p.Status == "success")
 }

@@ -4,11 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
+
 	"github.com/livechat-integrations/go-billing-sdk/pkg/billing"
 	"github.com/livechat-integrations/go-billing-sdk/pkg/billing/storage/postgresql/sqlc"
+	"github.com/livechat-integrations/go-billing-sdk/pkg/common/livechat"
 )
 
 type PGXConn interface {
@@ -68,7 +71,7 @@ func (r *PostgresqlPGX) GetChargeByOrganizationID(ctx context.Context, lcID stri
 	return row.ToBillingCharge(), nil
 }
 
-func (r *PostgresqlPGX) UpdateChargePayload(ctx context.Context, id string, payload billing.BaseCharge) error {
+func (r *PostgresqlPGX) UpdateChargePayload(ctx context.Context, id string, payload livechat.BaseCharge) error {
 	rawPayload, err := json.Marshal(payload)
 	if err != nil {
 		return err

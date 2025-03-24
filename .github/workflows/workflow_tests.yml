@@ -1,0 +1,33 @@
+name: Go package
+
+on:
+  workflow_call:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Test
+        run: go test -v ./...
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
