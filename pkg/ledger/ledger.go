@@ -110,10 +110,9 @@ type CreateTopUpRequestParams struct {
 }
 
 type TopUpConfig struct {
-	ConfirmationUrl string  `json:"confirmationUrl"`
-	TrialDays       *int    `json:"trialDays"`
-	Months          *int    `json:"months"`
-	ReturnUrl       *string `json:"returnUrl"`
+	TrialDays *int    `json:"trialDays"`
+	Months    *int    `json:"months"`
+	ReturnUrl *string `json:"returnUrl"`
 }
 
 func (s *Service) CreateTopUpRequest(ctx context.Context, params CreateTopUpRequestParams) (string, error) {
@@ -133,7 +132,7 @@ func (s *Service) CreateTopUpRequest(ctx context.Context, params CreateTopUpRequ
 		config.Months = params.Config.Months
 	}
 
-	chargeID, rawCharge, err := s.createBillingCharge(ctx, createBillingChargeParams{
+	cr, err := s.createBillingCharge(ctx, createBillingChargeParams{
 		Test:           isTest,
 		OrganizationID: params.OrganizationID,
 		Name:           params.Name,
@@ -148,7 +147,7 @@ func (s *Service) CreateTopUpRequest(ctx context.Context, params CreateTopUpRequ
 			err:   fmt.Errorf("failed to create top up billing charge: %w", err),
 		})
 	}
-	if rawCharge == nil || chargeID == nil {
+	if cr.RawCharge == nil || cr.ChargeID == nil || cr.ConfirmationUrl == nil {
 		event.Type = EventTypeError
 		return "", s.ToError(ctx, ToErrorParams{
 			event: event,
@@ -157,13 +156,13 @@ func (s *Service) CreateTopUpRequest(ctx context.Context, params CreateTopUpRequ
 	}
 
 	topUp := TopUp{
-		ID:               *chargeID,
+		ID:               *cr.ChargeID,
 		LCOrganizationID: params.OrganizationID,
 		Status:           TopUpStatusPending,
 		Amount:           params.Amount,
 		Type:             params.Type,
-		ConfirmationUrl:  params.Config.ConfirmationUrl,
-		LCCharge:         *rawCharge,
+		ConfirmationUrl:  *cr.ConfirmationUrl,
+		LCCharge:         *cr.RawCharge,
 	}
 	err = s.storage.CreateTopUp(ctx, topUp)
 	if err != nil {
@@ -175,7 +174,7 @@ func (s *Service) CreateTopUpRequest(ctx context.Context, params CreateTopUpRequ
 	}
 	event.SetPayload(topUp)
 	_ = s.CreateEvent(ctx, event)
-	return *chargeID, nil
+	return topUp.ID, nil
 }
 
 func (s *Service) GetBalance(ctx context.Context, organizationID string) (float32, error) {
@@ -428,15 +427,20 @@ type ChargeConfig struct {
 	ReturnUrl *string `json:"returnUrl"`
 }
 
-func (s *Service) createBillingCharge(ctx context.Context, params createBillingChargeParams) (*string, *json.RawMessage, error) {
+type createBillingChargeResult struct {
+	RawCharge       *[]byte `json:"charge"`
+	ConfirmationUrl *string `json:"confirmationUrl"`
+	ChargeID        *string `json:"chargeId"`
+}
+
+func (s *Service) createBillingCharge(ctx context.Context, params createBillingChargeParams) (*createBillingChargeResult, error) {
 	isTest := params.Test || params.OrganizationID == s.masterOrgID
 	returnUrl := s.returnURL
 	if params.Config.ReturnUrl != nil {
 		returnUrl = *params.Config.ReturnUrl
 	}
 
-	var rawCharge json.RawMessage
-	var chargeID string
+	var result createBillingChargeResult
 	switch params.Type {
 	case TopUpTypeDirect:
 		lcCharge, err := s.billingAPI.CreateDirectCharge(ctx, livechat.CreateDirectChargeParams{
@@ -447,21 +451,23 @@ func (s *Service) createBillingCharge(ctx context.Context, params createBillingC
 		})
 
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to create direct charge via lc: %w", err)
+			return nil, fmt.Errorf("failed to create direct charge via lc: %w", err)
 		}
 
 		if lcCharge == nil {
-			return nil, nil, fmt.Errorf("failed to create direct charge via lc: charge is nil")
+			return nil, fmt.Errorf("failed to create direct charge via lc: charge is nil")
 		}
 
-		rawCharge, err = json.Marshal(lcCharge)
+		rawCharge, err := json.Marshal(lcCharge)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to marshal lc direct charge: %w", err)
+			return nil, fmt.Errorf("failed to marshal lc direct charge: %w", err)
 		}
-		chargeID = lcCharge.ID
+		result.RawCharge = &rawCharge
+		result.ConfirmationUrl = &lcCharge.ConfirmationURL
+		result.ChargeID = &lcCharge.ID
 	case TopUpTypeRecurrent:
 		if params.Config.Months == nil {
-			return nil, nil, fmt.Errorf("failed to create recurrent charge v2 via lc: charge config months is nil")
+			return nil, fmt.Errorf("failed to create recurrent charge v2 via lc: charge config months is nil")
 		}
 		recurrentChargeParams := livechat.CreateRecurrentChargeV2Params{
 			Name:      params.Name,
@@ -476,21 +482,23 @@ func (s *Service) createBillingCharge(ctx context.Context, params createBillingC
 		lcCharge, err := s.billingAPI.CreateRecurrentChargeV2(ctx, recurrentChargeParams)
 
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to create recurrent charge v2 via lc: %w", err)
+			return nil, fmt.Errorf("failed to create recurrent charge v2 via lc: %w", err)
 		}
 
 		if lcCharge == nil {
-			return nil, nil, fmt.Errorf("failed to create recurrent charge v2 via lc: charge is nil")
+			return nil, fmt.Errorf("failed to create recurrent charge v2 via lc: charge is nil")
 		}
 
-		rawCharge, err = json.Marshal(lcCharge)
+		rawCharge, err := json.Marshal(lcCharge)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to marshal lc recurrent charge: %w", err)
+			return nil, fmt.Errorf("failed to marshal lc recurrent charge: %w", err)
 		}
-		chargeID = lcCharge.ID
+		result.RawCharge = &rawCharge
+		result.ConfirmationUrl = &lcCharge.ConfirmationURL
+		result.ChargeID = &lcCharge.ID
 	}
 
-	return &chargeID, &rawCharge, nil
+	return &result, nil
 }
 
 func (s *Service) CreateEvent(ctx context.Context, event Event) error {

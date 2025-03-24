@@ -268,12 +268,14 @@ func TestService_CreateTopUpRequest(t *testing.T) {
 		amount := float32(5.234)
 		lcoid := "lcOrganizationID"
 		months := 0
+		confUrl := "http://livechat.com/confirmation"
 		rc := &livechat.RecurrentChargeV2{
 			BaseChargeV2: livechat.BaseChargeV2{
-				ID:    "id",
-				Name:  "name",
-				Test:  false,
-				Price: amount,
+				ID:              "id",
+				Name:            "name",
+				Test:            false,
+				Price:           amount,
+				ConfirmationURL: confUrl,
 			},
 			TrialDays: 0,
 			Months:    months,
@@ -289,6 +291,7 @@ func TestService_CreateTopUpRequest(t *testing.T) {
 			Type:             TopUpTypeRecurrent,
 			Status:           TopUpStatusPending,
 			LCCharge:         rawRC,
+			ConfirmationUrl:  confUrl,
 		}
 		am.On("CreateRecurrentChargeV2", ctx, livechat.CreateRecurrentChargeV2Params{
 			Name:      "name",
