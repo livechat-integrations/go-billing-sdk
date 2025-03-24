@@ -93,12 +93,12 @@ func (q *Queries) CreateTopUp(ctx context.Context, arg CreateTopUpParams) error 
 
 const getOrganizationBalance = `-- name: GetOrganizationBalance :one
 SELECT b.amount::numeric FROM (SELECT (
-    SELECT SUM(tu.amount)
+    SELECT COALESCE(SUM(tu.amount), 0)
     FROM ledger_top_ups tu
     WHERE tu.lc_organization_id = $1
       AND tu.status = $2
 ) - (
-    SELECT SUM(c.amount)
+    SELECT COALESCE(SUM(c.amount), 0)
     FROM ledger_charges c
     WHERE c.lc_organization_id = $1
       AND c.status = $3
