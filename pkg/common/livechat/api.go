@@ -123,7 +123,7 @@ func (a *Api) CreateDirectCharge(ctx context.Context, params CreateDirectChargeP
 		Payload           []byte  `json:"payload"`
 	}
 
-	resp, err := a.call(ctx, "POST", "/v2/direct_charge", payload{
+	resp, err := a.call(ctx, "POST", "/v2/direct_charge/livechat", payload{
 		Name:              params.Name,
 		Price:             params.Price,
 		ReturnURL:         params.ReturnURL,
@@ -140,7 +140,7 @@ func (a *Api) CreateDirectCharge(ctx context.Context, params CreateDirectChargeP
 }
 
 func (a *Api) GetDirectCharge(ctx context.Context, id string) (*DirectCharge, error) {
-	resp, err := a.call(ctx, "GET", "/v2/direct_charge/"+id, nil)
+	resp, err := a.call(ctx, "GET", "/v2/direct_charge/livechat/"+id, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -204,7 +204,7 @@ func (a *Api) CreateRecurrentChargeV2(ctx context.Context, params CreateRecurren
 		Months            int     `json:"months,omitempty"`
 		CommissionPercent *int    `json:"commission_percent,omitempty"`
 	}
-	resp, err := a.call(ctx, "POST", "/v2/recurrent_charge", payload{
+	resp, err := a.call(ctx, "POST", "/v2/recurrent_charge/livechat", payload{
 		Name:              params.Name,
 		Price:             params.Price,
 		ReturnURL:         params.ReturnURL,
@@ -230,7 +230,7 @@ func (a *Api) GetRecurrentCharge(ctx context.Context, id string) (*RecurrentChar
 }
 
 func (a *Api) GetRecurrentChargeV2(ctx context.Context, id string) (*RecurrentChargeV2, error) {
-	resp, err := a.call(ctx, "GET", "/v2/recurrent_charge/"+id, nil)
+	resp, err := a.call(ctx, "GET", "/v2/recurrent_charge/livechat/"+id, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -239,7 +239,7 @@ func (a *Api) GetRecurrentChargeV2(ctx context.Context, id string) (*RecurrentCh
 }
 
 func (a *Api) CancelRecurrentCharge(ctx context.Context, id string) (*RecurrentChargeV2, error) {
-	resp, err := a.call(ctx, "PUT", fmt.Sprintf("/v2/recurrent_charge/%s/cancel", id), nil)
+	resp, err := a.call(ctx, "PUT", fmt.Sprintf("/v2/recurrent_charge/livechat/%s/cancel", id), nil)
 	if err != nil {
 		return nil, err
 	}
