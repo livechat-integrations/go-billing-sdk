@@ -83,6 +83,11 @@ type storageMock struct {
 	mock.Mock
 }
 
+func (m *storageMock) GetChargesByOrganizationID(ctx context.Context, lcID string) ([]Charge, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
 func (m *storageMock) DeleteCharge(ctx context.Context, id string) error {
 	//TODO implement me
 	panic("implement me")

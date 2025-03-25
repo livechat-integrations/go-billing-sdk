@@ -56,6 +56,58 @@ func TestAPI_CreateRecurrentCharge(t *testing.T) {
 	})
 }
 
+func TestAPI_CreateRecurrentChargeV2(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
+		hm.On("Do", mock.Anything).Return(&http.Response{
+			StatusCode: 201,
+			Body:       io.NopCloser(strings.NewReader(`{"id":"1","price":2000}`)),
+		}, nil).Once()
+
+		charge, err := a.CreateRecurrentChargeV2(context.Background(), CreateRecurrentChargeV2Params{
+			Price: float32(20.000),
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, "1", charge.ID)
+	})
+
+	t.Run("error", func(t *testing.T) {
+		hm.On("Do", mock.Anything).Return(&http.Response{
+			StatusCode: 500,
+			Body:       io.NopCloser(strings.NewReader(``)),
+		}, nil).Once()
+
+		charge, err := a.CreateRecurrentChargeV2(context.Background(), CreateRecurrentChargeV2Params{})
+		assert.Error(t, err)
+		assert.Nil(t, charge)
+	})
+}
+
+func TestAPI_CreateDirectCharge(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
+		hm.On("Do", mock.Anything).Return(&http.Response{
+			StatusCode: 201,
+			Body:       io.NopCloser(strings.NewReader(`{"id":"1","price":2000}`)),
+		}, nil).Once()
+
+		charge, err := a.CreateDirectCharge(context.Background(), CreateDirectChargeParams{
+			Price: float32(20.000),
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, "1", charge.ID)
+	})
+
+	t.Run("error", func(t *testing.T) {
+		hm.On("Do", mock.Anything).Return(&http.Response{
+			StatusCode: 500,
+			Body:       io.NopCloser(strings.NewReader(``)),
+		}, nil).Once()
+
+		charge, err := a.CreateDirectCharge(context.Background(), CreateDirectChargeParams{})
+		assert.Error(t, err)
+		assert.Nil(t, charge)
+	})
+}
+
 func TestAPI_GetRecurrentCharge(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		hm.On("Do", mock.Anything).Return(&http.Response{

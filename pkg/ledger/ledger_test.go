@@ -296,7 +296,7 @@ func TestService_CreateTopUpRequest(t *testing.T) {
 		am.On("CreateRecurrentChargeV2", ctx, livechat.CreateRecurrentChargeV2Params{
 			Name:      "name",
 			ReturnURL: "returnURL",
-			Price:     amount,
+			Price:     amount * 100,
 			Test:      false,
 			TrialDays: 0,
 			Months:    months,
@@ -380,7 +380,7 @@ func TestService_CreateTopUpRequest(t *testing.T) {
 		am.On("CreateRecurrentChargeV2", ctx, livechat.CreateRecurrentChargeV2Params{
 			Name:      "name",
 			ReturnURL: "returnURL",
-			Price:     amount,
+			Price:     amount * 100,
 			Test:      false,
 			TrialDays: 0,
 			Months:    months,
@@ -425,7 +425,7 @@ func TestService_CreateTopUpRequest(t *testing.T) {
 		am.On("CreateRecurrentChargeV2", ctx, livechat.CreateRecurrentChargeV2Params{
 			Name:      "name",
 			ReturnURL: "returnURL",
-			Price:     amount,
+			Price:     amount * 100,
 			Test:      false,
 			TrialDays: 0,
 			Months:    months,
@@ -476,7 +476,7 @@ func TestService_CreateTopUpRequest(t *testing.T) {
 		am.On("CreateDirectCharge", ctx, livechat.CreateDirectChargeParams{
 			Name:      "name",
 			ReturnURL: "returnURL",
-			Price:     amount,
+			Price:     amount * 100,
 			Test:      false,
 		}).Return(rc, nil).Once()
 		sm.On("CreateTopUp", ctx, topUp).Return(nil).Once()
@@ -522,7 +522,7 @@ func TestService_CreateTopUpRequest(t *testing.T) {
 		am.On("CreateDirectCharge", ctx, livechat.CreateDirectChargeParams{
 			Name:      "name",
 			ReturnURL: "returnURL",
-			Price:     amount,
+			Price:     amount * 100,
 			Test:      false,
 		}).Return(nil, assert.AnError).Once()
 
@@ -561,7 +561,7 @@ func TestService_CreateTopUpRequest(t *testing.T) {
 		am.On("CreateDirectCharge", ctx, livechat.CreateDirectChargeParams{
 			Name:      "name",
 			ReturnURL: "returnURL",
-			Price:     amount,
+			Price:     amount * 100,
 			Test:      false,
 		}).Return(nil, nil).Once()
 
