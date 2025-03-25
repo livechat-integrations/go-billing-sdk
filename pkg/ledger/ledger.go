@@ -443,10 +443,11 @@ func (s *Service) createBillingCharge(ctx context.Context, params createBillingC
 	var result createBillingChargeResult
 	switch params.Type {
 	case TopUpTypeDirect:
+		// multiply price by 100 because LC is using integer (1 = 1 cent)
 		lcCharge, err := s.billingAPI.CreateDirectCharge(ctx, livechat.CreateDirectChargeParams{
 			Name:      params.Name,
 			ReturnURL: returnUrl,
-			Price:     params.Amount,
+			Price:     params.Amount * 100,
 			Test:      isTest,
 		})
 
@@ -469,10 +470,11 @@ func (s *Service) createBillingCharge(ctx context.Context, params createBillingC
 		if params.Config.Months == nil {
 			return nil, fmt.Errorf("failed to create recurrent charge v2 via lc: charge config months is nil")
 		}
+		// multiply price by 100 because LC is using integer (1 = 1 cent)
 		recurrentChargeParams := livechat.CreateRecurrentChargeV2Params{
 			Name:      params.Name,
 			ReturnURL: returnUrl,
-			Price:     params.Amount,
+			Price:     params.Amount * 100,
 			Test:      isTest,
 			Months:    *params.Config.Months,
 		}
