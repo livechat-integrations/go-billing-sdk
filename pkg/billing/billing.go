@@ -142,3 +142,12 @@ func (s *Service) DeleteSubscriptionWithCharge(ctx context.Context, chargeID str
 
 	return nil
 }
+
+func (s *Service) GetChargesByOrganizationID(ctx context.Context, lcID string) ([]Charge, error) {
+	rows, err := s.storage.GetChargesByOrganizationID(ctx, lcID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get charges by organization id: %w", err)
+	}
+
+	return rows, nil
+}
