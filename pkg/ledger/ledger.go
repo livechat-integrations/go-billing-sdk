@@ -454,7 +454,6 @@ func (s *Service) createBillingCharge(ctx context.Context, params createBillingC
 		if err != nil {
 			return nil, fmt.Errorf("failed to create direct charge via lc: %w", err)
 		}
-
 		if lcCharge == nil {
 			return nil, fmt.Errorf("failed to create direct charge via lc: charge is nil")
 		}
@@ -486,7 +485,6 @@ func (s *Service) createBillingCharge(ctx context.Context, params createBillingC
 		if err != nil {
 			return nil, fmt.Errorf("failed to create recurrent charge v2 via lc: %w", err)
 		}
-
 		if lcCharge == nil {
 			return nil, fmt.Errorf("failed to create recurrent charge v2 via lc: charge is nil")
 		}
