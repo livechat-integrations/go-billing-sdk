@@ -39,4 +39,5 @@ type LedgerTopUp struct {
 	NextTopUpAt       pgtype.Timestamptz
 	CreatedAt         pgtype.Timestamptz
 	UpdatedAt         pgtype.Timestamptz
+	UniqueAt          pgtype.Timestamptz
 }
