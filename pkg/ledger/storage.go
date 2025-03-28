@@ -3,22 +3,40 @@ package ledger
 import (
 	"context"
 	"fmt"
+	"time"
 )
 
 var (
 	ErrNotFound = fmt.Errorf("not found")
 )
 
+type InitRecurrentTopUpRequiredValuesParams struct {
+	CurrentToppedUpAt time.Time
+	NextTopUpAt       time.Time
+	ID                string
+}
+
+type UpdateTopUpStatusParams struct {
+	ID                string
+	Status            TopUpStatus
+	CurrentToppedUpAt *time.Time
+}
+
+type GetTopUpByIDAndTypeParams struct {
+	ID                string
+	Type              TopUpType
+	CurrentToppedUpAt *time.Time
+}
+
 type Storage interface {
-	GetTopUpByID(ctx context.Context, ID string) (*TopUp, error)
-	GetTopUpByIDAndType(ctx context.Context, ID string, topUpType TopUpType) (*TopUp, error)
-	GetTopUpsByOrganizationID(ctx context.Context, organizationID string) ([]TopUp, error)
-	GetBalance(ctx context.Context, organizationID string) (float32, error)
 	CreateCharge(ctx context.Context, charge Charge) error
-	CreateTopUp(ctx context.Context, topUp TopUp) error
-	CreateEvent(ctx context.Context, event Event) error
-	UpdateTopUpStatus(ctx context.Context, ID string, status TopUpStatus) error
 	UpdateChargeStatus(ctx context.Context, ID string, status ChargeStatus) error
+	GetBalance(ctx context.Context, organizationID string) (float32, error)
+	GetTopUpsByOrganizationID(ctx context.Context, organizationID string) ([]TopUp, error)
+	UpdateTopUpStatus(ctx context.Context, params UpdateTopUpStatusParams) error
+	GetTopUpByIDAndType(ctx context.Context, params GetTopUpByIDAndTypeParams) (*TopUp, error)
+	CreateEvent(ctx context.Context, event Event) error
 	GetTopUpsByOrganizationIDAndStatus(ctx context.Context, organizationID string, status TopUpStatus) ([]TopUp, error)
 	UpsertTopUp(ctx context.Context, topUp TopUp) (*TopUp, error)
+	InitRecurrentTopUpRequiredValues(ctx context.Context, params InitRecurrentTopUpRequiredValuesParams) error
 }

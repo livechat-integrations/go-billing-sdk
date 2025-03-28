@@ -51,7 +51,7 @@ func (h *Handler) HandleDPSWebhook(ctx context.Context, req DPSWebhookRequest) e
 			})
 		}
 		for _, t := range topUps {
-			if err := h.ledger.ForceCancelTopUp(ctx, t.LCOrganizationID, t.ID); err != nil {
+			if err := h.ledger.ForceCancelTopUp(ctx, t); err != nil {
 				event.Type = EventTypeError
 				return h.ledger.ToError(ctx, ToErrorParams{
 					event: event,
@@ -60,7 +60,7 @@ func (h *Handler) HandleDPSWebhook(ctx context.Context, req DPSWebhookRequest) e
 			}
 		}
 		_ = h.ledger.CreateEvent(ctx, event)
-	case "payment_collected", "payment_activated", "payment_cancelled", "payment_declined":
+	case "payment_collected", "payment_cancelled", "payment_declined":
 		event := h.ledger.ToEvent(ctx, req.LCOrganizationID, EventActionDPSWebhookPayment, EventTypeInfo, req)
 		paymentID, ok := req.Payload["paymentID"].(string)
 		if !ok {
@@ -73,13 +73,18 @@ func (h *Handler) HandleDPSWebhook(ctx context.Context, req DPSWebhookRequest) e
 		_, err := h.ledger.SyncTopUp(ctx, req.LCOrganizationID, paymentID)
 		if err != nil {
 			if req.Event == "payment_cancelled" {
-				if t, err := h.ledger.GetTopUpByID(ctx, paymentID); err == nil {
-					if err := h.ledger.ForceCancelTopUp(ctx, req.LCOrganizationID, t.ID); err != nil {
-						event.Type = EventTypeError
-						return h.ledger.ToError(ctx, ToErrorParams{
-							event: event,
-							err:   fmt.Errorf("force cancell top up: %w", err),
-						})
+				if tps, err := h.ledger.GetTopUps(ctx, req.LCOrganizationID); err == nil {
+					for _, t := range tps {
+						if paymentID != t.ID {
+							continue
+						}
+						if err := h.ledger.ForceCancelTopUp(ctx, t); err != nil {
+							event.Type = EventTypeError
+							return h.ledger.ToError(ctx, ToErrorParams{
+								event: event,
+								err:   fmt.Errorf("force cancell top up: %w", err),
+							})
+						}
 					}
 				} else {
 					event.Type = EventTypeError
@@ -96,6 +101,7 @@ func (h *Handler) HandleDPSWebhook(ctx context.Context, req DPSWebhookRequest) e
 				err:   fmt.Errorf("syncing top up: %w", err),
 			})
 		}
+
 		_ = h.ledger.CreateEvent(ctx, event)
 	}
 

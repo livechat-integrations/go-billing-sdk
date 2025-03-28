@@ -18,11 +18,12 @@ const (
 	EventActionCreateCharge                     EventAction = "create_charge"
 	EventActionCreateTopUp                      EventAction = "create_top_up"
 	EventActionCancelTopUp                      EventAction = "cancel_top_up"
-	EventActionUpdateTopUpStatus                EventAction = "update_top_up_status"
 	EventActionCancelCharge                     EventAction = "cancel_charge_event"
+	EventActionForceCancelCharge                EventAction = "force_cancel_charge_event"
 	EventActionDPSWebhookApplicationUninstalled EventAction = "dps_webhook_event_application_uninstalled"
 	EventActionDPSWebhookPayment                EventAction = "dps_webhook_event_payment"
 	EventActionSyncTopUp                        EventAction = "sync_top_up_event"
+	EventActionMarkRecurrentTopUpPaymentActive  EventAction = "mark_recurrent_top_up_payment_active"
 )
 
 type Event struct {

@@ -17,19 +17,17 @@ import (
 
 type LedgerInterface interface {
 	CreateCharge(ctx context.Context, params CreateChargeParams) (string, error)
-	CreateTopUpRequest(ctx context.Context, params CreateTopUpRequestParams) (string, error)
+	CreateTopUpRequest(ctx context.Context, params CreateTopUpRequestParams) (*TopUp, error)
 	GetBalance(ctx context.Context, organizationID string) (float32, error)
 	GetTopUps(ctx context.Context, organizationID string) ([]TopUp, error)
-	GetTopUpByID(ctx context.Context, ID string) (*TopUp, error)
 	CancelTopUpRequest(ctx context.Context, organizationID string, ID string) error
-	ForceCancelTopUp(ctx context.Context, organizationID string, ID string) error
+	ForceCancelTopUp(ctx context.Context, topUp TopUp) error
 	CancelCharge(ctx context.Context, organizationID string, ID string) error
 	GetTopUpsByOrganizationIDAndStatus(ctx context.Context, organizationID string, status TopUpStatus) ([]TopUp, error)
 	ToError(ctx context.Context, params ToErrorParams) error
 	ToEvent(ctx context.Context, organizationID string, action EventAction, eventType EventType, payload any) Event
 	GetUniqueID() string
 	CreateEvent(ctx context.Context, event Event) error
-	UpdateTopUpStatus(ctx context.Context, organizationID string, ID string, status TopUpStatus) error
 	SyncTopUp(ctx context.Context, organizationID string, ID string) (*TopUp, error)
 }
 
@@ -115,7 +113,7 @@ type TopUpConfig struct {
 	ReturnUrl *string `json:"returnUrl"`
 }
 
-func (s *Service) CreateTopUpRequest(ctx context.Context, params CreateTopUpRequestParams) (string, error) {
+func (s *Service) CreateTopUpRequest(ctx context.Context, params CreateTopUpRequestParams) (*TopUp, error) {
 	event := s.ToEvent(ctx, params.OrganizationID, EventActionCreateTopUp, EventTypeInfo, params)
 	isTest := params.Test || params.OrganizationID == s.masterOrgID
 	config := ChargeConfig{
@@ -142,14 +140,14 @@ func (s *Service) CreateTopUpRequest(ctx context.Context, params CreateTopUpRequ
 	})
 	if err != nil {
 		event.Type = EventTypeError
-		return "", s.ToError(ctx, ToErrorParams{
+		return nil, s.ToError(ctx, ToErrorParams{
 			event: event,
 			err:   fmt.Errorf("failed to create top up billing charge: %w", err),
 		})
 	}
 	if cr.RawCharge == nil || cr.ChargeID == nil || cr.ConfirmationUrl == nil {
 		event.Type = EventTypeError
-		return "", s.ToError(ctx, ToErrorParams{
+		return nil, s.ToError(ctx, ToErrorParams{
 			event: event,
 			err:   fmt.Errorf("failed to create billing charge: empty charge id"),
 		})
@@ -164,17 +162,24 @@ func (s *Service) CreateTopUpRequest(ctx context.Context, params CreateTopUpRequ
 		ConfirmationUrl:  *cr.ConfirmationUrl,
 		LCCharge:         *cr.RawCharge,
 	}
-	err = s.storage.CreateTopUp(ctx, topUp)
+	if cr.NextChargeAt != nil {
+		topUp.NextTopUpAt = cr.NextChargeAt
+	}
+	if cr.CurrentChargeAt != nil {
+		topUp.CurrentToppedUpAt = cr.CurrentChargeAt
+	}
+
+	tu, err := s.storage.UpsertTopUp(ctx, topUp)
 	if err != nil {
 		event.Type = EventTypeError
-		return "", s.ToError(ctx, ToErrorParams{
+		return nil, s.ToError(ctx, ToErrorParams{
 			event: event,
 			err:   fmt.Errorf("failed to create database top up: %w", err),
 		})
 	}
-	event.SetPayload(topUp)
+	event.SetPayload(tu)
 	_ = s.CreateEvent(ctx, event)
-	return topUp.ID, nil
+	return tu, nil
 }
 
 func (s *Service) GetBalance(ctx context.Context, organizationID string) (float32, error) {
@@ -190,13 +195,12 @@ func (s *Service) GetTopUps(ctx context.Context, organizationID string) ([]TopUp
 	return s.storage.GetTopUpsByOrganizationID(ctx, organizationID)
 }
 
-func (s *Service) GetTopUpByID(ctx context.Context, ID string) (*TopUp, error) {
-	return s.storage.GetTopUpByID(ctx, ID)
-}
-
 func (s *Service) CancelTopUpRequest(ctx context.Context, organizationID string, ID string) error {
 	event := s.ToEvent(ctx, organizationID, EventActionCancelTopUp, EventTypeInfo, map[string]interface{}{"id": ID})
-	topUp, err := s.storage.GetTopUpByIDAndType(ctx, ID, TopUpTypeRecurrent)
+	topUp, err := s.storage.GetTopUpByIDAndType(ctx, GetTopUpByIDAndTypeParams{
+		ID:   ID,
+		Type: TopUpTypeRecurrent,
+	})
 	if err != nil {
 		event.Type = EventTypeError
 		return s.ToError(ctx, ToErrorParams{
@@ -219,7 +223,11 @@ func (s *Service) CancelTopUpRequest(ctx context.Context, organizationID string,
 		})
 	}
 
-	err = s.storage.UpdateTopUpStatus(ctx, ID, TopUpStatusCancelled)
+	err = s.storage.UpdateTopUpStatus(ctx, UpdateTopUpStatusParams{
+		ID:                ID,
+		Status:            TopUpStatusCancelled,
+		CurrentToppedUpAt: topUp.CurrentToppedUpAt,
+	})
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			event.SetPayload(map[string]interface{}{"id": ID, "result": "top up not found"})
@@ -239,16 +247,16 @@ func (s *Service) CancelTopUpRequest(ctx context.Context, organizationID string,
 	return nil
 }
 
-func (s *Service) ForceCancelTopUp(ctx context.Context, organizationID string, ID string) error {
-	return s.UpdateTopUpStatus(ctx, organizationID, ID, TopUpStatusCancelled)
-}
-
-func (s *Service) UpdateTopUpStatus(ctx context.Context, organizationID string, ID string, status TopUpStatus) error {
-	event := s.ToEvent(ctx, organizationID, EventActionUpdateTopUpStatus, EventTypeInfo, map[string]interface{}{"id": ID, "status": status})
-	err := s.storage.UpdateTopUpStatus(ctx, ID, status)
+func (s *Service) ForceCancelTopUp(ctx context.Context, topUp TopUp) error {
+	event := s.ToEvent(ctx, topUp.LCOrganizationID, EventActionForceCancelCharge, EventTypeInfo, map[string]interface{}{"id": topUp.ID, "status": TopUpStatusCancelled})
+	err := s.storage.UpdateTopUpStatus(ctx, UpdateTopUpStatusParams{
+		ID:                topUp.ID,
+		Status:            TopUpStatusCancelled,
+		CurrentToppedUpAt: topUp.CurrentToppedUpAt,
+	})
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
-			event.SetPayload(map[string]interface{}{"id": ID, "result": "top up not found"})
+			event.SetPayload(map[string]interface{}{"id": topUp.ID, "result": "top up not found"})
 			_ = s.CreateEvent(ctx, event)
 			return ErrTopUpNotFound
 		}
@@ -341,6 +349,8 @@ func (s *Service) SyncTopUp(ctx context.Context, organizationID string, ID strin
 			status = TopUpStatusCancelled
 		case "declined":
 			status = TopUpStatusCancelled
+		case "frozen":
+			status = TopUpStatusCancelled
 		}
 		topUp.CurrentToppedUpAt = c.CurrentChargeAt
 		topUp.NextTopUpAt = c.NextChargeAt
@@ -395,8 +405,28 @@ func (s *Service) SyncTopUp(ctx context.Context, organizationID string, ID strin
 	topUp.Type = chargeType
 	topUp.Status = status
 	topUp.LCCharge = p
-	topUp.Amount = baseCharge.Price
+	if baseCharge.Price > 0 {
+		topUp.Amount = baseCharge.Price / 100
+	}
 	topUp.ConfirmationUrl = baseCharge.ConfirmationURL
+
+	// make sure that recurrent top up have all required fields initiated before proceeding to status upsert
+	if isRecurrent && topUp.CurrentToppedUpAt != nil {
+		err = s.storage.InitRecurrentTopUpRequiredValues(ctx, InitRecurrentTopUpRequiredValuesParams{
+			CurrentToppedUpAt: *topUp.CurrentToppedUpAt,
+			NextTopUpAt:       *topUp.NextTopUpAt,
+			ID:                topUp.ID,
+		})
+		if err != nil {
+			if !errors.Is(err, ErrNotFound) {
+				event.Type = EventTypeError
+				return nil, s.ToError(ctx, ToErrorParams{
+					event: event,
+					err:   err,
+				})
+			}
+		}
+	}
 
 	uTopUp, err := s.storage.UpsertTopUp(ctx, topUp)
 	if err != nil {
@@ -428,9 +458,11 @@ type ChargeConfig struct {
 }
 
 type createBillingChargeResult struct {
-	RawCharge       *[]byte `json:"charge"`
-	ConfirmationUrl *string `json:"confirmationUrl"`
-	ChargeID        *string `json:"chargeId"`
+	RawCharge       *[]byte    `json:"charge"`
+	ConfirmationUrl *string    `json:"confirmationUrl"`
+	ChargeID        *string    `json:"chargeId"`
+	NextChargeAt    *time.Time `json:"nextChargeAt"`
+	CurrentChargeAt *time.Time `json:"currentChargeAt"`
 }
 
 func (s *Service) createBillingCharge(ctx context.Context, params createBillingChargeParams) (*createBillingChargeResult, error) {
@@ -496,6 +528,8 @@ func (s *Service) createBillingCharge(ctx context.Context, params createBillingC
 		result.RawCharge = &rawCharge
 		result.ConfirmationUrl = &lcCharge.ConfirmationURL
 		result.ChargeID = &lcCharge.ID
+		result.NextChargeAt = lcCharge.NextChargeAt
+		result.CurrentChargeAt = lcCharge.CurrentChargeAt
 	}
 
 	return &result, nil

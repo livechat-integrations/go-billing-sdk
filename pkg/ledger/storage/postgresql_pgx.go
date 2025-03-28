@@ -2,7 +2,6 @@ package storage
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -56,52 +55,6 @@ func (r *PostgresqlPGX) UpdateChargeStatus(ctx context.Context, ID string, statu
 	return nil
 }
 
-func (r *PostgresqlPGX) GetTopUpByID(ctx context.Context, ID string) (*ledger.TopUp, error) {
-	t, err := r.queries.GetTopUpByID(ctx, ID)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, nil
-		}
-		return nil, err
-	}
-
-	return t.ToLedgerTopUp()
-}
-
-func (r *PostgresqlPGX) CreateTopUp(ctx context.Context, t ledger.TopUp) error {
-	rawLCCharge, err := json.Marshal(t.LCCharge)
-	if err != nil {
-		return err
-	}
-	params := sqlc.CreateTopUpParams{
-		ID:               t.ID,
-		Status:           string(t.Status),
-		Amount:           ToPGNumeric(&t.Amount),
-		Type:             string(t.Type),
-		LcOrganizationID: t.LCOrganizationID,
-		LcCharge:         rawLCCharge,
-		ConfirmationUrl:  t.ConfirmationUrl,
-	}
-
-	if t.CurrentToppedUpAt != nil {
-		params.CurrentToppedUpAt = pgtype.Timestamptz{
-			Time:  *t.CurrentToppedUpAt,
-			Valid: true,
-		}
-	}
-	if t.NextTopUpAt != nil {
-		params.NextTopUpAt = pgtype.Timestamptz{
-			Time:  *t.NextTopUpAt,
-			Valid: true,
-		}
-	}
-
-	if err := r.queries.CreateTopUp(ctx, params); err != nil {
-		return err
-	}
-	return nil
-}
-
 func (r *PostgresqlPGX) GetBalance(ctx context.Context, organizationID string) (float32, error) {
 	b, err := r.queries.GetOrganizationBalance(ctx, sqlc.GetOrganizationBalanceParams{
 		LcOrganizationID: organizationID,
@@ -138,11 +91,49 @@ func (r *PostgresqlPGX) GetTopUpsByOrganizationID(ctx context.Context, organizat
 	return ts, nil
 }
 
-func (r *PostgresqlPGX) UpdateTopUpStatus(ctx context.Context, ID string, status ledger.TopUpStatus) error {
-	err := r.queries.UpdateTopUpRequestStatus(ctx, sqlc.UpdateTopUpRequestStatusParams{
-		ID:     ID,
-		Status: string(status),
-	})
+func (r *PostgresqlPGX) InitRecurrentTopUpRequiredValues(ctx context.Context, params ledger.InitRecurrentTopUpRequiredValuesParams) error {
+	p := sqlc.InitTopUpRequiredValuesParams{
+		CurrentToppedUpAt: pgtype.Timestamptz{
+			Time:  params.CurrentToppedUpAt,
+			Valid: true,
+		},
+		NextTopUpAt: pgtype.Timestamptz{
+			Time:  params.NextTopUpAt,
+			Valid: true,
+		},
+		UniqueAt: pgtype.Timestamptz{
+			Time:  params.CurrentToppedUpAt,
+			Valid: true,
+		},
+		ID:     params.ID,
+		Type:   string(ledger.TopUpTypeRecurrent),
+		Status: string(ledger.TopUpStatusPending),
+	}
+
+	err := r.queries.InitTopUpRequiredValues(ctx, p)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ledger.ErrNotFound
+		}
+		return err
+	}
+	return nil
+}
+
+func (r *PostgresqlPGX) UpdateTopUpStatus(ctx context.Context, params ledger.UpdateTopUpStatusParams) error {
+	p := sqlc.UpdateTopUpRequestStatusParams{
+		ID:       params.ID,
+		Status:   string(params.Status),
+		UniqueAt: pgtype.Timestamptz{},
+	}
+	if params.CurrentToppedUpAt != nil {
+		p.UniqueAt = pgtype.Timestamptz{
+			Time:  *params.CurrentToppedUpAt,
+			Valid: true,
+		}
+	}
+
+	err := r.queries.UpdateTopUpRequestStatus(ctx, p)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ledger.ErrNotFound
@@ -153,12 +144,14 @@ func (r *PostgresqlPGX) UpdateTopUpStatus(ctx context.Context, ID string, status
 	return nil
 }
 
-func (r *PostgresqlPGX) GetTopUpByIDAndType(ctx context.Context, ID string, topUpType ledger.TopUpType) (*ledger.TopUp, error) {
-	t, err := r.queries.GetTopUpByIDAndTypeWhereStatusIsNot(ctx, sqlc.GetTopUpByIDAndTypeWhereStatusIsNotParams{
-		ID:     ID,
-		Type:   string(topUpType),
+func (r *PostgresqlPGX) GetTopUpByIDAndType(ctx context.Context, params ledger.GetTopUpByIDAndTypeParams) (*ledger.TopUp, error) {
+	p := sqlc.GetTopUpByIDAndTypeWhereStatusIsNotParams{
+		ID:     params.ID,
+		Type:   string(params.Type),
 		Status: string(ledger.TopUpStatusCancelled),
-	})
+	}
+
+	t, err := r.queries.GetTopUpByIDAndTypeWhereStatusIsNot(ctx, p)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
@@ -224,6 +217,10 @@ func (r *PostgresqlPGX) UpsertTopUp(ctx context.Context, topUp ledger.TopUp) (*l
 
 	if topUp.CurrentToppedUpAt != nil {
 		params.CurrentToppedUpAt = pgtype.Timestamptz{
+			Time:  *topUp.CurrentToppedUpAt,
+			Valid: true,
+		}
+		params.Column9 = pgtype.Timestamptz{
 			Time:  *topUp.CurrentToppedUpAt,
 			Valid: true,
 		}

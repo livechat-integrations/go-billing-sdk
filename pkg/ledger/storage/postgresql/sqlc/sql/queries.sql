@@ -12,14 +12,10 @@ SET status = $1, updated_at = now()
 WHERE id = $2
 ;
 
--- name: CreateTopUp :exec
-INSERT INTO ledger_top_ups(id, status, amount, type, lc_organization_id, lc_charge, confirmation_url, current_topped_up_at, next_top_up_at, created_at, updated_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW());
-
 -- name: UpsertTopUp :one
-INSERT INTO ledger_top_ups(id, status, amount, type, lc_organization_id, lc_charge, confirmation_url, current_topped_up_at, next_top_up_at, created_at, updated_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
-ON CONFLICT (id) DO UPDATE SET lc_charge = EXCLUDED.lc_charge, status = EXCLUDED.status, confirmation_url = EXCLUDED.confirmation_url, current_topped_up_at = EXCLUDED.current_topped_up_at, next_top_up_at = EXCLUDED.next_top_up_at, updated_at = NOW()
+INSERT INTO ledger_top_ups(id, status, amount, type, lc_organization_id, lc_charge, confirmation_url, current_topped_up_at, unique_at, next_top_up_at, created_at, updated_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, COALESCE($9, '1970-01-01 00:00:00+00'::timestamptz), $10, COALESCE((SELECT lups.created_at FROM ledger_top_ups lups WHERE lups.id = $1::varchar ORDER BY lups.created_at ASC LIMIT 1)::timestamptz, NOW()),NOW())
+ON CONFLICT ON CONSTRAINT ledger_top_ups_pkey DO UPDATE SET lc_charge = EXCLUDED.lc_charge, status = EXCLUDED.status, updated_at = NOW()
 RETURNING *;
 
 -- name: GetTopUpByIDAndTypeWhereStatusIsNot :one
@@ -28,18 +24,23 @@ FROM ledger_top_ups
 WHERE id = $1
   AND type = $2
   AND status != $3
+ORDER BY unique_at DESC
 ;
 
--- name: GetTopUpByID :one
-SELECT *
-FROM ledger_top_ups
-WHERE id = $1
+-- name: InitTopUpRequiredValues :exec
+UPDATE ledger_top_ups l
+SET current_topped_up_at = $1, next_top_up_at = $2, unique_at = $3
+WHERE l.id = $4
+  AND l.type = $5
+  AND l.status = $6
+  AND l.current_topped_up_at IS NULL
 ;
 
 -- name: UpdateTopUpRequestStatus :exec
 UPDATE ledger_top_ups
 SET status = $1, updated_at = now()
 WHERE id = $2
+  AND unique_at = COALESCE($3, '1970-01-01 00:00:00+00'::timestamptz)
 ;
 
 -- name: GetTopUpsByOrganizationID :many
