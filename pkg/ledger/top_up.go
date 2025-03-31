@@ -18,6 +18,8 @@ const (
 	TopUpStatusPending   TopUpStatus = "pending"
 	TopUpStatusActive    TopUpStatus = "active"
 	TopUpStatusCancelled TopUpStatus = "cancelled"
+	TopUpStatusFailed    TopUpStatus = "failed"
+	TopUpStatusDeclined  TopUpStatus = "declined"
 )
 
 type TopUp struct {

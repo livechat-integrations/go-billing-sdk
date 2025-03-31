@@ -1282,6 +1282,73 @@ func TestService_CancelCharge(t *testing.T) {
 }
 
 func TestService_SyncTopUp(t *testing.T) {
+	t.Run("success direct cancelled", func(t *testing.T) {
+		amount := float32(5.234)
+		lcoid := "lcOrganizationID"
+		confUrl := "http://www.google.com/confirmation"
+
+		dc := livechat.DirectCharge{
+			BaseChargeV2: livechat.BaseChargeV2{
+				ID:                "id",
+				BuyerLicenseID:    123,
+				BuyerEntityID:     "321",
+				SellerClientID:    "213",
+				OrderClientID:     "123",
+				OrderLicenseID:    "123",
+				OrderEntityID:     "123",
+				Name:              "some",
+				Price:             amount * 100,
+				ReturnURL:         "http://www.google.com",
+				Test:              false,
+				PerAccount:        false,
+				Status:            "cancelled",
+				ConfirmationURL:   confUrl,
+				CommissionPercent: 10,
+			},
+			Quantity: 1,
+		}
+
+		jdc, _ := json.Marshal(dc)
+
+		topUp := TopUp{
+			ID:               "id",
+			LCOrganizationID: lcoid,
+			Status:           TopUpStatusCancelled,
+			Amount:           amount,
+			Type:             TopUpTypeDirect,
+			ConfirmationUrl:  confUrl,
+			LCCharge:         jdc,
+		}
+
+		call := xm.On("GenerateId").Return(xid, nil)
+		am.On("GetDirectCharge", ctx, "id").Return(&dc, nil).Once()
+		am.On("GetRecurrentChargeV2", ctx, "id").Return(nil, nil).Once()
+		sm.On("UpsertTopUp", ctx, topUp).Return(&topUp, nil).Once()
+		sc, _ := json.Marshal(topUp)
+		sm.On("CreateEvent", ctx, Event{
+			ID:               xid,
+			LCOrganizationID: lcoid,
+			Type:             EventTypeInfo,
+			Action:           EventActionSyncTopUp,
+			Payload:          sc,
+		}).Return(nil).Once()
+
+		tp, err := s.SyncTopUp(context.Background(), lcoid, "id")
+
+		assert.Nil(t, err)
+		assert.Equal(t, topUp.ID, tp.ID)
+		assert.Equal(t, topUp.Amount, tp.Amount)
+		assert.Equal(t, topUp.Type, tp.Type)
+		assert.Equal(t, topUp.Status, topUp.Status)
+		assert.Equal(t, topUp.LCCharge, topUp.LCCharge)
+		assert.Equal(t, topUp.CurrentToppedUpAt, topUp.CurrentToppedUpAt)
+		assert.Equal(t, topUp.NextTopUpAt, topUp.NextTopUpAt)
+		assert.Equal(t, topUp.ConfirmationUrl, topUp.ConfirmationUrl)
+
+		assertExpectations(t)
+		call.Unset()
+	})
+
 	t.Run("success direct failed", func(t *testing.T) {
 		amount := float32(5.234)
 		lcoid := "lcOrganizationID"
@@ -1313,7 +1380,7 @@ func TestService_SyncTopUp(t *testing.T) {
 		topUp := TopUp{
 			ID:               "id",
 			LCOrganizationID: lcoid,
-			Status:           TopUpStatusCancelled,
+			Status:           TopUpStatusFailed,
 			Amount:           amount,
 			Type:             TopUpTypeDirect,
 			ConfirmationUrl:  confUrl,
@@ -1380,7 +1447,7 @@ func TestService_SyncTopUp(t *testing.T) {
 		topUp := TopUp{
 			ID:               "id",
 			LCOrganizationID: lcoid,
-			Status:           TopUpStatusCancelled,
+			Status:           TopUpStatusDeclined,
 			Amount:           amount,
 			Type:             TopUpTypeDirect,
 			ConfirmationUrl:  confUrl,
@@ -1587,7 +1654,7 @@ func TestService_SyncTopUp(t *testing.T) {
 		topUp := TopUp{
 			ID:                "id",
 			LCOrganizationID:  lcoid,
-			Status:            TopUpStatusCancelled,
+			Status:            TopUpStatusDeclined,
 			Amount:            amount,
 			Type:              TopUpTypeRecurrent,
 			ConfirmationUrl:   confUrl,
@@ -1982,7 +2049,7 @@ func TestService_SyncTopUp(t *testing.T) {
 		topUp := TopUp{
 			ID:                "id",
 			LCOrganizationID:  lcoid,
-			Status:            TopUpStatusCancelled,
+			Status:            TopUpStatusDeclined,
 			Amount:            amount,
 			Type:              TopUpTypeRecurrent,
 			ConfirmationUrl:   confUrl,
@@ -2195,7 +2262,7 @@ func TestService_SyncTopUp(t *testing.T) {
 		topUp := TopUp{
 			ID:               "id",
 			LCOrganizationID: lcoid,
-			Status:           TopUpStatusCancelled,
+			Status:           TopUpStatusFailed,
 			Amount:           amount,
 			Type:             TopUpTypeDirect,
 			ConfirmationUrl:  confUrl,
