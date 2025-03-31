@@ -29,6 +29,7 @@ type LedgerInterface interface {
 	GetUniqueID() string
 	CreateEvent(ctx context.Context, event Event) error
 	SyncTopUp(ctx context.Context, organizationID string, ID string) (*TopUp, error)
+	SyncOrCancelAllPendingTopUpRequests(ctx context.Context, organizationID string) error
 }
 
 var (
@@ -442,6 +443,30 @@ func (s *Service) SyncTopUp(ctx context.Context, organizationID string, ID strin
 	_ = s.CreateEvent(ctx, event)
 
 	return uTopUp, nil
+}
+
+func (s *Service) SyncOrCancelAllPendingTopUpRequests(ctx context.Context, organizationID string) error {
+	topUps, err := s.storage.GetTopUpsByOrganizationIDAndStatus(ctx, organizationID, TopUpStatusPending)
+	if err != nil {
+		return err
+	}
+
+	for _, topUp := range topUps {
+		tu, err := s.SyncTopUp(ctx, organizationID, topUp.ID)
+		if err != nil {
+			return err
+		}
+
+		monthAgo := time.Now().AddDate(0, -1, 0)
+		if tu.Status == TopUpStatusPending && monthAgo.After(tu.UpdatedAt) {
+			err = s.ForceCancelTopUp(ctx, *tu)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
 }
 
 type createBillingChargeParams struct {

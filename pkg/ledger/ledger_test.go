@@ -2431,6 +2431,500 @@ func TestService_SyncTopUp(t *testing.T) {
 	})
 }
 
+func TestService_SyncOrCancelAllPendingTopUpRequests(t *testing.T) {
+	t.Run("success recurrent and direct active", func(t *testing.T) {
+		amount := float32(5.234)
+		lcoid := "lcOrganizationID"
+		confUrl := "http://www.google.com/confirmation"
+		months := 1
+		someDate, _ := time.Parse(time.DateTime, "2025-03-14 12:31:56")
+		someDate2, _ := time.Parse(time.DateTime, "2025-06-14 12:31:56")
+
+		rc1 := livechat.RecurrentChargeV2{
+			BaseChargeV2: livechat.BaseChargeV2{
+				ID:                "id1",
+				BuyerLicenseID:    123,
+				BuyerEntityID:     "321",
+				SellerClientID:    "213",
+				OrderClientID:     "123",
+				OrderLicenseID:    "123",
+				OrderEntityID:     "123",
+				Name:              "some",
+				Price:             amount * 100,
+				ReturnURL:         "http://www.google.com",
+				Test:              false,
+				PerAccount:        false,
+				Status:            "active",
+				ConfirmationURL:   confUrl,
+				CommissionPercent: 10,
+			},
+			TrialDays:       0,
+			Months:          months,
+			CurrentChargeAt: &someDate,
+			NextChargeAt:    &someDate2,
+		}
+		rc2 := livechat.DirectCharge{
+			BaseChargeV2: livechat.BaseChargeV2{
+				ID:                "id2",
+				BuyerLicenseID:    123,
+				BuyerEntityID:     "321",
+				SellerClientID:    "213",
+				OrderClientID:     "123",
+				OrderLicenseID:    "123",
+				OrderEntityID:     "123",
+				Name:              "some",
+				Price:             amount * 100,
+				ReturnURL:         "http://www.google.com",
+				Test:              false,
+				PerAccount:        false,
+				Status:            "success",
+				ConfirmationURL:   confUrl,
+				CommissionPercent: 10,
+			},
+			Quantity: 1,
+		}
+
+		jrc1, _ := json.Marshal(rc1)
+		jrc2, _ := json.Marshal(rc2)
+
+		topUp1 := TopUp{
+			ID:                "id1",
+			LCOrganizationID:  lcoid,
+			Status:            TopUpStatusActive,
+			Amount:            amount,
+			Type:              TopUpTypeRecurrent,
+			ConfirmationUrl:   confUrl,
+			LCCharge:          jrc1,
+			CurrentToppedUpAt: &someDate,
+			NextTopUpAt:       &someDate2,
+		}
+
+		topUp2 := TopUp{
+			ID:               "id2",
+			LCOrganizationID: lcoid,
+			Status:           TopUpStatusActive,
+			Amount:           amount,
+			Type:             TopUpTypeDirect,
+			ConfirmationUrl:  confUrl,
+			LCCharge:         jrc2,
+		}
+
+		sm.On("GetTopUpsByOrganizationIDAndStatus", ctx, lcoid, TopUpStatusPending).Return([]TopUp{topUp1, topUp2}, nil).Once()
+		call := xm.On("GenerateId").Return(xid, nil)
+		am.On("GetDirectCharge", ctx, "id1").Return(nil, nil).Once()
+		am.On("GetRecurrentChargeV2", ctx, "id1").Return(&rc1, nil).Once()
+		am.On("GetDirectCharge", ctx, "id2").Return(&rc2, nil).Once()
+		am.On("GetRecurrentChargeV2", ctx, "id2").Return(nil, nil).Once()
+		sm.On("UpsertTopUp", ctx, topUp1).Return(&topUp1, nil).Once()
+		sm.On("UpsertTopUp", ctx, topUp2).Return(&topUp2, nil).Once()
+		sc1, _ := json.Marshal(topUp1)
+		sc2, _ := json.Marshal(topUp2)
+		sm.On("CreateEvent", ctx, Event{
+			ID:               xid,
+			LCOrganizationID: lcoid,
+			Type:             EventTypeInfo,
+			Action:           EventActionSyncTopUp,
+			Payload:          sc1,
+		}).Return(nil).Once()
+		sm.On("CreateEvent", ctx, Event{
+			ID:               xid,
+			LCOrganizationID: lcoid,
+			Type:             EventTypeInfo,
+			Action:           EventActionSyncTopUp,
+			Payload:          sc2,
+		}).Return(nil).Once()
+		sm.On("InitRecurrentTopUpRequiredValues", ctx, InitRecurrentTopUpRequiredValuesParams{
+			CurrentToppedUpAt: someDate,
+			NextTopUpAt:       someDate2,
+			ID:                "id1",
+		}).Return(nil).Once()
+
+		err := s.SyncOrCancelAllPendingTopUpRequests(context.Background(), lcoid)
+
+		assert.Nil(t, err)
+
+		assertExpectations(t)
+		call.Unset()
+	})
+
+	t.Run("success recurrent and direct pending", func(t *testing.T) {
+		amount := float32(5.234)
+		lcoid := "lcOrganizationID"
+		confUrl := "http://www.google.com/confirmation"
+		months := 1
+		someDate2, _ := time.Parse(time.DateTime, "2025-06-14 12:31:56")
+		now := time.Now()
+
+		rc1 := livechat.RecurrentChargeV2{
+			BaseChargeV2: livechat.BaseChargeV2{
+				ID:                "id1",
+				BuyerLicenseID:    123,
+				BuyerEntityID:     "321",
+				SellerClientID:    "213",
+				OrderClientID:     "123",
+				OrderLicenseID:    "123",
+				OrderEntityID:     "123",
+				Name:              "some",
+				Price:             amount * 100,
+				ReturnURL:         "http://www.google.com",
+				Test:              false,
+				PerAccount:        false,
+				Status:            "pending",
+				ConfirmationURL:   confUrl,
+				CommissionPercent: 10,
+			},
+			TrialDays:       0,
+			Months:          months,
+			CurrentChargeAt: &now,
+			NextChargeAt:    &someDate2,
+		}
+		rc2 := livechat.DirectCharge{
+			BaseChargeV2: livechat.BaseChargeV2{
+				ID:                "id2",
+				BuyerLicenseID:    123,
+				BuyerEntityID:     "321",
+				SellerClientID:    "213",
+				OrderClientID:     "123",
+				OrderLicenseID:    "123",
+				OrderEntityID:     "123",
+				Name:              "some",
+				Price:             amount * 100,
+				ReturnURL:         "http://www.google.com",
+				Test:              false,
+				PerAccount:        false,
+				Status:            "pending",
+				ConfirmationURL:   confUrl,
+				CommissionPercent: 10,
+			},
+			Quantity: 1,
+		}
+
+		jrc1, _ := json.Marshal(rc1)
+		jrc2, _ := json.Marshal(rc2)
+
+		oTopUp1 := TopUp{
+			ID:                "id1",
+			LCOrganizationID:  lcoid,
+			Status:            TopUpStatusPending,
+			Amount:            amount,
+			Type:              TopUpTypeRecurrent,
+			ConfirmationUrl:   confUrl,
+			LCCharge:          jrc1,
+			CurrentToppedUpAt: &now,
+			NextTopUpAt:       &someDate2,
+		}
+		topUp1 := oTopUp1
+		topUp1.CreatedAt = now
+		topUp1.UpdatedAt = now
+
+		oTopUp2 := TopUp{
+			ID:               "id2",
+			LCOrganizationID: lcoid,
+			Status:           TopUpStatusPending,
+			Amount:           amount,
+			Type:             TopUpTypeDirect,
+			ConfirmationUrl:  confUrl,
+			LCCharge:         jrc2,
+		}
+		topUp2 := oTopUp2
+		topUp2.CreatedAt = now
+		topUp2.UpdatedAt = now
+
+		sm.On("GetTopUpsByOrganizationIDAndStatus", ctx, lcoid, TopUpStatusPending).Return([]TopUp{topUp1, topUp2}, nil).Once()
+		call := xm.On("GenerateId").Return(xid, nil)
+		am.On("GetDirectCharge", ctx, "id1").Return(nil, nil).Once()
+		am.On("GetRecurrentChargeV2", ctx, "id1").Return(&rc1, nil).Once()
+		am.On("GetDirectCharge", ctx, "id2").Return(&rc2, nil).Once()
+		am.On("GetRecurrentChargeV2", ctx, "id2").Return(nil, nil).Once()
+		sm.On("UpsertTopUp", ctx, oTopUp1).Return(&topUp1, nil).Once()
+		sm.On("UpsertTopUp", ctx, oTopUp2).Return(&topUp2, nil).Once()
+		sc1, _ := json.Marshal(oTopUp1)
+		sc2, _ := json.Marshal(oTopUp2)
+		sm.On("CreateEvent", ctx, Event{
+			ID:               xid,
+			LCOrganizationID: lcoid,
+			Type:             EventTypeInfo,
+			Action:           EventActionSyncTopUp,
+			Payload:          sc1,
+		}).Return(nil).Once()
+		sm.On("CreateEvent", ctx, Event{
+			ID:               xid,
+			LCOrganizationID: lcoid,
+			Type:             EventTypeInfo,
+			Action:           EventActionSyncTopUp,
+			Payload:          sc2,
+		}).Return(nil).Once()
+		sm.On("InitRecurrentTopUpRequiredValues", ctx, InitRecurrentTopUpRequiredValuesParams{
+			CurrentToppedUpAt: now,
+			NextTopUpAt:       someDate2,
+			ID:                "id1",
+		}).Return(nil).Once()
+
+		err := s.SyncOrCancelAllPendingTopUpRequests(context.Background(), lcoid)
+
+		assert.Nil(t, err)
+
+		assertExpectations(t)
+		call.Unset()
+	})
+
+	t.Run("force cancel all old pending", func(t *testing.T) {
+		amount := float32(5.234)
+		lcoid := "lcOrganizationID"
+		confUrl := "http://www.google.com/confirmation"
+		months := 1
+		someDate, _ := time.Parse(time.DateTime, "2025-03-14 12:31:56")
+		someDate2, _ := time.Parse(time.DateTime, "2025-06-14 12:31:56")
+
+		rc1 := livechat.RecurrentChargeV2{
+			BaseChargeV2: livechat.BaseChargeV2{
+				ID:                "id1",
+				BuyerLicenseID:    123,
+				BuyerEntityID:     "321",
+				SellerClientID:    "213",
+				OrderClientID:     "123",
+				OrderLicenseID:    "123",
+				OrderEntityID:     "123",
+				Name:              "some",
+				Price:             amount * 100,
+				ReturnURL:         "http://www.google.com",
+				Test:              false,
+				PerAccount:        false,
+				Status:            "other",
+				ConfirmationURL:   confUrl,
+				CommissionPercent: 10,
+			},
+			TrialDays:       0,
+			Months:          months,
+			CurrentChargeAt: &someDate,
+			NextChargeAt:    &someDate2,
+		}
+		rc2 := livechat.DirectCharge{
+			BaseChargeV2: livechat.BaseChargeV2{
+				ID:                "id2",
+				BuyerLicenseID:    123,
+				BuyerEntityID:     "321",
+				SellerClientID:    "213",
+				OrderClientID:     "123",
+				OrderLicenseID:    "123",
+				OrderEntityID:     "123",
+				Name:              "some",
+				Price:             amount * 100,
+				ReturnURL:         "http://www.google.com",
+				Test:              false,
+				PerAccount:        false,
+				Status:            "other",
+				ConfirmationURL:   confUrl,
+				CommissionPercent: 10,
+			},
+			Quantity: 1,
+		}
+
+		jrc1, _ := json.Marshal(rc1)
+		jrc2, _ := json.Marshal(rc2)
+
+		topUp1 := TopUp{
+			ID:                "id1",
+			LCOrganizationID:  lcoid,
+			Status:            TopUpStatusPending,
+			Amount:            amount,
+			Type:              TopUpTypeRecurrent,
+			ConfirmationUrl:   confUrl,
+			LCCharge:          jrc1,
+			CurrentToppedUpAt: &someDate,
+			NextTopUpAt:       &someDate2,
+		}
+
+		topUp2 := TopUp{
+			ID:               "id2",
+			LCOrganizationID: lcoid,
+			Status:           TopUpStatusPending,
+			Amount:           amount,
+			Type:             TopUpTypeDirect,
+			ConfirmationUrl:  confUrl,
+			LCCharge:         jrc2,
+		}
+
+		sm.On("GetTopUpsByOrganizationIDAndStatus", ctx, lcoid, TopUpStatusPending).Return([]TopUp{topUp1, topUp2}, nil).Once()
+		call := xm.On("GenerateId").Return(xid, nil)
+		am.On("GetDirectCharge", ctx, "id1").Return(nil, nil).Once()
+		am.On("GetRecurrentChargeV2", ctx, "id1").Return(&rc1, nil).Once()
+		am.On("GetDirectCharge", ctx, "id2").Return(&rc2, nil).Once()
+		am.On("GetRecurrentChargeV2", ctx, "id2").Return(nil, nil).Once()
+		sm.On("UpsertTopUp", ctx, topUp1).Return(&topUp1, nil).Once()
+		sm.On("UpsertTopUp", ctx, topUp2).Return(&topUp2, nil).Once()
+		sm.On("UpdateTopUpStatus", ctx, UpdateTopUpStatusParams{
+			ID:                "id1",
+			Status:            TopUpStatusCancelled,
+			CurrentToppedUpAt: &someDate,
+		}).Return(nil).Once()
+		sm.On("UpdateTopUpStatus", ctx, UpdateTopUpStatusParams{
+			ID:     "id2",
+			Status: TopUpStatusCancelled,
+		}).Return(nil).Once()
+
+		sc1, _ := json.Marshal(topUp1)
+		sc2, _ := json.Marshal(topUp2)
+		sc11, _ := json.Marshal(map[string]interface{}{"id": "id1", "status": TopUpStatusCancelled})
+		sc22, _ := json.Marshal(map[string]interface{}{"id": "id2", "status": TopUpStatusCancelled})
+		sm.On("CreateEvent", ctx, Event{
+			ID:               xid,
+			LCOrganizationID: lcoid,
+			Type:             EventTypeInfo,
+			Action:           EventActionSyncTopUp,
+			Payload:          sc1,
+		}).Return(nil).Once()
+		sm.On("CreateEvent", ctx, Event{
+			ID:               xid,
+			LCOrganizationID: lcoid,
+			Type:             EventTypeInfo,
+			Payload:          sc11,
+			Action:           EventActionForceCancelCharge,
+		}).Return(nil).Once()
+		sm.On("CreateEvent", ctx, Event{
+			ID:               xid,
+			LCOrganizationID: lcoid,
+			Type:             EventTypeInfo,
+			Action:           EventActionSyncTopUp,
+			Payload:          sc2,
+		}).Return(nil).Once()
+		sm.On("CreateEvent", ctx, Event{
+			ID:               xid,
+			LCOrganizationID: lcoid,
+			Type:             EventTypeInfo,
+			Payload:          sc22,
+			Action:           EventActionForceCancelCharge,
+		}).Return(nil).Once()
+		sm.On("InitRecurrentTopUpRequiredValues", ctx, InitRecurrentTopUpRequiredValuesParams{
+			CurrentToppedUpAt: someDate,
+			NextTopUpAt:       someDate2,
+			ID:                "id1",
+		}).Return(nil).Once()
+
+		err := s.SyncOrCancelAllPendingTopUpRequests(context.Background(), lcoid)
+
+		assert.Nil(t, err)
+
+		assertExpectations(t)
+		call.Unset()
+	})
+
+	t.Run("success recurrent and error direct", func(t *testing.T) {
+		amount := float32(5.234)
+		lcoid := "lcOrganizationID"
+		confUrl := "http://www.google.com/confirmation"
+		months := 1
+		someDate, _ := time.Parse(time.DateTime, "2025-03-14 12:31:56")
+		someDate2, _ := time.Parse(time.DateTime, "2025-06-14 12:31:56")
+
+		rc1 := livechat.RecurrentChargeV2{
+			BaseChargeV2: livechat.BaseChargeV2{
+				ID:                "id1",
+				BuyerLicenseID:    123,
+				BuyerEntityID:     "321",
+				SellerClientID:    "213",
+				OrderClientID:     "123",
+				OrderLicenseID:    "123",
+				OrderEntityID:     "123",
+				Name:              "some",
+				Price:             amount * 100,
+				ReturnURL:         "http://www.google.com",
+				Test:              false,
+				PerAccount:        false,
+				Status:            "active",
+				ConfirmationURL:   confUrl,
+				CommissionPercent: 10,
+			},
+			TrialDays:       0,
+			Months:          months,
+			CurrentChargeAt: &someDate,
+			NextChargeAt:    &someDate2,
+		}
+		rc2 := livechat.DirectCharge{
+			BaseChargeV2: livechat.BaseChargeV2{
+				ID:                "id2",
+				BuyerLicenseID:    123,
+				BuyerEntityID:     "321",
+				SellerClientID:    "213",
+				OrderClientID:     "123",
+				OrderLicenseID:    "123",
+				OrderEntityID:     "123",
+				Name:              "some",
+				Price:             amount * 100,
+				ReturnURL:         "http://www.google.com",
+				Test:              false,
+				PerAccount:        false,
+				Status:            "success",
+				ConfirmationURL:   confUrl,
+				CommissionPercent: 10,
+			},
+			Quantity: 1,
+		}
+
+		jrc1, _ := json.Marshal(rc1)
+		jrc2, _ := json.Marshal(rc2)
+
+		topUp1 := TopUp{
+			ID:                "id1",
+			LCOrganizationID:  lcoid,
+			Status:            TopUpStatusActive,
+			Amount:            amount,
+			Type:              TopUpTypeRecurrent,
+			ConfirmationUrl:   confUrl,
+			LCCharge:          jrc1,
+			CurrentToppedUpAt: &someDate,
+			NextTopUpAt:       &someDate2,
+		}
+
+		topUp2 := TopUp{
+			ID:               "id2",
+			LCOrganizationID: lcoid,
+			Status:           TopUpStatusActive,
+			Amount:           amount,
+			Type:             TopUpTypeDirect,
+			ConfirmationUrl:  confUrl,
+			LCCharge:         jrc2,
+		}
+
+		sm.On("GetTopUpsByOrganizationIDAndStatus", ctx, lcoid, TopUpStatusPending).Return([]TopUp{topUp1, topUp2}, nil).Once()
+		call := xm.On("GenerateId").Return(xid, nil)
+		am.On("GetDirectCharge", ctx, "id1").Return(nil, nil).Once()
+		am.On("GetRecurrentChargeV2", ctx, "id1").Return(&rc1, nil).Once()
+		am.On("GetDirectCharge", ctx, "id2").Return(nil, assert.AnError).Once()
+		am.On("GetRecurrentChargeV2", ctx, "id2").Return(nil, nil).Once()
+		sm.On("UpsertTopUp", ctx, topUp1).Return(&topUp1, nil).Once()
+		sc1, _ := json.Marshal(topUp1)
+		sc2, _ := json.Marshal(map[string]interface{}{"id": "id2"})
+		sm.On("CreateEvent", ctx, Event{
+			ID:               xid,
+			LCOrganizationID: lcoid,
+			Type:             EventTypeInfo,
+			Action:           EventActionSyncTopUp,
+			Payload:          sc1,
+		}).Return(nil).Once()
+		sm.On("CreateEvent", ctx, Event{
+			ID:               xid,
+			LCOrganizationID: lcoid,
+			Type:             EventTypeError,
+			Action:           EventActionSyncTopUp,
+			Payload:          sc2,
+			Error:            "assert.AnError general error for testing",
+		}).Return(nil).Once()
+		sm.On("InitRecurrentTopUpRequiredValues", ctx, InitRecurrentTopUpRequiredValuesParams{
+			CurrentToppedUpAt: someDate,
+			NextTopUpAt:       someDate2,
+			ID:                "id1",
+		}).Return(nil).Once()
+
+		err := s.SyncOrCancelAllPendingTopUpRequests(context.Background(), lcoid)
+
+		assert.ErrorIs(t, err, assert.AnError)
+
+		assertExpectations(t)
+		call.Unset()
+	})
+}
+
 func TestService_ToEvent(t *testing.T) {
 	t.Run("success id from context", func(t *testing.T) {
 		id := "id-from-context"
