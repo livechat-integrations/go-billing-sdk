@@ -59,11 +59,11 @@ SELECT b.amount::numeric FROM (SELECT (
     SELECT COALESCE(SUM(tu.amount), 0)
     FROM ledger_top_ups tu
     WHERE tu.lc_organization_id = $1
-      AND tu.status = $2
+      AND (tu.status = $2 OR (tu.status = $3 AND tu.type = $4))
 ) - (
     SELECT COALESCE(SUM(c.amount), 0)
     FROM ledger_charges c
     WHERE c.lc_organization_id = $1
-      AND c.status = $3
+      AND c.status = $5
 ) AS amount) AS b
 ;

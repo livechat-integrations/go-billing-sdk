@@ -33,6 +33,11 @@ type ledgerMock struct {
 	mock.Mock
 }
 
+func (l *ledgerMock) SyncOrCancelAllPendingTopUpRequests(ctx context.Context, organizationID string) error {
+	//TODO implement me
+	panic("implement me")
+}
+
 func (l *ledgerMock) CreateTopUpRequest(ctx context.Context, params CreateTopUpRequestParams) (*TopUp, error) {
 	//TODO implement me
 	panic("implement me")

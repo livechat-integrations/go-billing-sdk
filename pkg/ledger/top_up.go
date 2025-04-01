@@ -20,6 +20,7 @@ const (
 	TopUpStatusCancelled TopUpStatus = "cancelled"
 	TopUpStatusFailed    TopUpStatus = "failed"
 	TopUpStatusDeclined  TopUpStatus = "declined"
+	TopUpStatusFrozen    TopUpStatus = "frozen"
 )
 
 type TopUp struct {
