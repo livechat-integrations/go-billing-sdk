@@ -330,6 +330,8 @@ func (s *Service) SyncTopUp(ctx context.Context, organizationID string, ID strin
 			status = TopUpStatusCancelled
 		case "declined":
 			status = TopUpStatusDeclined
+		case "frozen":
+			status = TopUpStatusFrozen
 		}
 		isDirect = true
 		return nil
@@ -353,7 +355,7 @@ func (s *Service) SyncTopUp(ctx context.Context, organizationID string, ID strin
 		case "declined":
 			status = TopUpStatusDeclined
 		case "frozen":
-			status = TopUpStatusCancelled
+			status = TopUpStatusFrozen
 		}
 		topUp.CurrentToppedUpAt = c.CurrentChargeAt
 		topUp.NextTopUpAt = c.NextChargeAt
