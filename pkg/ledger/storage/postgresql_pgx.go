@@ -60,7 +60,6 @@ func (r *PostgresqlPGX) GetBalance(ctx context.Context, organizationID string) (
 		LcOrganizationID: organizationID,
 		Status:           string(ledger.TopUpStatusActive),
 		Status_2:         string(ledger.ChargeStatusCancelled),
-		Type:             string(ledger.TopUpTypeRecurrent),
 		Status_3:         string(ledger.ChargeStatusActive),
 	})
 	if err != nil {

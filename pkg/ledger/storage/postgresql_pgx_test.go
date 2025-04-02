@@ -181,7 +181,7 @@ func TestPostgresqlSQLC_GetBalance(t *testing.T) {
 		v := pgtype.Numeric{}
 		_ = v.Scan(fmt.Sprintf("%f", amount))
 		dbMock.ExpectQuery("SELECT b.amount::numeric FROM").
-			WithArgs("lc_organization_id", string(ledger.TopUpStatusActive), string(ledger.TopUpStatusCancelled), string(ledger.TopUpTypeRecurrent), string(ledger.ChargeStatusActive)).
+			WithArgs("lc_organization_id", string(ledger.TopUpStatusActive), string(ledger.TopUpStatusCancelled), string(ledger.ChargeStatusActive)).
 			WillReturnRows(
 				pgxmock.NewRows([]string{"amount"}).
 					AddRow(v)).Times(1)
@@ -195,7 +195,7 @@ func TestPostgresqlSQLC_GetBalance(t *testing.T) {
 
 	t.Run("no rows", func(t *testing.T) {
 		dbMock.ExpectQuery("SELECT b.amount::numeric FROM").
-			WithArgs("lc_organization_id", string(ledger.TopUpStatusActive), string(ledger.TopUpStatusCancelled), string(ledger.TopUpTypeRecurrent), string(ledger.ChargeStatusActive)).Times(1).
+			WithArgs("lc_organization_id", string(ledger.TopUpStatusActive), string(ledger.TopUpStatusCancelled), string(ledger.ChargeStatusActive)).Times(1).
 			WillReturnError(pgx.ErrNoRows)
 
 		balance, err := s.GetBalance(context.Background(), "lc_organization_id")
@@ -209,7 +209,7 @@ func TestPostgresqlSQLC_GetBalance(t *testing.T) {
 		v := pgtype.Numeric{}
 		_ = v.Scan(fmt.Sprintf("%f", amount))
 		dbMock.ExpectQuery("SELECT b.amount::numeric FROM").
-			WithArgs("lc_organization_id", string(ledger.TopUpStatusActive), string(ledger.TopUpStatusCancelled), string(ledger.TopUpTypeRecurrent), string(ledger.ChargeStatusActive)).Times(1).
+			WithArgs("lc_organization_id", string(ledger.TopUpStatusActive), string(ledger.TopUpStatusCancelled), string(ledger.ChargeStatusActive)).Times(1).
 			WillReturnError(assert.AnError)
 
 		balance, err := s.GetBalance(context.Background(), "lc_organization_id")

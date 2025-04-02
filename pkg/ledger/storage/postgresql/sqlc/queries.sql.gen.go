@@ -64,12 +64,12 @@ SELECT b.amount::numeric FROM (SELECT (
     SELECT COALESCE(SUM(tu.amount), 0)
     FROM ledger_top_ups tu
     WHERE tu.lc_organization_id = $1
-      AND (tu.status = $2 OR (tu.status = $3 AND tu.type = $4))
+      AND (tu.status = $2 OR tu.status = $3)
 ) - (
     SELECT COALESCE(SUM(c.amount), 0)
     FROM ledger_charges c
     WHERE c.lc_organization_id = $1
-      AND c.status = $5
+      AND c.status = $4
 ) AS amount) AS b
 `
 
@@ -77,7 +77,6 @@ type GetOrganizationBalanceParams struct {
 	LcOrganizationID string
 	Status           string
 	Status_2         string
-	Type             string
 	Status_3         string
 }
 
@@ -86,7 +85,6 @@ func (q *Queries) GetOrganizationBalance(ctx context.Context, arg GetOrganizatio
 		arg.LcOrganizationID,
 		arg.Status,
 		arg.Status_2,
-		arg.Type,
 		arg.Status_3,
 	)
 	var b_amount pgtype.Numeric
