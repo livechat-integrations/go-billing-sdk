@@ -5,13 +5,27 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	lcMySQL "github.com/livechat/go-mysql"
+	"github.com/rcrowley/go-metrics"
 
 	"github.com/livechat-integrations/go-billing-sdk/pkg/billing"
 	"github.com/livechat-integrations/go-billing-sdk/pkg/common/livechat"
 )
+
+type Clock interface {
+	Now() time.Time
+	After(d time.Duration) <-chan time.Time
+}
+
+type RealClock struct{}
+
+func (RealClock) Now() time.Time                         { return time.Now() }
+func (RealClock) After(d time.Duration) <-chan time.Time { return time.After(d) }
+
+const slowlogTreshold = time.Second
 
 var (
 	ErrChargeNotFound       = errors.New("charge not found")
@@ -48,11 +62,13 @@ type SQLSubscription struct {
 
 type SQLClient struct {
 	sqlClient MySQLClient
+	clock     Clock
 }
 
-func NewSQLClient(client MySQLClient) *SQLClient {
+func NewSQLClient(client MySQLClient, clock Clock) *SQLClient {
 	return &SQLClient{
 		sqlClient: client,
+		clock:     clock,
 	}
 }
 
@@ -62,7 +78,7 @@ func (sql *SQLClient) CreateCharge(ctx context.Context, c billing.Charge) error 
 		return err
 	}
 
-	res, err := sql.sqlClient.Exec(ctx, "INSERT INTO charges(id, type, payload, lc_organization_id, created_at) VALUES (?, ?, ?, ?, ?)", c.ID, string(c.Type), c.LCOrganizationID, rawPayload, time.Now())
+	res, err := sql.sqlClient.Exec(ctx, "INSERT INTO charges(id, type, payload, lc_organization_id, created_at) VALUES (?, ?, ?, ?, ?)", c.ID, string(c.Type), c.LCOrganizationID, rawPayload, sql.clock.Now())
 	if err != nil {
 		return fmt.Errorf("couldn't add new charge: %w", err)
 	}
@@ -109,7 +125,7 @@ func (sql *SQLClient) UpdateChargePayload(ctx context.Context, id string, payloa
 }
 
 func (sql *SQLClient) DeleteCharge(ctx context.Context, id string) error {
-	res, err := sql.sqlClient.Exec(ctx, "UPDATE charges SET deleted_at = ? WHERE id = ?", time.Now(), id)
+	res, err := sql.sqlClient.Exec(ctx, "UPDATE charges SET deleted_at = ? WHERE id = ?", sql.clock.Now(), id)
 	if err != nil {
 		return fmt.Errorf("couldn't delete charge: %w", err)
 	}
@@ -121,7 +137,7 @@ func (sql *SQLClient) DeleteCharge(ctx context.Context, id string) error {
 }
 
 func (sql *SQLClient) CreateSubscription(ctx context.Context, subscription billing.Subscription) error {
-	res, err := sql.sqlClient.Exec(ctx, "INSERT INTO subscriptions(id, lc_organization_id, plan_name, charge_id, created_at) VALUES (?, ?, ?, ?, ?)", subscription.ID, subscription.LCOrganizationID, subscription.PlanName, subscription.Charge.ID, time.Now())
+	res, err := sql.sqlClient.Exec(ctx, "INSERT INTO subscriptions(id, lc_organization_id, plan_name, charge_id, created_at) VALUES (?, ?, ?, ?, ?)", subscription.ID, subscription.LCOrganizationID, subscription.PlanName, subscription.Charge.ID, sql.clock.Now())
 	if err != nil {
 		return fmt.Errorf("couldn't add new subscription: %w", err)
 	}
@@ -153,7 +169,7 @@ func (sql *SQLClient) GetSubscriptionsByOrganizationID(ctx context.Context, lcID
 }
 
 func (sql *SQLClient) DeleteSubscriptionByChargeID(ctx context.Context, id string) error {
-	res, err := sql.sqlClient.Exec(ctx, "UPDATE subscriptions SET deleted_at = ? WHERE charge_id = $1", time.Now(), id)
+	res, err := sql.sqlClient.Exec(ctx, "UPDATE subscriptions SET deleted_at = ? WHERE charge_id = $1", sql.clock.Now(), id)
 	if err != nil {
 		return fmt.Errorf("couldn't delete subsctiption: %w", err)
 	}
@@ -232,5 +248,15 @@ func ToBillingCharge(c *SQLCharge) *billing.Charge {
 		Payload:          c.Payload,
 		CreatedAt:        c.CreatedAt,
 		CanceledAt:       canceledAt,
+	}
+}
+
+func (sql *SQLClient) Metrics() {
+	for {
+		sample := <-sql.sqlClient.SamplesChan()
+		metrics.GetOrRegisterTimer("db.execution_time", nil).Update(sample.ExecutionTime)
+		if sample.ExecutionTime > slowlogTreshold {
+			slog.Warn("slowlog for query '%s': %v", sample.Query, sample.ExecutionTime)
+		}
 	}
 }
