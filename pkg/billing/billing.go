@@ -12,6 +12,11 @@ import (
 	"github.com/livechat-integrations/go-billing-sdk/pkg/common/livechat"
 )
 
+type (
+	BillingEventIDCtxKey   struct{}
+	BillingLicenseIDCtxKey struct{}
+)
+
 type Service struct {
 	billingAPI  livechat.ApiInterface
 	storage     Storage
