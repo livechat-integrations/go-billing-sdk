@@ -324,6 +324,8 @@ func (s *Service) SyncTopUp(ctx context.Context, organizationID string, ID strin
 		switch baseCharge.Status {
 		case "success":
 			status = TopUpStatusActive
+		case "processed", "accepted":
+			status = TopUpStatusProcessing
 		case "failed":
 			status = TopUpStatusFailed
 		case "cancelled":
@@ -350,6 +352,8 @@ func (s *Service) SyncTopUp(ctx context.Context, organizationID string, ID strin
 		switch baseCharge.Status {
 		case "active":
 			status = TopUpStatusActive
+		case "accepted":
+			status = TopUpStatusProcessing
 		case "cancelled":
 			status = TopUpStatusCancelled
 		case "declined":
