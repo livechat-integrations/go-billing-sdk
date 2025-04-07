@@ -12,6 +12,7 @@ import (
 	"github.com/rcrowley/go-metrics"
 
 	"github.com/livechat-integrations/go-billing-sdk/pkg/billing"
+	"github.com/livechat-integrations/go-billing-sdk/pkg/common"
 	"github.com/livechat-integrations/go-billing-sdk/pkg/common/livechat"
 )
 
@@ -198,6 +199,23 @@ func (sql *SQLClient) GetChargesByOrganizationID(ctx context.Context, lcID strin
 		charges = append(charges, *ToBillingCharge(ch))
 	}
 	return charges, nil
+}
+
+func (sql *SQLClient) CreateEvent(ctx context.Context, e common.Event) error {
+	rawPayload, err := json.Marshal(e.Payload)
+	if err != nil {
+		return err
+	}
+
+	res, err := sql.sqlClient.Exec(ctx, "INSERT INTO billing_events(id, lc_organization_id, type, action, payload, error, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)", e.ID, e.LCOrganizationID, string(e.Type), string(e.Action), rawPayload, e.Error, sql.clock.Now())
+	if err != nil {
+		return fmt.Errorf("couldn't add new billing event: %w", err)
+	}
+	if res.RowsAffected == 0 {
+		return errors.New("couldn't add new billing event")
+	}
+
+	return nil
 }
 
 func ToBillingSubscription(r *SQLSubscription) *billing.Subscription {

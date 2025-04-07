@@ -3,33 +3,73 @@ package billing
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
+	"github.com/livechat-integrations/go-billing-sdk/pkg/common"
 	"github.com/livechat-integrations/go-billing-sdk/pkg/common/livechat"
 )
 
 var am = new(apiMock)
 var sm = new(storageMock)
+var em = new(eventMock)
+var xm = new(xIdMock)
+var xid = "2341"
+var lcoid = "lcOrganizationID"
 
 var s = Service{
-	billingAPI:  am,
-	storage:     sm,
-	plans:       Plans{{Name: "super"}},
-	returnURL:   "returnURL",
-	masterOrgID: "masterOrgID",
+	billingAPI:   am,
+	eventService: em,
+	idProvider:   xm,
+	storage:      sm,
+	plans:        Plans{{Name: "super"}},
+	returnURL:    "returnURL",
+	masterOrgID:  "masterOrgID",
 }
 var ctx = context.Background()
 
 var assertExpectations = func(t *testing.T) {
-	mock.AssertExpectationsForObjects(t, am, sm)
+	mock.AssertExpectationsForObjects(t, am, sm, em, xm)
 	am.Calls = nil
 	sm.Calls = nil
+	em.Calls = nil
+	xm.Calls = nil
 
 	am.ExpectedCalls = nil
 	sm.ExpectedCalls = nil
+	em.ExpectedCalls = nil
+	xm.ExpectedCalls = nil
+}
+
+type xIdMock struct {
+	mock.Mock
+}
+
+func (x *xIdMock) GenerateId() string {
+	args := x.Called()
+	return args.Get(0).(string)
+}
+
+type eventMock struct {
+	mock.Mock
+}
+
+func (m *eventMock) CreateEvent(ctx context.Context, e common.Event) error {
+	args := m.Called(ctx, e)
+	return args.Error(0)
+}
+
+func (m *eventMock) ToError(ctx context.Context, params common.ToErrorParams) error {
+	args := m.Called(ctx, params)
+	return args.Error(0)
+}
+
+func (m *eventMock) ToEvent(ctx context.Context, organizationID string, action common.EventAction, eventType common.EventType, payload any) common.Event {
+	args := m.Called(ctx, organizationID, action, eventType, payload)
+	return args.Get(0).(common.Event)
 }
 
 type apiMock struct {
@@ -81,6 +121,11 @@ func (m *apiMock) CreateRecurrentCharge(ctx context.Context, params livechat.Cre
 
 type storageMock struct {
 	mock.Mock
+}
+
+func (m *storageMock) CreateEvent(ctx context.Context, event common.Event) error {
+	//TODO implement me
+	panic("implement me")
 }
 
 func (m *storageMock) GetChargesByOrganizationID(ctx context.Context, lcID string) ([]Charge, error) {
@@ -142,7 +187,7 @@ func (m *storageMock) GetSubscriptionsByOrganizationID(ctx context.Context, lcID
 
 func TestNewService(t *testing.T) {
 	t.Run("NewService", func(t *testing.T) {
-		newService := NewService(nil, "labs", func(ctx context.Context) (string, error) { return "", nil }, &storageMock{}, nil, "returnURL", "masterOrgID")
+		newService := NewService(nil, nil, nil, "labs", func(ctx context.Context) (string, error) { return "", nil }, &storageMock{}, nil, "returnURL", "masterOrgID")
 
 		assert.NotNil(t, newService)
 	})
@@ -166,7 +211,7 @@ func TestService_CreateRecurrentCharge(t *testing.T) {
 			ID:               "id",
 			Type:             ChargeTypeRecurring,
 			Payload:          rawRC,
-			LCOrganizationID: "lcOrganizationID",
+			LCOrganizationID: lcoid,
 		}
 		am.On("CreateRecurrentCharge", ctx, livechat.CreateRecurrentChargeParams{
 			Name:      "name",
@@ -177,8 +222,19 @@ func TestService_CreateRecurrentCharge(t *testing.T) {
 			Months:    1,
 		}).Return(rc, nil).Once()
 		sm.On("CreateCharge", ctx, domainCharge).Return(nil).Once()
+		payload := map[string]interface{}{"name": "name", "price": 10}
+		sc, _ := json.Marshal(domainCharge)
+		levent := common.Event{
+			ID:               xid,
+			LCOrganizationID: lcoid,
+			Type:             common.EventTypeInfo,
+			Action:           common.EventActionCreateCharge,
+			Payload:          sc,
+		}
+		em.On("CreateEvent", context.Background(), levent).Return(nil).Once()
+		em.On("ToEvent", context.Background(), lcoid, common.EventActionCreateCharge, common.EventTypeInfo, payload).Return(levent).Once()
 
-		id, err := s.CreateRecurrentCharge(context.Background(), "name", 10, "lcOrganizationID")
+		id, err := s.CreateRecurrentCharge(context.Background(), "name", 10, lcoid)
 
 		assert.Equal(t, "id", id)
 		assert.Nil(t, err)
@@ -214,6 +270,17 @@ func TestService_CreateRecurrentCharge(t *testing.T) {
 			Months:    1,
 		}).Return(rc, nil).Once()
 		sm.On("CreateCharge", ctx, domainCharge).Return(nil).Once()
+		payload := map[string]interface{}{"name": "name", "price": 10}
+		sc, _ := json.Marshal(domainCharge)
+		levent := common.Event{
+			ID:               xid,
+			LCOrganizationID: "masterOrgID",
+			Type:             common.EventTypeInfo,
+			Action:           common.EventActionCreateCharge,
+			Payload:          sc,
+		}
+		em.On("CreateEvent", context.Background(), levent).Return(nil).Once()
+		em.On("ToEvent", context.Background(), "masterOrgID", common.EventActionCreateCharge, common.EventTypeInfo, payload).Return(levent).Once()
 
 		id, err := s.CreateRecurrentCharge(context.Background(), "name", 10, "masterOrgID")
 
@@ -232,8 +299,23 @@ func TestService_CreateRecurrentCharge(t *testing.T) {
 			TrialDays: 0,
 			Months:    1,
 		}).Return(nil, assert.AnError).Once()
+		payload := map[string]interface{}{"name": "name", "price": 10}
+		sc, _ := json.Marshal(payload)
+		levent := common.Event{
+			ID:               xid,
+			LCOrganizationID: lcoid,
+			Type:             common.EventTypeError,
+			Action:           common.EventActionCreateCharge,
+			Payload:          sc,
+			Error:            "error creating recurrent charge",
+		}
+		em.On("ToEvent", context.Background(), lcoid, common.EventActionCreateCharge, common.EventTypeInfo, payload).Return(levent).Once()
+		em.On("ToError", context.Background(), common.ToErrorParams{
+			Event: levent,
+			Err:   fmt.Errorf("failed to create recurrent charge via lc: %w", assert.AnError),
+		}).Return(assert.AnError).Once()
 
-		id, err := s.CreateRecurrentCharge(context.Background(), "name", 10, "lcOrganizationID")
+		id, err := s.CreateRecurrentCharge(context.Background(), "name", 10, lcoid)
 
 		assert.Empty(t, id)
 		assert.Error(t, err)
@@ -250,11 +332,26 @@ func TestService_CreateRecurrentCharge(t *testing.T) {
 			TrialDays: 0,
 			Months:    1,
 		}).Return(nil, nil).Once()
+		payload := map[string]interface{}{"name": "name", "price": 10}
+		sc, _ := json.Marshal(payload)
+		levent := common.Event{
+			ID:               xid,
+			LCOrganizationID: lcoid,
+			Type:             common.EventTypeError,
+			Action:           common.EventActionCreateCharge,
+			Payload:          sc,
+			Error:            "error creating recurrent charge",
+		}
+		em.On("ToEvent", context.Background(), lcoid, common.EventActionCreateCharge, common.EventTypeInfo, payload).Return(levent).Once()
+		em.On("ToError", context.Background(), common.ToErrorParams{
+			Event: levent,
+			Err:   fmt.Errorf("failed to create recurrent charge via lc: charge is nil"),
+		}).Return(assert.AnError).Once()
 
-		id, err := s.CreateRecurrentCharge(context.Background(), "name", 10, "lcOrganizationID")
+		id, err := s.CreateRecurrentCharge(context.Background(), "name", 10, lcoid)
 
 		assert.Empty(t, id)
-		assert.ErrorContains(t, err, "charge is nil")
+		assert.ErrorIs(t, err, assert.AnError)
 
 		assertExpectations(t)
 	})
@@ -276,7 +373,7 @@ func TestService_CreateRecurrentCharge(t *testing.T) {
 			ID:               "id",
 			Type:             ChargeTypeRecurring,
 			Payload:          rawRC,
-			LCOrganizationID: "lcOrganizationID",
+			LCOrganizationID: lcoid,
 		}
 
 		am.On("CreateRecurrentCharge", ctx, livechat.CreateRecurrentChargeParams{
@@ -288,8 +385,23 @@ func TestService_CreateRecurrentCharge(t *testing.T) {
 			Months:    1,
 		}).Return(rc, nil).Once()
 		sm.On("CreateCharge", ctx, domainCharge).Return(assert.AnError).Once()
+		payload := map[string]interface{}{"name": "name", "price": 10}
+		sc, _ := json.Marshal(payload)
+		levent := common.Event{
+			ID:               xid,
+			LCOrganizationID: lcoid,
+			Type:             common.EventTypeError,
+			Action:           common.EventActionCreateCharge,
+			Payload:          sc,
+			Error:            "error creating recurrent charge",
+		}
+		em.On("ToEvent", context.Background(), lcoid, common.EventActionCreateCharge, common.EventTypeInfo, payload).Return(levent).Once()
+		em.On("ToError", context.Background(), common.ToErrorParams{
+			Event: levent,
+			Err:   fmt.Errorf("failed to create charge in database: %w", assert.AnError),
+		}).Return(assert.AnError).Once()
 
-		id, err := s.CreateRecurrentCharge(context.Background(), "name", 10, "lcOrganizationID")
+		id, err := s.CreateRecurrentCharge(context.Background(), "name", 10, lcoid)
 
 		assert.Empty(t, id)
 		assert.Error(t, err)
@@ -301,19 +413,32 @@ func TestService_CreateRecurrentCharge(t *testing.T) {
 
 func TestService_CreateSubscription(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
-		sm.On("GetCharge", ctx, "id").Return(&Charge{
+		charge := Charge{
 			ID: "id",
-		}, nil).Once()
+		}
+		sm.On("GetCharge", ctx, "id").Return(&charge, nil).Once()
 		sm.On("CreateSubscription", ctx, mock.Anything).Run(func(args mock.Arguments) {
 			argsSub := args.Get(1).(Subscription)
 			assert.NotNil(t, argsSub)
 			assert.Equal(t, "id", argsSub.Charge.ID)
 			assert.Equal(t, "super", argsSub.PlanName)
-			assert.Equal(t, "lcOrganizationID", argsSub.LCOrganizationID)
+			assert.Equal(t, lcoid, argsSub.LCOrganizationID)
 			assert.NotNil(t, argsSub.ID)
 		}).Return(nil).Once()
+		xm.On("GenerateId").Return(xid, nil)
+		payload := map[string]interface{}{"planName": "super", "chargeID": "id"}
+		sc, _ := json.Marshal(charge)
+		levent := common.Event{
+			ID:               xid,
+			LCOrganizationID: lcoid,
+			Type:             common.EventTypeInfo,
+			Action:           common.EventActionCreateSubscription,
+			Payload:          sc,
+		}
+		em.On("CreateEvent", context.Background(), levent).Return(nil).Once()
+		em.On("ToEvent", context.Background(), lcoid, common.EventActionCreateSubscription, common.EventTypeInfo, payload).Return(levent).Once()
 
-		err := s.CreateSubscription(context.Background(), "lcOrganizationID", "id", "super")
+		err := s.CreateSubscription(context.Background(), lcoid, "id", "super")
 
 		assert.Nil(t, err)
 
@@ -321,29 +446,72 @@ func TestService_CreateSubscription(t *testing.T) {
 	})
 
 	t.Run("error plan not found", func(t *testing.T) {
-		err := s.CreateSubscription(context.Background(), "lcOrganizationID", "xyz", "notFound")
+		payload := map[string]interface{}{"planName": "notFound", "chargeID": "xyz"}
+		sc, _ := json.Marshal(payload)
+		levent := common.Event{
+			ID:               xid,
+			LCOrganizationID: lcoid,
+			Type:             common.EventTypeError,
+			Action:           common.EventActionCreateSubscription,
+			Payload:          sc,
+		}
+		em.On("ToEvent", context.Background(), lcoid, common.EventActionCreateSubscription, common.EventTypeInfo, payload).Return(levent).Once()
+		em.On("ToError", context.Background(), common.ToErrorParams{
+			Event: levent,
+			Err:   fmt.Errorf("plan not found"),
+		}).Return(assert.AnError).Once()
 
-		assert.ErrorContains(t, err, "plan not found")
+		err := s.CreateSubscription(context.Background(), lcoid, "xyz", "notFound")
+
+		assert.ErrorIs(t, err, assert.AnError)
 
 		assertExpectations(t)
 	})
 
 	t.Run("error getting charge", func(t *testing.T) {
 		sm.On("GetCharge", ctx, "id").Return(nil, assert.AnError).Once()
+		payload := map[string]interface{}{"planName": "super", "chargeID": "id"}
+		sc, _ := json.Marshal(payload)
+		levent := common.Event{
+			ID:               xid,
+			LCOrganizationID: lcoid,
+			Type:             common.EventTypeError,
+			Action:           common.EventActionCreateSubscription,
+			Payload:          sc,
+		}
+		em.On("ToEvent", context.Background(), lcoid, common.EventActionCreateSubscription, common.EventTypeInfo, payload).Return(levent).Once()
+		em.On("ToError", context.Background(), common.ToErrorParams{
+			Event: levent,
+			Err:   fmt.Errorf("failed to get charge by organization id: %w", assert.AnError),
+		}).Return(assert.AnError).Once()
 
-		err := s.CreateSubscription(context.Background(), "lcOrganizationID", "id", "super")
+		err := s.CreateSubscription(context.Background(), lcoid, "id", "super")
 
-		assert.Error(t, err)
+		assert.ErrorIs(t, err, assert.AnError)
 
 		assertExpectations(t)
 	})
 
 	t.Run("error charge is nil", func(t *testing.T) {
 		sm.On("GetCharge", ctx, "id").Return(nil, nil).Once()
+		payload := map[string]interface{}{"planName": "super", "chargeID": "id"}
+		sc, _ := json.Marshal(payload)
+		levent := common.Event{
+			ID:               xid,
+			LCOrganizationID: lcoid,
+			Type:             common.EventTypeError,
+			Action:           common.EventActionCreateSubscription,
+			Payload:          sc,
+		}
+		em.On("ToEvent", context.Background(), lcoid, common.EventActionCreateSubscription, common.EventTypeInfo, payload).Return(levent).Once()
+		em.On("ToError", context.Background(), common.ToErrorParams{
+			Event: levent,
+			Err:   fmt.Errorf("charge not found"),
+		}).Return(assert.AnError).Once()
 
-		err := s.CreateSubscription(context.Background(), "lcOrganizationID", "id", "super")
+		err := s.CreateSubscription(context.Background(), lcoid, "id", "super")
 
-		assert.ErrorContains(t, err, "charge not found")
+		assert.ErrorIs(t, err, assert.AnError)
 
 		assertExpectations(t)
 	})
@@ -352,11 +520,26 @@ func TestService_CreateSubscription(t *testing.T) {
 		sm.On("GetCharge", ctx, "id").Return(&Charge{
 			ID: "id",
 		}, nil).Once()
+		xm.On("GenerateId").Return(xid, nil)
 		sm.On("CreateSubscription", ctx, mock.Anything).Return(assert.AnError).Once()
+		payload := map[string]interface{}{"planName": "super", "chargeID": "id"}
+		sc, _ := json.Marshal(payload)
+		levent := common.Event{
+			ID:               xid,
+			LCOrganizationID: lcoid,
+			Type:             common.EventTypeError,
+			Action:           common.EventActionCreateSubscription,
+			Payload:          sc,
+		}
+		em.On("ToEvent", context.Background(), lcoid, common.EventActionCreateSubscription, common.EventTypeInfo, payload).Return(levent).Once()
+		em.On("ToError", context.Background(), common.ToErrorParams{
+			Event: levent,
+			Err:   fmt.Errorf("failed to create subscription in database: %w", assert.AnError),
+		}).Return(assert.AnError).Once()
 
-		err := s.CreateSubscription(context.Background(), "lcOrganizationID", "id", "super")
+		err := s.CreateSubscription(context.Background(), lcoid, "id", "super")
 
-		assert.Error(t, err)
+		assert.ErrorIs(t, err, assert.AnError)
 
 		assertExpectations(t)
 	})
@@ -431,7 +614,7 @@ func TestService_SyncRecurrentCharge(t *testing.T) {
 		sm.On("GetCharge", ctx, "id").Return(&Charge{
 			ID: "id",
 		}, nil).Once()
-		am.On("GetRecurrentCharge", ctx, "id").Return(&livechat.RecurrentCharge{
+		charge := livechat.RecurrentCharge{
 			BaseCharge: livechat.BaseCharge{
 				ID:    "id",
 				Name:  "name",
@@ -440,15 +623,27 @@ func TestService_SyncRecurrentCharge(t *testing.T) {
 			},
 			TrialDays: 0,
 			Months:    1,
-		}, nil).Once()
+		}
+		am.On("GetRecurrentCharge", ctx, "id").Return(&charge, nil).Once()
 		sm.On("UpdateChargePayload", ctx, "id", mock.Anything).Run(func(args mock.Arguments) {
 			payload := args.Get(2).(livechat.BaseCharge)
 			assert.NotNil(t, payload)
 			assert.Equal(t, "name", payload.Name)
 			assert.Equal(t, 10, payload.Price)
 		}).Return(nil).Once()
+		payload := map[string]interface{}{"id": "id"}
+		sc, _ := json.Marshal(charge)
+		levent := common.Event{
+			ID:               xid,
+			LCOrganizationID: lcoid,
+			Type:             common.EventTypeInfo,
+			Action:           common.EventActionSyncRecurrentCharge,
+			Payload:          sc,
+		}
+		em.On("ToEvent", context.Background(), lcoid, common.EventActionSyncRecurrentCharge, common.EventTypeInfo, payload).Return(levent).Once()
+		em.On("CreateEvent", context.Background(), levent).Return(nil).Once()
 
-		err := s.SyncRecurrentCharge(context.Background(), "id")
+		err := s.SyncRecurrentCharge(context.Background(), lcoid, "id")
 
 		assert.Nil(t, err)
 
@@ -457,20 +652,48 @@ func TestService_SyncRecurrentCharge(t *testing.T) {
 
 	t.Run("error getting charge", func(t *testing.T) {
 		sm.On("GetCharge", ctx, "id").Return(nil, assert.AnError).Once()
+		payload := map[string]interface{}{"id": "id"}
+		sc, _ := json.Marshal(payload)
+		levent := common.Event{
+			ID:               xid,
+			LCOrganizationID: lcoid,
+			Type:             common.EventTypeError,
+			Action:           common.EventActionSyncRecurrentCharge,
+			Payload:          sc,
+		}
+		em.On("ToEvent", context.Background(), lcoid, common.EventActionSyncRecurrentCharge, common.EventTypeInfo, payload).Return(levent).Once()
+		em.On("ToError", context.Background(), common.ToErrorParams{
+			Event: levent,
+			Err:   fmt.Errorf("failed to get charge: %w", assert.AnError),
+		}).Return(assert.AnError).Once()
 
-		err := s.SyncRecurrentCharge(context.Background(), "id")
+		err := s.SyncRecurrentCharge(context.Background(), lcoid, "id")
 
-		assert.Error(t, err)
+		assert.ErrorIs(t, err, assert.AnError)
 
 		assertExpectations(t)
 	})
 
 	t.Run("error charge is nil", func(t *testing.T) {
 		sm.On("GetCharge", ctx, "id").Return(nil, nil).Once()
+		payload := map[string]interface{}{"id": "id"}
+		sc, _ := json.Marshal(payload)
+		levent := common.Event{
+			ID:               xid,
+			LCOrganizationID: lcoid,
+			Type:             common.EventTypeError,
+			Action:           common.EventActionSyncRecurrentCharge,
+			Payload:          sc,
+		}
+		em.On("ToEvent", context.Background(), lcoid, common.EventActionSyncRecurrentCharge, common.EventTypeInfo, payload).Return(levent).Once()
+		em.On("ToError", context.Background(), common.ToErrorParams{
+			Event: levent,
+			Err:   fmt.Errorf("charge not found"),
+		}).Return(assert.AnError).Once()
 
-		err := s.SyncRecurrentCharge(context.Background(), "id")
+		err := s.SyncRecurrentCharge(context.Background(), lcoid, "id")
 
-		assert.ErrorContains(t, err, "charge not found")
+		assert.ErrorIs(t, err, assert.AnError)
 
 		assertExpectations(t)
 	})
@@ -480,10 +703,24 @@ func TestService_SyncRecurrentCharge(t *testing.T) {
 			ID: "id",
 		}, nil).Once()
 		am.On("GetRecurrentCharge", ctx, "id").Return(nil, assert.AnError).Once()
+		payload := map[string]interface{}{"id": "id"}
+		sc, _ := json.Marshal(payload)
+		levent := common.Event{
+			ID:               xid,
+			LCOrganizationID: lcoid,
+			Type:             common.EventTypeError,
+			Action:           common.EventActionSyncRecurrentCharge,
+			Payload:          sc,
+		}
+		em.On("ToEvent", context.Background(), lcoid, common.EventActionSyncRecurrentCharge, common.EventTypeInfo, payload).Return(levent).Once()
+		em.On("ToError", context.Background(), common.ToErrorParams{
+			Event: levent,
+			Err:   fmt.Errorf("failed to get recurrent charge: %w", assert.AnError),
+		}).Return(assert.AnError).Once()
 
-		err := s.SyncRecurrentCharge(context.Background(), "id")
+		err := s.SyncRecurrentCharge(context.Background(), lcoid, "id")
 
-		assert.Error(t, err)
+		assert.ErrorIs(t, err, assert.AnError)
 
 		assertExpectations(t)
 	})
@@ -503,10 +740,24 @@ func TestService_SyncRecurrentCharge(t *testing.T) {
 			Months:    1,
 		}, nil).Once()
 		sm.On("UpdateChargePayload", ctx, "id", mock.Anything).Return(assert.AnError).Once()
+		payload := map[string]interface{}{"id": "id"}
+		sc, _ := json.Marshal(payload)
+		levent := common.Event{
+			ID:               xid,
+			LCOrganizationID: lcoid,
+			Type:             common.EventTypeError,
+			Action:           common.EventActionSyncRecurrentCharge,
+			Payload:          sc,
+		}
+		em.On("ToEvent", context.Background(), lcoid, common.EventActionSyncRecurrentCharge, common.EventTypeInfo, payload).Return(levent).Once()
+		em.On("ToError", context.Background(), common.ToErrorParams{
+			Event: levent,
+			Err:   fmt.Errorf("failed to update charge payload: %w", assert.AnError),
+		}).Return(assert.AnError).Once()
 
-		err := s.SyncRecurrentCharge(context.Background(), "id")
+		err := s.SyncRecurrentCharge(context.Background(), lcoid, "id")
 
-		assert.Error(t, err)
+		assert.ErrorIs(t, err, assert.AnError)
 
 		assertExpectations(t)
 	})

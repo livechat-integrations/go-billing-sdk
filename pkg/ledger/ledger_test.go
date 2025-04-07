@@ -3,35 +3,65 @@ package ledger
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"net/url"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
+	"github.com/livechat-integrations/go-billing-sdk/pkg/common"
 	"github.com/livechat-integrations/go-billing-sdk/pkg/common/livechat"
 )
 
 var am = new(apiMock)
 var sm = new(storageMock)
 var xm = new(xIdMock)
+var em = new(eventMock)
 
 var s = Service{
-	idProvider:  xm,
-	billingAPI:  am,
-	storage:     sm,
-	returnURL:   "returnURL",
-	masterOrgID: "masterOrgID",
+	eventService: em,
+	idProvider:   xm,
+	billingAPI:   am,
+	storage:      sm,
+	returnURL:    "returnURL",
+	masterOrgID:  "masterOrgID",
 }
 var ctx = context.Background()
 
 var assertExpectations = func(t *testing.T) {
-	mock.AssertExpectationsForObjects(t, am, sm)
+	mock.AssertExpectationsForObjects(t, em, xm, am, sm, lm)
+	em.Calls = nil
+	xm.Calls = nil
 	am.Calls = nil
 	sm.Calls = nil
+	lm.Calls = nil
 
+	em.ExpectedCalls = nil
+	xm.ExpectedCalls = nil
 	am.ExpectedCalls = nil
 	sm.ExpectedCalls = nil
+	lm.ExpectedCalls = nil
+}
+
+type eventMock struct {
+	mock.Mock
+}
+
+func (m *eventMock) CreateEvent(ctx context.Context, e common.Event) error {
+	args := m.Called(ctx, e)
+	return args.Error(0)
+}
+
+func (m *eventMock) ToError(ctx context.Context, params common.ToErrorParams) error {
+	args := m.Called(ctx, params)
+	return args.Error(0)
+}
+
+func (m *eventMock) ToEvent(ctx context.Context, organizationID string, action common.EventAction, eventType common.EventType, payload any) common.Event {
+	args := m.Called(ctx, organizationID, action, eventType, payload)
+	return args.Get(0).(common.Event)
 }
 
 type xIdMock struct {
@@ -103,6 +133,11 @@ type storageMock struct {
 	mock.Mock
 }
 
+func (m *storageMock) CreateEvent(ctx context.Context, event common.Event) error {
+	//TODO implement me
+	panic("implement me")
+}
+
 func (m *storageMock) InitRecurrentTopUpRequiredValues(ctx context.Context, params InitRecurrentTopUpRequiredValuesParams) error {
 	args := m.Called(ctx, params)
 	return args.Error(0)
@@ -150,11 +185,6 @@ func (m *storageMock) GetBalance(ctx context.Context, organizationID string) (fl
 	return args.Get(0).(float32), args.Error(1)
 }
 
-func (m *storageMock) CreateEvent(ctx context.Context, e Event) error {
-	args := m.Called(ctx, e)
-	return args.Error(0)
-}
-
 func (m *storageMock) UpdateTopUpStatus(ctx context.Context, params UpdateTopUpStatusParams) error {
 	args := m.Called(ctx, params)
 	return args.Error(0)
@@ -172,7 +202,7 @@ func (m *storageMock) CreateCharge(ctx context.Context, c Charge) error {
 
 func TestNewService(t *testing.T) {
 	t.Run("NewService", func(t *testing.T) {
-		newService := NewService(nil, nil, "labs", func(ctx context.Context) (string, error) { return "", nil }, &storageMock{}, "returnURL", "masterOrgID")
+		newService := NewService(nil, nil, nil, "labs", func(ctx context.Context) (string, error) { return "", nil }, &storageMock{}, "returnURL", "masterOrgID")
 
 		assert.NotNil(t, newService)
 		assertExpectations(t)
@@ -184,7 +214,7 @@ func TestService_CreateCharge(t *testing.T) {
 		amount := float32(5.234)
 		lcoid := "lcOrganizationID"
 
-		call := xm.On("GenerateId").Return(xid, nil)
+		xm.On("GenerateId").Return(xid, nil)
 		domainCharge := Charge{
 			ID:               xid,
 			LCOrganizationID: lcoid,
@@ -194,26 +224,28 @@ func TestService_CreateCharge(t *testing.T) {
 
 		sm.On("CreateCharge", ctx, domainCharge).Return(nil).Once()
 		sc, _ := json.Marshal(domainCharge)
-		sm.On("CreateEvent", ctx, Event{
+		levent := common.Event{
 			ID:               xid,
 			LCOrganizationID: lcoid,
-			Type:             EventTypeInfo,
-			Action:           EventActionCreateCharge,
+			Type:             common.EventTypeInfo,
+			Action:           common.EventActionCreateCharge,
 			Payload:          sc,
-		}).Return(nil).Once()
-
-		id, err := s.CreateCharge(context.Background(), CreateChargeParams{
+		}
+		em.On("CreateEvent", context.Background(), levent).Return(nil).Once()
+		params := CreateChargeParams{
 			Test:           false,
 			Name:           "name",
 			Amount:         amount,
 			OrganizationID: lcoid,
-		})
+		}
+		em.On("ToEvent", context.Background(), lcoid, common.EventActionCreateCharge, common.EventTypeInfo, params).Return(levent).Once()
+
+		id, err := s.CreateCharge(context.Background(), params)
 
 		assert.Equal(t, xid, id)
 		assert.Nil(t, err)
 
 		assertExpectations(t)
-		call.Unset()
 	})
 
 	t.Run("error", func(t *testing.T) {
@@ -226,7 +258,7 @@ func TestService_CreateCharge(t *testing.T) {
 			OrganizationID: lcoid,
 		}
 
-		call := xm.On("GenerateId").Return(xid, nil)
+		xm.On("GenerateId").Return(xid, nil)
 		domainCharge := Charge{
 			ID:               xid,
 			LCOrganizationID: lcoid,
@@ -236,14 +268,19 @@ func TestService_CreateCharge(t *testing.T) {
 
 		sm.On("CreateCharge", ctx, domainCharge).Return(assert.AnError).Once()
 		sc, _ := json.Marshal(params)
-		sm.On("CreateEvent", ctx, Event{
+		levent := common.Event{
 			ID:               xid,
 			LCOrganizationID: lcoid,
-			Type:             EventTypeError,
-			Action:           EventActionCreateCharge,
+			Type:             common.EventTypeError,
+			Action:           common.EventActionCreateCharge,
 			Payload:          sc,
 			Error:            "failed to create charge in database: assert.AnError general error for testing",
-		}).Return(nil).Once()
+		}
+		em.On("ToEvent", context.Background(), lcoid, common.EventActionCreateCharge, common.EventTypeInfo, params).Return(levent).Once()
+		em.On("ToError", context.Background(), common.ToErrorParams{
+			Event: levent,
+			Err:   fmt.Errorf("failed to create charge in database: %w", assert.AnError),
+		}).Return(assert.AnError).Once()
 
 		id, err := s.CreateCharge(context.Background(), params)
 
@@ -251,7 +288,6 @@ func TestService_CreateCharge(t *testing.T) {
 		assert.ErrorIs(t, err, assert.AnError)
 
 		assertExpectations(t)
-		call.Unset()
 	})
 }
 
@@ -273,8 +309,6 @@ func TestService_CreateTopUpRequest(t *testing.T) {
 			Months:    months,
 		}
 
-		call := xm.On("GenerateId").Return(xid, nil)
-
 		rawRC, _ := json.Marshal(rc)
 		topUp := TopUp{
 			ID:               "id",
@@ -295,15 +329,15 @@ func TestService_CreateTopUpRequest(t *testing.T) {
 		}).Return(rc, nil).Once()
 		sm.On("UpsertTopUp", ctx, topUp).Return(&topUp, nil).Once()
 		sc, _ := json.Marshal(topUp)
-		sm.On("CreateEvent", ctx, Event{
+		levent := common.Event{
 			ID:               xid,
 			LCOrganizationID: lcoid,
-			Type:             EventTypeInfo,
-			Action:           EventActionCreateTopUp,
+			Type:             common.EventTypeInfo,
+			Action:           common.EventActionCreateTopUp,
 			Payload:          sc,
-		}).Return(nil).Once()
-
-		tu, err := s.CreateTopUpRequest(context.Background(), CreateTopUpRequestParams{
+		}
+		em.On("CreateEvent", ctx, levent).Return(nil).Once()
+		params := CreateTopUpRequestParams{
 			Test:           false,
 			Name:           "name",
 			Amount:         amount,
@@ -312,13 +346,15 @@ func TestService_CreateTopUpRequest(t *testing.T) {
 			Config: TopUpConfig{
 				Months: &months,
 			},
-		})
+		}
+		em.On("ToEvent", ctx, lcoid, common.EventActionCreateTopUp, common.EventTypeInfo, params).Return(levent).Once()
+
+		tu, err := s.CreateTopUpRequest(ctx, params)
 
 		assert.Equal(t, &topUp, tu)
 		assert.Nil(t, err)
 
 		assertExpectations(t)
-		call.Unset()
 	})
 
 	t.Run("error recurrent no months", func(t *testing.T) {
@@ -333,24 +369,27 @@ func TestService_CreateTopUpRequest(t *testing.T) {
 			Config:         TopUpConfig{},
 		}
 
-		call := xm.On("GenerateId").Return(xid, nil)
 		sc, _ := json.Marshal(params)
-		sm.On("CreateEvent", ctx, Event{
+		levent := common.Event{
 			ID:               xid,
 			LCOrganizationID: lcoid,
-			Type:             EventTypeError,
-			Action:           EventActionCreateTopUp,
+			Type:             common.EventTypeError,
+			Action:           common.EventActionCreateTopUp,
 			Payload:          sc,
 			Error:            "failed to create top up billing charge: failed to create recurrent charge v2 via lc: charge config months is nil",
-		}).Return(nil).Once()
+		}
+		em.On("ToEvent", ctx, lcoid, common.EventActionCreateTopUp, common.EventTypeInfo, params).Return(levent).Once()
+		em.On("ToError", context.Background(), common.ToErrorParams{
+			Event: levent,
+			Err:   fmt.Errorf("failed to create top up billing charge: %w", fmt.Errorf("failed to create recurrent charge v2 via lc: charge config months is nil")),
+		}).Return(assert.AnError).Once()
 
 		tu, err := s.CreateTopUpRequest(context.Background(), params)
 
 		assert.Nil(t, tu)
-		assert.Equal(t, "2341: failed to create top up billing charge: failed to create recurrent charge v2 via lc: charge config months is nil", err.Error())
+		assert.ErrorIs(t, err, assert.AnError)
 
 		assertExpectations(t)
-		call.Unset()
 	})
 
 	t.Run("error recurrent api error", func(t *testing.T) {
@@ -368,7 +407,6 @@ func TestService_CreateTopUpRequest(t *testing.T) {
 			},
 		}
 
-		call := xm.On("GenerateId").Return(xid, nil)
 		am.On("CreateRecurrentChargeV2", ctx, livechat.CreateRecurrentChargeV2Params{
 			Name:      "name",
 			ReturnURL: "returnURL",
@@ -379,15 +417,19 @@ func TestService_CreateTopUpRequest(t *testing.T) {
 		}).Return(nil, assert.AnError).Once()
 
 		sc, _ := json.Marshal(params)
-
-		sm.On("CreateEvent", ctx, Event{
+		levent := common.Event{
 			ID:               xid,
 			LCOrganizationID: lcoid,
-			Type:             EventTypeError,
-			Action:           EventActionCreateTopUp,
+			Type:             common.EventTypeError,
+			Action:           common.EventActionCreateTopUp,
 			Payload:          sc,
 			Error:            "failed to create top up billing charge: failed to create recurrent charge v2 via lc: assert.AnError general error for testing",
-		}).Return(nil).Once()
+		}
+		em.On("ToEvent", ctx, lcoid, common.EventActionCreateTopUp, common.EventTypeInfo, params).Return(levent).Once()
+		em.On("ToError", context.Background(), common.ToErrorParams{
+			Event: levent,
+			Err:   fmt.Errorf("failed to create top up billing charge: %w", fmt.Errorf("failed to create recurrent charge v2 via lc: %w", assert.AnError)),
+		}).Return(assert.AnError).Once()
 
 		tu, err := s.CreateTopUpRequest(context.Background(), params)
 
@@ -395,7 +437,6 @@ func TestService_CreateTopUpRequest(t *testing.T) {
 		assert.ErrorIs(t, err, assert.AnError)
 
 		assertExpectations(t)
-		call.Unset()
 	})
 
 	t.Run("error recurrent no api charge returned", func(t *testing.T) {
@@ -413,7 +454,6 @@ func TestService_CreateTopUpRequest(t *testing.T) {
 			},
 		}
 
-		call := xm.On("GenerateId").Return(xid, nil)
 		am.On("CreateRecurrentChargeV2", ctx, livechat.CreateRecurrentChargeV2Params{
 			Name:      "name",
 			ReturnURL: "returnURL",
@@ -424,22 +464,26 @@ func TestService_CreateTopUpRequest(t *testing.T) {
 		}).Return(nil, nil).Once()
 
 		sc, _ := json.Marshal(params)
-		sm.On("CreateEvent", ctx, Event{
+		levent := common.Event{
 			ID:               xid,
 			LCOrganizationID: lcoid,
-			Type:             EventTypeError,
-			Action:           EventActionCreateTopUp,
+			Type:             common.EventTypeError,
+			Action:           common.EventActionCreateTopUp,
 			Payload:          sc,
-			Error:            "failed to create top up billing charge: failed to create recurrent charge v2 via lc: charge is nil",
-		}).Return(nil).Once()
+			Error:            "failed to create top up billing charge: failed to create recurrent charge v2 via lc: ",
+		}
+		em.On("ToEvent", ctx, lcoid, common.EventActionCreateTopUp, common.EventTypeInfo, params).Return(levent).Once()
+		em.On("ToError", context.Background(), common.ToErrorParams{
+			Event: levent,
+			Err:   fmt.Errorf("failed to create top up billing charge: %w", fmt.Errorf("failed to create recurrent charge v2 via lc: charge is nil")),
+		}).Return(assert.AnError).Once()
 
 		tu, err := s.CreateTopUpRequest(context.Background(), params)
 
 		assert.Nil(t, tu)
-		assert.Equal(t, "2341: failed to create top up billing charge: failed to create recurrent charge v2 via lc: charge is nil", err.Error())
+		assert.ErrorIs(t, err, assert.AnError)
 
 		assertExpectations(t)
-		call.Unset()
 	})
 
 	t.Run("success direct", func(t *testing.T) {
@@ -455,7 +499,6 @@ func TestService_CreateTopUpRequest(t *testing.T) {
 			Quantity: 1,
 		}
 
-		call := xm.On("GenerateId").Return(xid, nil)
 		rawRC, _ := json.Marshal(rc)
 		topUp := TopUp{
 			ID:               "id",
@@ -474,28 +517,30 @@ func TestService_CreateTopUpRequest(t *testing.T) {
 		sm.On("UpsertTopUp", ctx, topUp).Return(&topUp, nil).Once()
 
 		sc, _ := json.Marshal(topUp)
-		sm.On("CreateEvent", ctx, Event{
-			ID:               xid,
-			LCOrganizationID: lcoid,
-			Type:             EventTypeInfo,
-			Action:           EventActionCreateTopUp,
-			Payload:          sc,
-		}).Return(nil).Once()
-
-		tu, err := s.CreateTopUpRequest(context.Background(), CreateTopUpRequestParams{
+		params := CreateTopUpRequestParams{
 			Test:           false,
 			Name:           "name",
 			Amount:         amount,
 			OrganizationID: lcoid,
 			Type:           TopUpTypeDirect,
 			Config:         TopUpConfig{},
-		})
+		}
+		levent := common.Event{
+			ID:               xid,
+			LCOrganizationID: lcoid,
+			Type:             common.EventTypeInfo,
+			Action:           common.EventActionCreateTopUp,
+			Payload:          sc,
+		}
+		em.On("ToEvent", ctx, lcoid, common.EventActionCreateTopUp, common.EventTypeInfo, params).Return(levent).Once()
+		em.On("CreateEvent", ctx, levent).Return(nil).Once()
+
+		tu, err := s.CreateTopUpRequest(context.Background(), params)
 
 		assert.Equal(t, &topUp, tu)
 		assert.Nil(t, err)
 
 		assertExpectations(t)
-		call.Unset()
 	})
 
 	t.Run("error direct api error", func(t *testing.T) {
@@ -510,7 +555,6 @@ func TestService_CreateTopUpRequest(t *testing.T) {
 			Config:         TopUpConfig{},
 		}
 
-		call := xm.On("GenerateId").Return(xid, nil)
 		am.On("CreateDirectCharge", ctx, livechat.CreateDirectChargeParams{
 			Name:      "name",
 			ReturnURL: "returnURL",
@@ -519,14 +563,19 @@ func TestService_CreateTopUpRequest(t *testing.T) {
 		}).Return(nil, assert.AnError).Once()
 
 		sc, _ := json.Marshal(params)
-		sm.On("CreateEvent", ctx, Event{
+		levent := common.Event{
 			ID:               xid,
 			LCOrganizationID: lcoid,
-			Type:             EventTypeError,
-			Action:           EventActionCreateTopUp,
+			Type:             common.EventTypeError,
+			Action:           common.EventActionCreateTopUp,
 			Payload:          sc,
 			Error:            "failed to create top up billing charge: failed to create direct charge via lc: assert.AnError general error for testing",
-		}).Return(nil).Once()
+		}
+		em.On("ToEvent", ctx, lcoid, common.EventActionCreateTopUp, common.EventTypeInfo, params).Return(levent).Once()
+		em.On("ToError", context.Background(), common.ToErrorParams{
+			Event: levent,
+			Err:   fmt.Errorf("failed to create top up billing charge: %w", fmt.Errorf("failed to create direct charge via lc: %w", assert.AnError)),
+		}).Return(assert.AnError).Once()
 
 		tu, err := s.CreateTopUpRequest(context.Background(), params)
 
@@ -534,7 +583,6 @@ func TestService_CreateTopUpRequest(t *testing.T) {
 		assert.ErrorIs(t, err, assert.AnError)
 
 		assertExpectations(t)
-		call.Unset()
 	})
 
 	t.Run("error direct no api charge returned", func(t *testing.T) {
@@ -549,7 +597,6 @@ func TestService_CreateTopUpRequest(t *testing.T) {
 			Config:         TopUpConfig{},
 		}
 
-		call := xm.On("GenerateId").Return(xid, nil)
 		am.On("CreateDirectCharge", ctx, livechat.CreateDirectChargeParams{
 			Name:      "name",
 			ReturnURL: "returnURL",
@@ -558,22 +605,26 @@ func TestService_CreateTopUpRequest(t *testing.T) {
 		}).Return(nil, nil).Once()
 
 		sc, _ := json.Marshal(params)
-		sm.On("CreateEvent", ctx, Event{
+		levent := common.Event{
 			ID:               xid,
 			LCOrganizationID: lcoid,
-			Type:             EventTypeError,
-			Action:           EventActionCreateTopUp,
+			Type:             common.EventTypeError,
+			Action:           common.EventActionCreateTopUp,
 			Payload:          sc,
 			Error:            "failed to create top up billing charge: failed to create direct charge via lc: charge is nil",
-		}).Return(nil).Once()
+		}
+		em.On("ToEvent", ctx, lcoid, common.EventActionCreateTopUp, common.EventTypeInfo, params).Return(levent).Once()
+		em.On("ToError", context.Background(), common.ToErrorParams{
+			Event: levent,
+			Err:   fmt.Errorf("failed to create top up billing charge: %w", fmt.Errorf("failed to create direct charge via lc: charge is nil")),
+		}).Return(assert.AnError).Once()
 
 		tu, err := s.CreateTopUpRequest(context.Background(), params)
 
 		assert.Nil(t, tu)
-		assert.Equal(t, "2341: failed to create top up billing charge: failed to create direct charge via lc: charge is nil", err.Error())
+		assert.ErrorIs(t, err, assert.AnError)
 
 		assertExpectations(t)
-		call.Unset()
 	})
 }
 
@@ -606,7 +657,6 @@ func TestService_GetBalance(t *testing.T) {
 	})
 }
 
-// TODO test with and without current topped up at
 func TestService_CancelTopUpRequest(t *testing.T) {
 	t.Run("success without current topped up at", func(t *testing.T) {
 		amount := float32(5.234)
@@ -622,8 +672,6 @@ func TestService_CancelTopUpRequest(t *testing.T) {
 			TrialDays: 0,
 			Months:    months,
 		}
-
-		call := xm.On("GenerateId").Return(xid, nil)
 
 		rawRC, _ := json.Marshal(rc)
 		topUp := TopUp{
@@ -646,20 +694,21 @@ func TestService_CancelTopUpRequest(t *testing.T) {
 
 		sc, _ := json.Marshal(map[string]interface{}{"id": "id", "result": "success"})
 
-		sm.On("CreateEvent", ctx, Event{
+		levent := common.Event{
 			ID:               xid,
 			LCOrganizationID: lcoid,
-			Type:             EventTypeInfo,
-			Action:           EventActionCancelTopUp,
+			Type:             common.EventTypeInfo,
+			Action:           common.EventActionCancelTopUp,
 			Payload:          sc,
-		}).Return(nil).Once()
+		}
+		em.On("ToEvent", ctx, lcoid, common.EventActionCancelTopUp, common.EventTypeInfo, map[string]interface{}{"id": "id"}).Return(levent).Once()
+		em.On("CreateEvent", ctx, levent).Return(nil).Once()
 
 		err := s.CancelTopUpRequest(context.Background(), lcoid, "id")
 
 		assert.Nil(t, err)
 
 		assertExpectations(t)
-		call.Unset()
 	})
 
 	t.Run("success with current topped up at", func(t *testing.T) {
@@ -677,8 +726,6 @@ func TestService_CancelTopUpRequest(t *testing.T) {
 			TrialDays: 0,
 			Months:    months,
 		}
-
-		call := xm.On("GenerateId").Return(xid, nil)
 
 		rawRC, _ := json.Marshal(rc)
 		topUp := TopUp{
@@ -703,70 +750,74 @@ func TestService_CancelTopUpRequest(t *testing.T) {
 
 		sc, _ := json.Marshal(map[string]interface{}{"id": "id", "result": "success"})
 
-		sm.On("CreateEvent", ctx, Event{
+		levent := common.Event{
 			ID:               xid,
 			LCOrganizationID: lcoid,
-			Type:             EventTypeInfo,
-			Action:           EventActionCancelTopUp,
+			Type:             common.EventTypeInfo,
+			Action:           common.EventActionCancelTopUp,
 			Payload:          sc,
-		}).Return(nil).Once()
+		}
+		em.On("ToEvent", ctx, lcoid, common.EventActionCancelTopUp, common.EventTypeInfo, map[string]interface{}{"id": "id"}).Return(levent).Once()
+		em.On("CreateEvent", ctx, levent).Return(nil).Once()
 
 		err := s.CancelTopUpRequest(context.Background(), lcoid, "id")
 
 		assert.Nil(t, err)
 
 		assertExpectations(t)
-		call.Unset()
 	})
 
 	t.Run("top up not found", func(t *testing.T) {
 		lcoid := "lcOrganizationID"
-		call := xm.On("GenerateId").Return(xid, nil)
 		sm.On("GetTopUpByIDAndType", ctx, GetTopUpByIDAndTypeParams{
 			ID:   "id",
 			Type: TopUpTypeRecurrent,
 		}).Return(nil, nil).Once()
 		sc, _ := json.Marshal(map[string]interface{}{"id": "id", "result": "top up not found"})
 
-		sm.On("CreateEvent", ctx, Event{
+		levent := common.Event{
 			ID:               xid,
 			LCOrganizationID: lcoid,
-			Type:             EventTypeInfo,
-			Action:           EventActionCancelTopUp,
+			Type:             common.EventTypeInfo,
+			Action:           common.EventActionCancelTopUp,
 			Payload:          sc,
-		}).Return(nil).Once()
+		}
+		em.On("ToEvent", ctx, lcoid, common.EventActionCancelTopUp, common.EventTypeInfo, map[string]interface{}{"id": "id"}).Return(levent).Once()
+		em.On("CreateEvent", ctx, levent).Return(nil).Once()
 
 		err := s.CancelTopUpRequest(context.Background(), lcoid, "id")
 
 		assert.ErrorIs(t, err, ErrTopUpNotFound)
 
 		assertExpectations(t)
-		call.Unset()
 	})
 
 	t.Run("get top up error", func(t *testing.T) {
 		lcoid := "lcOrganizationID"
-		call := xm.On("GenerateId").Return(xid, nil)
 		sm.On("GetTopUpByIDAndType", ctx, GetTopUpByIDAndTypeParams{
 			ID:   "id",
 			Type: TopUpTypeRecurrent,
 		}).Return(nil, assert.AnError).Once()
 		sc, _ := json.Marshal(map[string]interface{}{"id": "id"})
-		sm.On("CreateEvent", ctx, Event{
+		levent := common.Event{
 			ID:               xid,
 			LCOrganizationID: lcoid,
-			Type:             EventTypeError,
-			Action:           EventActionCancelTopUp,
+			Type:             common.EventTypeError,
+			Action:           common.EventActionCancelTopUp,
 			Payload:          sc,
 			Error:            "assert.AnError general error for testing",
-		}).Return(nil).Once()
+		}
+		em.On("ToEvent", ctx, lcoid, common.EventActionCancelTopUp, common.EventTypeInfo, map[string]interface{}{"id": "id"}).Return(levent).Once()
+		em.On("ToError", context.Background(), common.ToErrorParams{
+			Event: levent,
+			Err:   assert.AnError,
+		}).Return(assert.AnError).Once()
 
 		err := s.CancelTopUpRequest(context.Background(), lcoid, "id")
 
 		assert.ErrorIs(t, err, assert.AnError)
 
 		assertExpectations(t)
-		call.Unset()
 	})
 
 	t.Run("api error", func(t *testing.T) {
@@ -783,7 +834,6 @@ func TestService_CancelTopUpRequest(t *testing.T) {
 			TrialDays: 0,
 			Months:    months,
 		}
-		call := xm.On("GenerateId").Return(xid, nil)
 
 		rawRC, _ := json.Marshal(rc)
 		topUp := TopUp{
@@ -802,21 +852,25 @@ func TestService_CancelTopUpRequest(t *testing.T) {
 
 		sc, _ := json.Marshal(map[string]interface{}{"id": "id"})
 
-		sm.On("CreateEvent", ctx, Event{
+		levent := common.Event{
 			ID:               xid,
 			LCOrganizationID: lcoid,
-			Type:             EventTypeError,
-			Action:           EventActionCancelTopUp,
+			Type:             common.EventTypeError,
+			Action:           common.EventActionCancelTopUp,
 			Payload:          sc,
 			Error:            "assert.AnError general error for testing",
-		}).Return(nil).Once()
+		}
+		em.On("ToEvent", ctx, lcoid, common.EventActionCancelTopUp, common.EventTypeInfo, map[string]interface{}{"id": "id"}).Return(levent).Once()
+		em.On("ToError", context.Background(), common.ToErrorParams{
+			Event: levent,
+			Err:   assert.AnError,
+		}).Return(assert.AnError).Once()
 
 		err := s.CancelTopUpRequest(context.Background(), lcoid, "id")
 
 		assert.ErrorIs(t, err, assert.AnError)
 
 		assertExpectations(t)
-		call.Unset()
 	})
 
 	t.Run("update status error without current topped up at", func(t *testing.T) {
@@ -833,7 +887,6 @@ func TestService_CancelTopUpRequest(t *testing.T) {
 			TrialDays: 0,
 			Months:    months,
 		}
-		call := xm.On("GenerateId").Return(xid, nil)
 
 		rawRC, _ := json.Marshal(rc)
 		topUp := TopUp{
@@ -856,21 +909,25 @@ func TestService_CancelTopUpRequest(t *testing.T) {
 
 		sc, _ := json.Marshal(map[string]interface{}{"id": "id"})
 
-		sm.On("CreateEvent", ctx, Event{
+		levent := common.Event{
 			ID:               xid,
 			LCOrganizationID: lcoid,
-			Type:             EventTypeError,
-			Action:           EventActionCancelTopUp,
+			Type:             common.EventTypeError,
+			Action:           common.EventActionCancelTopUp,
 			Payload:          sc,
 			Error:            "assert.AnError general error for testing",
-		}).Return(nil).Once()
+		}
+		em.On("ToEvent", ctx, lcoid, common.EventActionCancelTopUp, common.EventTypeInfo, map[string]interface{}{"id": "id"}).Return(levent).Once()
+		em.On("ToError", context.Background(), common.ToErrorParams{
+			Event: levent,
+			Err:   assert.AnError,
+		}).Return(assert.AnError).Once()
 
 		err := s.CancelTopUpRequest(context.Background(), lcoid, "id")
 
 		assert.ErrorIs(t, err, assert.AnError)
 
 		assertExpectations(t)
-		call.Unset()
 	})
 
 	t.Run("update status error with current topped up at", func(t *testing.T) {
@@ -888,7 +945,6 @@ func TestService_CancelTopUpRequest(t *testing.T) {
 			TrialDays: 0,
 			Months:    months,
 		}
-		call := xm.On("GenerateId").Return(xid, nil)
 
 		rawRC, _ := json.Marshal(rc)
 		topUp := TopUp{
@@ -913,21 +969,25 @@ func TestService_CancelTopUpRequest(t *testing.T) {
 
 		sc, _ := json.Marshal(map[string]interface{}{"id": "id"})
 
-		sm.On("CreateEvent", ctx, Event{
+		levent := common.Event{
 			ID:               xid,
 			LCOrganizationID: lcoid,
-			Type:             EventTypeError,
-			Action:           EventActionCancelTopUp,
+			Type:             common.EventTypeError,
+			Action:           common.EventActionCancelTopUp,
 			Payload:          sc,
 			Error:            "assert.AnError general error for testing",
-		}).Return(nil).Once()
+		}
+		em.On("ToEvent", ctx, lcoid, common.EventActionCancelTopUp, common.EventTypeInfo, map[string]interface{}{"id": "id"}).Return(levent).Once()
+		em.On("ToError", context.Background(), common.ToErrorParams{
+			Event: levent,
+			Err:   assert.AnError,
+		}).Return(assert.AnError).Once()
 
 		err := s.CancelTopUpRequest(context.Background(), lcoid, "id")
 
 		assert.ErrorIs(t, err, assert.AnError)
 
 		assertExpectations(t)
-		call.Unset()
 	})
 
 	t.Run("update status not found error without current topped up at", func(t *testing.T) {
@@ -944,7 +1004,6 @@ func TestService_CancelTopUpRequest(t *testing.T) {
 			TrialDays: 0,
 			Months:    months,
 		}
-		call := xm.On("GenerateId").Return(xid, nil)
 
 		rawRC, _ := json.Marshal(rc)
 		topUp := TopUp{
@@ -967,20 +1026,21 @@ func TestService_CancelTopUpRequest(t *testing.T) {
 
 		sc, _ := json.Marshal(map[string]interface{}{"id": "id", "result": "top up not found"})
 
-		sm.On("CreateEvent", ctx, Event{
+		levent := common.Event{
 			ID:               xid,
 			LCOrganizationID: lcoid,
-			Type:             EventTypeInfo,
-			Action:           EventActionCancelTopUp,
+			Type:             common.EventTypeInfo,
+			Action:           common.EventActionCancelTopUp,
 			Payload:          sc,
-		}).Return(nil).Once()
+		}
+		em.On("ToEvent", ctx, lcoid, common.EventActionCancelTopUp, common.EventTypeInfo, map[string]interface{}{"id": "id"}).Return(levent).Once()
+		em.On("CreateEvent", ctx, levent).Return(nil).Once()
 
 		err := s.CancelTopUpRequest(context.Background(), lcoid, "id")
 
 		assert.ErrorIs(t, err, ErrTopUpNotFound)
 
 		assertExpectations(t)
-		call.Unset()
 	})
 
 	t.Run("update status not found error with current topped up at", func(t *testing.T) {
@@ -998,7 +1058,6 @@ func TestService_CancelTopUpRequest(t *testing.T) {
 			TrialDays: 0,
 			Months:    months,
 		}
-		call := xm.On("GenerateId").Return(xid, nil)
 
 		rawRC, _ := json.Marshal(rc)
 		topUp := TopUp{
@@ -1023,20 +1082,21 @@ func TestService_CancelTopUpRequest(t *testing.T) {
 
 		sc, _ := json.Marshal(map[string]interface{}{"id": "id", "result": "top up not found"})
 
-		sm.On("CreateEvent", ctx, Event{
+		levent := common.Event{
 			ID:               xid,
 			LCOrganizationID: lcoid,
-			Type:             EventTypeInfo,
-			Action:           EventActionCancelTopUp,
+			Type:             common.EventTypeInfo,
+			Action:           common.EventActionCancelTopUp,
 			Payload:          sc,
-		}).Return(nil).Once()
+		}
+		em.On("ToEvent", ctx, lcoid, common.EventActionCancelTopUp, common.EventTypeInfo, map[string]interface{}{"id": "id"}).Return(levent).Once()
+		em.On("CreateEvent", ctx, levent).Return(nil).Once()
 
 		err := s.CancelTopUpRequest(context.Background(), lcoid, "id")
 
 		assert.ErrorIs(t, err, ErrTopUpNotFound)
 
 		assertExpectations(t)
-		call.Unset()
 	})
 }
 
@@ -1045,19 +1105,20 @@ func TestService_ForceCancelTopUp(t *testing.T) {
 		lcoid := "lcOrganizationID"
 		status := TopUpStatusCancelled
 
-		call := xm.On("GenerateId").Return(xid, nil)
 		sm.On("UpdateTopUpStatus", ctx, UpdateTopUpStatusParams{
 			ID:     "id",
 			Status: status,
 		}).Return(nil).Once()
 		sc, _ := json.Marshal(map[string]interface{}{"id": "id", "status": status})
-		sm.On("CreateEvent", ctx, Event{
+		levent := common.Event{
 			ID:               xid,
 			LCOrganizationID: lcoid,
-			Type:             EventTypeInfo,
-			Action:           EventActionForceCancelCharge,
+			Type:             common.EventTypeInfo,
+			Action:           common.EventActionForceCancelCharge,
 			Payload:          sc,
-		}).Return(nil).Once()
+		}
+		em.On("ToEvent", ctx, lcoid, common.EventActionForceCancelCharge, common.EventTypeInfo, map[string]interface{}{"id": "id", "status": TopUpStatusCancelled}).Return(levent).Once()
+		em.On("CreateEvent", ctx, levent).Return(nil).Once()
 
 		topUp := TopUp{
 			ID:               "id",
@@ -1070,7 +1131,6 @@ func TestService_ForceCancelTopUp(t *testing.T) {
 		assert.Nil(t, err)
 
 		assertExpectations(t)
-		call.Unset()
 	})
 
 	t.Run("success with current topped up at", func(t *testing.T) {
@@ -1078,20 +1138,21 @@ func TestService_ForceCancelTopUp(t *testing.T) {
 		status := TopUpStatusCancelled
 		someDate, _ := time.Parse(time.DateTime, "2025-03-14 12:31:56")
 
-		call := xm.On("GenerateId").Return(xid, nil)
 		sm.On("UpdateTopUpStatus", ctx, UpdateTopUpStatusParams{
 			ID:                "id",
 			Status:            status,
 			CurrentToppedUpAt: &someDate,
 		}).Return(nil).Once()
 		sc, _ := json.Marshal(map[string]interface{}{"id": "id", "status": status})
-		sm.On("CreateEvent", ctx, Event{
+		levent := common.Event{
 			ID:               xid,
 			LCOrganizationID: lcoid,
-			Type:             EventTypeInfo,
-			Action:           EventActionForceCancelCharge,
+			Type:             common.EventTypeInfo,
+			Action:           common.EventActionForceCancelCharge,
 			Payload:          sc,
-		}).Return(nil).Once()
+		}
+		em.On("ToEvent", ctx, lcoid, common.EventActionForceCancelCharge, common.EventTypeInfo, map[string]interface{}{"id": "id", "status": TopUpStatusCancelled}).Return(levent).Once()
+		em.On("CreateEvent", ctx, levent).Return(nil).Once()
 
 		topUp := TopUp{
 			ID:                "id",
@@ -1105,26 +1166,26 @@ func TestService_ForceCancelTopUp(t *testing.T) {
 		assert.Nil(t, err)
 
 		assertExpectations(t)
-		call.Unset()
 	})
 
 	t.Run("not found error without current topped up at", func(t *testing.T) {
 		lcoid := "lcOrganizationID"
 		status := TopUpStatusCancelled
 
-		call := xm.On("GenerateId").Return(xid, nil)
 		sm.On("UpdateTopUpStatus", ctx, UpdateTopUpStatusParams{
 			ID:     "id",
 			Status: status,
 		}).Return(ErrNotFound).Once()
 		sc, _ := json.Marshal(map[string]interface{}{"id": "id", "result": "top up not found"})
-		sm.On("CreateEvent", ctx, Event{
+		levent := common.Event{
 			ID:               xid,
 			LCOrganizationID: lcoid,
-			Type:             EventTypeInfo,
-			Action:           EventActionForceCancelCharge,
+			Type:             common.EventTypeInfo,
+			Action:           common.EventActionForceCancelCharge,
 			Payload:          sc,
-		}).Return(nil).Once()
+		}
+		em.On("ToEvent", ctx, lcoid, common.EventActionForceCancelCharge, common.EventTypeInfo, map[string]interface{}{"id": "id", "status": TopUpStatusCancelled}).Return(levent).Once()
+		em.On("CreateEvent", ctx, levent).Return(nil).Once()
 
 		topUp := TopUp{
 			ID:               "id",
@@ -1137,7 +1198,6 @@ func TestService_ForceCancelTopUp(t *testing.T) {
 		assert.ErrorIs(t, err, ErrTopUpNotFound)
 
 		assertExpectations(t)
-		call.Unset()
 	})
 
 	t.Run("not found error with current topped up at", func(t *testing.T) {
@@ -1145,20 +1205,21 @@ func TestService_ForceCancelTopUp(t *testing.T) {
 		status := TopUpStatusCancelled
 		someDate, _ := time.Parse(time.DateTime, "2025-03-14 12:31:56")
 
-		call := xm.On("GenerateId").Return(xid, nil)
 		sm.On("UpdateTopUpStatus", ctx, UpdateTopUpStatusParams{
 			ID:                "id",
 			Status:            status,
 			CurrentToppedUpAt: &someDate,
 		}).Return(ErrNotFound).Once()
 		sc, _ := json.Marshal(map[string]interface{}{"id": "id", "result": "top up not found"})
-		sm.On("CreateEvent", ctx, Event{
+		levent := common.Event{
 			ID:               xid,
 			LCOrganizationID: lcoid,
-			Type:             EventTypeInfo,
-			Action:           EventActionForceCancelCharge,
+			Type:             common.EventTypeInfo,
+			Action:           common.EventActionForceCancelCharge,
 			Payload:          sc,
-		}).Return(nil).Once()
+		}
+		em.On("ToEvent", ctx, lcoid, common.EventActionForceCancelCharge, common.EventTypeInfo, map[string]interface{}{"id": "id", "status": TopUpStatusCancelled}).Return(levent).Once()
+		em.On("CreateEvent", ctx, levent).Return(nil).Once()
 
 		topUp := TopUp{
 			ID:                "id",
@@ -1172,27 +1233,30 @@ func TestService_ForceCancelTopUp(t *testing.T) {
 		assert.ErrorIs(t, err, ErrTopUpNotFound)
 
 		assertExpectations(t)
-		call.Unset()
 	})
 
 	t.Run("error", func(t *testing.T) {
 		lcoid := "lcOrganizationID"
 		status := TopUpStatusCancelled
 
-		call := xm.On("GenerateId").Return(xid, nil)
 		sm.On("UpdateTopUpStatus", ctx, UpdateTopUpStatusParams{
 			ID:     "id",
 			Status: status,
 		}).Return(assert.AnError).Once()
 		sc, _ := json.Marshal(map[string]interface{}{"id": "id", "status": status})
-		sm.On("CreateEvent", ctx, Event{
+		levent := common.Event{
 			ID:               xid,
 			LCOrganizationID: lcoid,
-			Type:             EventTypeError,
-			Action:           EventActionForceCancelCharge,
+			Type:             common.EventTypeError,
+			Action:           common.EventActionForceCancelCharge,
 			Payload:          sc,
 			Error:            "assert.AnError general error for testing",
-		}).Return(nil).Once()
+		}
+		em.On("ToEvent", ctx, lcoid, common.EventActionForceCancelCharge, common.EventTypeInfo, map[string]interface{}{"id": "id", "status": TopUpStatusCancelled}).Return(levent).Once()
+		em.On("ToError", context.Background(), common.ToErrorParams{
+			Event: levent,
+			Err:   assert.AnError,
+		}).Return(assert.AnError).Once()
 
 		topUp := TopUp{
 			ID:               "id",
@@ -1205,79 +1269,81 @@ func TestService_ForceCancelTopUp(t *testing.T) {
 		assert.ErrorIs(t, err, assert.AnError)
 
 		assertExpectations(t)
-		call.Unset()
 	})
 }
 
 func TestService_CancelCharge(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		lcoid := "lcOrganizationID"
-		call := xm.On("GenerateId").Return(xid, nil)
 		sm.On("UpdateChargeStatus", ctx, "id", ChargeStatusCancelled).Return(nil).Once()
 
 		sc, _ := json.Marshal(map[string]interface{}{"id": "id", "result": "success"})
 
-		sm.On("CreateEvent", ctx, Event{
+		levent := common.Event{
 			ID:               xid,
 			LCOrganizationID: lcoid,
-			Type:             EventTypeInfo,
-			Action:           EventActionCancelCharge,
+			Type:             common.EventTypeInfo,
+			Action:           common.EventActionCancelCharge,
 			Payload:          sc,
-		}).Return(nil).Once()
+		}
+		em.On("ToEvent", ctx, lcoid, common.EventActionCancelCharge, common.EventTypeInfo, map[string]interface{}{"id": "id"}).Return(levent).Once()
+		em.On("CreateEvent", ctx, levent).Return(nil).Once()
 
 		err := s.CancelCharge(context.Background(), lcoid, "id")
 
 		assert.Nil(t, err)
 
 		assertExpectations(t)
-		call.Unset()
 	})
 
 	t.Run("charge not found error", func(t *testing.T) {
 		lcoid := "lcOrganizationID"
-		call := xm.On("GenerateId").Return(xid, nil)
 		sm.On("UpdateChargeStatus", ctx, "id", ChargeStatusCancelled).Return(ErrNotFound).Once()
 
 		sc, _ := json.Marshal(map[string]interface{}{"id": "id", "result": "charge not found"})
 
-		sm.On("CreateEvent", ctx, Event{
+		levent := common.Event{
 			ID:               xid,
 			LCOrganizationID: lcoid,
-			Type:             EventTypeInfo,
-			Action:           EventActionCancelCharge,
+			Type:             common.EventTypeInfo,
+			Action:           common.EventActionCancelCharge,
 			Payload:          sc,
-		}).Return(nil).Once()
+		}
+		em.On("ToEvent", ctx, lcoid, common.EventActionCancelCharge, common.EventTypeInfo, map[string]interface{}{"id": "id"}).Return(levent).Once()
+		em.On("CreateEvent", ctx, levent).Return(nil).Once()
 
 		err := s.CancelCharge(context.Background(), lcoid, "id")
 
 		assert.ErrorIs(t, err, ErrChargeNotFound)
 
 		assertExpectations(t)
-		call.Unset()
 	})
 
 	t.Run("update charge error", func(t *testing.T) {
 		lcoid := "lcOrganizationID"
-		call := xm.On("GenerateId").Return(xid, nil)
 		sm.On("UpdateChargeStatus", ctx, "id", ChargeStatusCancelled).Return(assert.AnError).Once()
 
 		sc, _ := json.Marshal(map[string]interface{}{"id": "id"})
 
-		sm.On("CreateEvent", ctx, Event{
+		levent := common.Event{
 			ID:               xid,
 			LCOrganizationID: lcoid,
-			Type:             EventTypeError,
-			Action:           EventActionCancelCharge,
+			Type:             common.EventTypeError,
+			Action:           common.EventActionCancelCharge,
 			Payload:          sc,
 			Error:            "assert.AnError general error for testing",
-		}).Return(nil).Once()
+		}
+		em.On("ToEvent", ctx, lcoid, common.EventActionCancelCharge, common.EventTypeInfo, map[string]interface{}{"id": "id"}).Return(levent).Once()
+		em.On("ToError", context.Background(), common.ToErrorParams{
+			Event: levent,
+			Err:   assert.AnError,
+		}).Return(assert.AnError).Once()
 
 		err := s.CancelCharge(context.Background(), lcoid, "id")
 
 		assert.ErrorIs(t, err, assert.AnError)
 
 		assertExpectations(t)
-		call.Unset()
 	})
 }
 
@@ -1320,18 +1386,19 @@ func TestService_SyncTopUp(t *testing.T) {
 			LCCharge:         jdc,
 		}
 
-		call := xm.On("GenerateId").Return(xid, nil)
 		am.On("GetDirectCharge", ctx, "id").Return(&dc, nil).Once()
 		am.On("GetRecurrentChargeV2", ctx, "id").Return(nil, nil).Once()
 		sm.On("UpsertTopUp", ctx, topUp).Return(&topUp, nil).Once()
 		sc, _ := json.Marshal(topUp)
-		sm.On("CreateEvent", ctx, Event{
+		levent := common.Event{
 			ID:               xid,
 			LCOrganizationID: lcoid,
-			Type:             EventTypeInfo,
-			Action:           EventActionSyncTopUp,
+			Type:             common.EventTypeInfo,
+			Action:           common.EventActionSyncTopUp,
 			Payload:          sc,
-		}).Return(nil).Once()
+		}
+		em.On("ToEvent", ctx, lcoid, common.EventActionSyncTopUp, common.EventTypeInfo, map[string]interface{}{"id": "id"}).Return(levent).Once()
+		em.On("CreateEvent", ctx, levent).Return(nil).Once()
 
 		tp, err := s.SyncTopUp(context.Background(), lcoid, "id")
 
@@ -1346,7 +1413,6 @@ func TestService_SyncTopUp(t *testing.T) {
 		assert.Equal(t, topUp.ConfirmationUrl, topUp.ConfirmationUrl)
 
 		assertExpectations(t)
-		call.Unset()
 	})
 
 	t.Run("success direct failed", func(t *testing.T) {
@@ -1387,18 +1453,19 @@ func TestService_SyncTopUp(t *testing.T) {
 			LCCharge:         jdc,
 		}
 
-		call := xm.On("GenerateId").Return(xid, nil)
 		am.On("GetDirectCharge", ctx, "id").Return(&dc, nil).Once()
 		am.On("GetRecurrentChargeV2", ctx, "id").Return(nil, nil).Once()
 		sm.On("UpsertTopUp", ctx, topUp).Return(&topUp, nil).Once()
 		sc, _ := json.Marshal(topUp)
-		sm.On("CreateEvent", ctx, Event{
+		levent := common.Event{
 			ID:               xid,
 			LCOrganizationID: lcoid,
-			Type:             EventTypeInfo,
-			Action:           EventActionSyncTopUp,
+			Type:             common.EventTypeInfo,
+			Action:           common.EventActionSyncTopUp,
 			Payload:          sc,
-		}).Return(nil).Once()
+		}
+		em.On("ToEvent", ctx, lcoid, common.EventActionSyncTopUp, common.EventTypeInfo, map[string]interface{}{"id": "id"}).Return(levent).Once()
+		em.On("CreateEvent", ctx, levent).Return(nil).Once()
 
 		tp, err := s.SyncTopUp(context.Background(), lcoid, "id")
 
@@ -1413,7 +1480,6 @@ func TestService_SyncTopUp(t *testing.T) {
 		assert.Equal(t, topUp.ConfirmationUrl, topUp.ConfirmationUrl)
 
 		assertExpectations(t)
-		call.Unset()
 	})
 
 	t.Run("success direct declined", func(t *testing.T) {
@@ -1454,18 +1520,19 @@ func TestService_SyncTopUp(t *testing.T) {
 			LCCharge:         jdc,
 		}
 
-		call := xm.On("GenerateId").Return(xid, nil)
 		am.On("GetDirectCharge", ctx, "id").Return(&dc, nil).Once()
 		am.On("GetRecurrentChargeV2", ctx, "id").Return(nil, nil).Once()
 		sm.On("UpsertTopUp", ctx, topUp).Return(&topUp, nil).Once()
 		sc, _ := json.Marshal(topUp)
-		sm.On("CreateEvent", ctx, Event{
+		levent := common.Event{
 			ID:               xid,
 			LCOrganizationID: lcoid,
-			Type:             EventTypeInfo,
-			Action:           EventActionSyncTopUp,
+			Type:             common.EventTypeInfo,
+			Action:           common.EventActionSyncTopUp,
 			Payload:          sc,
-		}).Return(nil).Once()
+		}
+		em.On("ToEvent", ctx, lcoid, common.EventActionSyncTopUp, common.EventTypeInfo, map[string]interface{}{"id": "id"}).Return(levent).Once()
+		em.On("CreateEvent", ctx, levent).Return(nil).Once()
 
 		tp, err := s.SyncTopUp(context.Background(), lcoid, "id")
 
@@ -1480,7 +1547,6 @@ func TestService_SyncTopUp(t *testing.T) {
 		assert.Equal(t, topUp.ConfirmationUrl, topUp.ConfirmationUrl)
 
 		assertExpectations(t)
-		call.Unset()
 	})
 
 	t.Run("success direct success", func(t *testing.T) {
@@ -1521,18 +1587,19 @@ func TestService_SyncTopUp(t *testing.T) {
 			LCCharge:         jdc,
 		}
 
-		call := xm.On("GenerateId").Return(xid, nil)
 		am.On("GetDirectCharge", ctx, "id").Return(&dc, nil).Once()
 		am.On("GetRecurrentChargeV2", ctx, "id").Return(nil, nil).Once()
 		sm.On("UpsertTopUp", ctx, topUp).Return(&topUp, nil).Once()
 		sc, _ := json.Marshal(topUp)
-		sm.On("CreateEvent", ctx, Event{
+		levent := common.Event{
 			ID:               xid,
 			LCOrganizationID: lcoid,
-			Type:             EventTypeInfo,
-			Action:           EventActionSyncTopUp,
+			Type:             common.EventTypeInfo,
+			Action:           common.EventActionSyncTopUp,
 			Payload:          sc,
-		}).Return(nil).Once()
+		}
+		em.On("ToEvent", ctx, lcoid, common.EventActionSyncTopUp, common.EventTypeInfo, map[string]interface{}{"id": "id"}).Return(levent).Once()
+		em.On("CreateEvent", ctx, levent).Return(nil).Once()
 
 		tp, err := s.SyncTopUp(context.Background(), lcoid, "id")
 
@@ -1547,7 +1614,6 @@ func TestService_SyncTopUp(t *testing.T) {
 		assert.Equal(t, topUp.ConfirmationUrl, topUp.ConfirmationUrl)
 
 		assertExpectations(t)
-		call.Unset()
 	})
 
 	t.Run("success direct processed", func(t *testing.T) {
@@ -1722,18 +1788,19 @@ func TestService_SyncTopUp(t *testing.T) {
 			LCCharge:         jdc,
 		}
 
-		call := xm.On("GenerateId").Return(xid, nil)
 		am.On("GetDirectCharge", ctx, "id").Return(&dc, nil).Once()
 		am.On("GetRecurrentChargeV2", ctx, "id").Return(nil, nil).Once()
 		sm.On("UpsertTopUp", ctx, topUp).Return(&topUp, nil).Once()
 		sc, _ := json.Marshal(topUp)
-		sm.On("CreateEvent", ctx, Event{
+		levent := common.Event{
 			ID:               xid,
 			LCOrganizationID: lcoid,
-			Type:             EventTypeInfo,
-			Action:           EventActionSyncTopUp,
+			Type:             common.EventTypeInfo,
+			Action:           common.EventActionSyncTopUp,
 			Payload:          sc,
-		}).Return(nil).Once()
+		}
+		em.On("ToEvent", ctx, lcoid, common.EventActionSyncTopUp, common.EventTypeInfo, map[string]interface{}{"id": "id"}).Return(levent).Once()
+		em.On("CreateEvent", ctx, levent).Return(nil).Once()
 
 		tp, err := s.SyncTopUp(context.Background(), lcoid, "id")
 
@@ -1748,7 +1815,6 @@ func TestService_SyncTopUp(t *testing.T) {
 		assert.Equal(t, topUp.ConfirmationUrl, topUp.ConfirmationUrl)
 
 		assertExpectations(t)
-		call.Unset()
 	})
 
 	t.Run("success recurrent declined", func(t *testing.T) {
@@ -1797,18 +1863,19 @@ func TestService_SyncTopUp(t *testing.T) {
 			NextTopUpAt:       &someDate2,
 		}
 
-		call := xm.On("GenerateId").Return(xid, nil)
 		am.On("GetDirectCharge", ctx, "id").Return(nil, nil).Once()
 		am.On("GetRecurrentChargeV2", ctx, "id").Return(&rc, nil).Once()
 		sm.On("UpsertTopUp", ctx, topUp).Return(&topUp, nil).Once()
 		sc, _ := json.Marshal(topUp)
-		sm.On("CreateEvent", ctx, Event{
+		levent := common.Event{
 			ID:               xid,
 			LCOrganizationID: lcoid,
-			Type:             EventTypeInfo,
-			Action:           EventActionSyncTopUp,
+			Type:             common.EventTypeInfo,
+			Action:           common.EventActionSyncTopUp,
 			Payload:          sc,
-		}).Return(nil).Once()
+		}
+		em.On("ToEvent", ctx, lcoid, common.EventActionSyncTopUp, common.EventTypeInfo, map[string]interface{}{"id": "id"}).Return(levent).Once()
+		em.On("CreateEvent", ctx, levent).Return(nil).Once()
 		sm.On("InitRecurrentTopUpRequiredValues", ctx, InitRecurrentTopUpRequiredValuesParams{
 			CurrentToppedUpAt: someDate,
 			NextTopUpAt:       someDate2,
@@ -1828,7 +1895,6 @@ func TestService_SyncTopUp(t *testing.T) {
 		assert.Equal(t, topUp.ConfirmationUrl, topUp.ConfirmationUrl)
 
 		assertExpectations(t)
-		call.Unset()
 	})
 
 	t.Run("success recurrent cancelled", func(t *testing.T) {
@@ -1877,18 +1943,19 @@ func TestService_SyncTopUp(t *testing.T) {
 			NextTopUpAt:       &someDate2,
 		}
 
-		call := xm.On("GenerateId").Return(xid, nil)
 		am.On("GetDirectCharge", ctx, "id").Return(nil, nil).Once()
 		am.On("GetRecurrentChargeV2", ctx, "id").Return(&rc, nil).Once()
 		sm.On("UpsertTopUp", ctx, topUp).Return(&topUp, nil).Once()
 		sc, _ := json.Marshal(topUp)
-		sm.On("CreateEvent", ctx, Event{
+		levent := common.Event{
 			ID:               xid,
 			LCOrganizationID: lcoid,
-			Type:             EventTypeInfo,
-			Action:           EventActionSyncTopUp,
+			Type:             common.EventTypeInfo,
+			Action:           common.EventActionSyncTopUp,
 			Payload:          sc,
-		}).Return(nil).Once()
+		}
+		em.On("ToEvent", ctx, lcoid, common.EventActionSyncTopUp, common.EventTypeInfo, map[string]interface{}{"id": "id"}).Return(levent).Once()
+		em.On("CreateEvent", ctx, levent).Return(nil).Once()
 		sm.On("InitRecurrentTopUpRequiredValues", ctx, InitRecurrentTopUpRequiredValuesParams{
 			CurrentToppedUpAt: someDate,
 			NextTopUpAt:       someDate2,
@@ -1908,7 +1975,6 @@ func TestService_SyncTopUp(t *testing.T) {
 		assert.Equal(t, topUp.ConfirmationUrl, topUp.ConfirmationUrl)
 
 		assertExpectations(t)
-		call.Unset()
 	})
 
 	t.Run("success recurrent active", func(t *testing.T) {
@@ -1957,18 +2023,19 @@ func TestService_SyncTopUp(t *testing.T) {
 			NextTopUpAt:       &someDate2,
 		}
 
-		call := xm.On("GenerateId").Return(xid, nil)
 		am.On("GetDirectCharge", ctx, "id").Return(nil, nil).Once()
 		am.On("GetRecurrentChargeV2", ctx, "id").Return(&rc, nil).Once()
 		sm.On("UpsertTopUp", ctx, topUp).Return(&topUp, nil).Once()
 		sc, _ := json.Marshal(topUp)
-		sm.On("CreateEvent", ctx, Event{
+		levent := common.Event{
 			ID:               xid,
 			LCOrganizationID: lcoid,
-			Type:             EventTypeInfo,
-			Action:           EventActionSyncTopUp,
+			Type:             common.EventTypeInfo,
+			Action:           common.EventActionSyncTopUp,
 			Payload:          sc,
-		}).Return(nil).Once()
+		}
+		em.On("ToEvent", ctx, lcoid, common.EventActionSyncTopUp, common.EventTypeInfo, map[string]interface{}{"id": "id"}).Return(levent).Once()
+		em.On("CreateEvent", ctx, levent).Return(nil).Once()
 		sm.On("InitRecurrentTopUpRequiredValues", ctx, InitRecurrentTopUpRequiredValuesParams{
 			CurrentToppedUpAt: someDate,
 			NextTopUpAt:       someDate2,
@@ -1988,7 +2055,6 @@ func TestService_SyncTopUp(t *testing.T) {
 		assert.Equal(t, topUp.ConfirmationUrl, topUp.ConfirmationUrl)
 
 		assertExpectations(t)
-		call.Unset()
 	})
 
 	t.Run("success recurrent accepted", func(t *testing.T) {
@@ -2117,18 +2183,19 @@ func TestService_SyncTopUp(t *testing.T) {
 			NextTopUpAt:       &someDate2,
 		}
 
-		call := xm.On("GenerateId").Return(xid, nil)
 		am.On("GetDirectCharge", ctx, "id").Return(nil, nil).Once()
 		am.On("GetRecurrentChargeV2", ctx, "id").Return(&rc, nil).Once()
 		sm.On("UpsertTopUp", ctx, topUp).Return(&topUp, nil).Once()
 		sc, _ := json.Marshal(topUp)
-		sm.On("CreateEvent", ctx, Event{
+		levent := common.Event{
 			ID:               xid,
 			LCOrganizationID: lcoid,
-			Type:             EventTypeInfo,
-			Action:           EventActionSyncTopUp,
+			Type:             common.EventTypeInfo,
+			Action:           common.EventActionSyncTopUp,
 			Payload:          sc,
-		}).Return(nil).Once()
+		}
+		em.On("ToEvent", ctx, lcoid, common.EventActionSyncTopUp, common.EventTypeInfo, map[string]interface{}{"id": "id"}).Return(levent).Once()
+		em.On("CreateEvent", ctx, levent).Return(nil).Once()
 		sm.On("InitRecurrentTopUpRequiredValues", ctx, InitRecurrentTopUpRequiredValuesParams{
 			CurrentToppedUpAt: someDate,
 			NextTopUpAt:       someDate2,
@@ -2148,7 +2215,6 @@ func TestService_SyncTopUp(t *testing.T) {
 		assert.Equal(t, topUp.ConfirmationUrl, topUp.ConfirmationUrl)
 
 		assertExpectations(t)
-		call.Unset()
 	})
 
 	t.Run("error recurrent and direct", func(t *testing.T) {
@@ -2204,26 +2270,29 @@ func TestService_SyncTopUp(t *testing.T) {
 			NextChargeAt:    &someDate2,
 		}
 
-		call := xm.On("GenerateId").Return(xid, nil)
 		am.On("GetDirectCharge", ctx, "id").Return(&dc, nil).Once()
 		am.On("GetRecurrentChargeV2", ctx, "id").Return(&rc, nil).Once()
 
 		sc, _ := json.Marshal(map[string]interface{}{"id": "id"})
-		sm.On("CreateEvent", ctx, Event{
+		levent := common.Event{
 			ID:               xid,
 			LCOrganizationID: lcoid,
-			Type:             EventTypeError,
-			Action:           EventActionSyncTopUp,
+			Type:             common.EventTypeError,
+			Action:           common.EventActionSyncTopUp,
 			Payload:          sc,
 			Error:            "charge conflict",
-		}).Return(nil).Once()
+		}
+		em.On("ToEvent", ctx, lcoid, common.EventActionSyncTopUp, common.EventTypeInfo, map[string]interface{}{"id": "id"}).Return(levent).Once()
+		em.On("ToError", context.Background(), common.ToErrorParams{
+			Event: levent,
+			Err:   fmt.Errorf("charge conflict"),
+		}).Return(assert.AnError).Once()
 
 		_, err := s.SyncTopUp(context.Background(), lcoid, "id")
 
-		assert.Equal(t, "2341: charge conflict", err.Error())
+		assert.ErrorIs(t, err, assert.AnError)
 
 		assertExpectations(t)
-		call.Unset()
 	})
 
 	t.Run("direct api error", func(t *testing.T) {
@@ -2272,18 +2341,19 @@ func TestService_SyncTopUp(t *testing.T) {
 			NextTopUpAt:       &someDate2,
 		}
 
-		call := xm.On("GenerateId").Return(xid, nil)
 		am.On("GetDirectCharge", ctx, "id").Return(nil, assert.AnError).Once()
 		am.On("GetRecurrentChargeV2", ctx, "id").Return(&rc, nil).Once()
 		sm.On("UpsertTopUp", ctx, topUp).Return(&topUp, nil).Once()
 		sc, _ := json.Marshal(topUp)
-		sm.On("CreateEvent", ctx, Event{
+		levent := common.Event{
 			ID:               xid,
 			LCOrganizationID: lcoid,
-			Type:             EventTypeInfo,
-			Action:           EventActionSyncTopUp,
+			Type:             common.EventTypeInfo,
+			Action:           common.EventActionSyncTopUp,
 			Payload:          sc,
-		}).Return(nil).Once()
+		}
+		em.On("ToEvent", ctx, lcoid, common.EventActionSyncTopUp, common.EventTypeInfo, map[string]interface{}{"id": "id"}).Return(levent).Once()
+		em.On("CreateEvent", ctx, levent).Return(nil).Once()
 		sm.On("InitRecurrentTopUpRequiredValues", ctx, InitRecurrentTopUpRequiredValuesParams{
 			CurrentToppedUpAt: someDate,
 			NextTopUpAt:       someDate2,
@@ -2303,7 +2373,6 @@ func TestService_SyncTopUp(t *testing.T) {
 		assert.Equal(t, topUp.ConfirmationUrl, topUp.ConfirmationUrl)
 
 		assertExpectations(t)
-		call.Unset()
 	})
 
 	t.Run("recurrent api error", func(t *testing.T) {
@@ -2344,18 +2413,19 @@ func TestService_SyncTopUp(t *testing.T) {
 			LCCharge:         jdc,
 		}
 
-		call := xm.On("GenerateId").Return(xid, nil)
 		am.On("GetDirectCharge", ctx, "id").Return(&dc, nil).Once()
 		am.On("GetRecurrentChargeV2", ctx, "id").Return(nil, assert.AnError).Once()
 		sm.On("UpsertTopUp", ctx, topUp).Return(&topUp, nil).Once()
 		sc, _ := json.Marshal(topUp)
-		sm.On("CreateEvent", ctx, Event{
+		levent := common.Event{
 			ID:               xid,
 			LCOrganizationID: lcoid,
-			Type:             EventTypeInfo,
-			Action:           EventActionSyncTopUp,
+			Type:             common.EventTypeInfo,
+			Action:           common.EventActionSyncTopUp,
 			Payload:          sc,
-		}).Return(nil).Once()
+		}
+		em.On("ToEvent", ctx, lcoid, common.EventActionSyncTopUp, common.EventTypeInfo, map[string]interface{}{"id": "id"}).Return(levent).Once()
+		em.On("CreateEvent", ctx, levent).Return(nil).Once()
 
 		tp, err := s.SyncTopUp(context.Background(), lcoid, "id")
 
@@ -2370,31 +2440,33 @@ func TestService_SyncTopUp(t *testing.T) {
 		assert.Equal(t, topUp.ConfirmationUrl, topUp.ConfirmationUrl)
 
 		assertExpectations(t)
-		call.Unset()
 	})
 
 	t.Run("no api charge error", func(t *testing.T) {
 		lcoid := "lcOrganizationID"
-		call := xm.On("GenerateId").Return(xid, nil)
 		am.On("GetDirectCharge", ctx, "id").Return(nil, nil).Once()
 		am.On("GetRecurrentChargeV2", ctx, "id").Return(nil, nil).Once()
 
 		sc, _ := json.Marshal(map[string]interface{}{"id": "id"})
-		sm.On("CreateEvent", ctx, Event{
+		levent := common.Event{
 			ID:               xid,
 			LCOrganizationID: lcoid,
-			Type:             EventTypeError,
-			Action:           EventActionSyncTopUp,
+			Type:             common.EventTypeError,
+			Action:           common.EventActionSyncTopUp,
 			Payload:          sc,
 			Error:            "charge not found",
-		}).Return(nil).Once()
+		}
+		em.On("ToEvent", ctx, lcoid, common.EventActionSyncTopUp, common.EventTypeInfo, map[string]interface{}{"id": "id"}).Return(levent).Once()
+		em.On("ToError", context.Background(), common.ToErrorParams{
+			Event: levent,
+			Err:   fmt.Errorf("charge not found"),
+		}).Return(assert.AnError).Once()
 
 		_, err := s.SyncTopUp(context.Background(), lcoid, "id")
 
-		assert.Equal(t, "2341: charge not found", err.Error())
+		assert.ErrorIs(t, err, assert.AnError)
 
 		assertExpectations(t)
-		call.Unset()
 	})
 
 	t.Run("url parse error", func(t *testing.T) {
@@ -2423,26 +2495,33 @@ func TestService_SyncTopUp(t *testing.T) {
 			Quantity: 1,
 		}
 
-		call := xm.On("GenerateId").Return(xid, nil)
 		am.On("GetDirectCharge", ctx, "id").Return(&dc, nil).Once()
 		am.On("GetRecurrentChargeV2", ctx, "id").Return(nil, nil).Once()
 
 		sc, _ := json.Marshal(map[string]interface{}{"id": "id"})
-		sm.On("CreateEvent", ctx, Event{
+		levent := common.Event{
 			ID:               xid,
 			LCOrganizationID: lcoid,
-			Type:             EventTypeError,
-			Action:           EventActionSyncTopUp,
+			Type:             common.EventTypeError,
+			Action:           common.EventActionSyncTopUp,
 			Payload:          sc,
 			Error:            "parse \"utp://lorem$%^\": invalid URL escape \"%^\"",
-		}).Return(nil).Once()
+		}
+		em.On("ToEvent", ctx, lcoid, common.EventActionSyncTopUp, common.EventTypeInfo, map[string]interface{}{"id": "id"}).Return(levent).Once()
+		em.On("ToError", context.Background(), common.ToErrorParams{
+			Event: levent,
+			Err: &url.Error{
+				Op:  "parse",
+				URL: "utp://lorem$%^",
+				Err: url.EscapeError("%^"),
+			},
+		}).Return(assert.AnError).Once()
 
 		_, err := s.SyncTopUp(context.Background(), lcoid, "id")
 
-		assert.Error(t, err)
+		assert.ErrorIs(t, err, assert.AnError)
 
 		assertExpectations(t)
-		call.Unset()
 	})
 
 	t.Run("upsert error", func(t *testing.T) {
@@ -2483,26 +2562,29 @@ func TestService_SyncTopUp(t *testing.T) {
 			LCCharge:         jdc,
 		}
 
-		call := xm.On("GenerateId").Return(xid, nil)
 		am.On("GetDirectCharge", ctx, "id").Return(&dc, nil).Once()
 		am.On("GetRecurrentChargeV2", ctx, "id").Return(nil, nil).Once()
 		sm.On("UpsertTopUp", ctx, topUp).Return(nil, assert.AnError).Once()
 		sc, _ := json.Marshal(map[string]interface{}{"id": "id"})
-		sm.On("CreateEvent", ctx, Event{
+		levent := common.Event{
 			ID:               xid,
 			LCOrganizationID: lcoid,
-			Type:             EventTypeError,
-			Action:           EventActionSyncTopUp,
+			Type:             common.EventTypeError,
+			Action:           common.EventActionSyncTopUp,
 			Payload:          sc,
 			Error:            "assert.AnError general error for testing",
-		}).Return(nil).Once()
+		}
+		em.On("ToEvent", ctx, lcoid, common.EventActionSyncTopUp, common.EventTypeInfo, map[string]interface{}{"id": "id"}).Return(levent).Once()
+		em.On("ToError", context.Background(), common.ToErrorParams{
+			Event: levent,
+			Err:   assert.AnError,
+		}).Return(assert.AnError).Once()
 
 		_, err := s.SyncTopUp(context.Background(), lcoid, "id")
 
 		assert.ErrorIs(t, err, assert.AnError)
 
 		assertExpectations(t)
-		call.Unset()
 	})
 
 	t.Run("error init recurrent top up values", func(t *testing.T) {
@@ -2537,18 +2619,22 @@ func TestService_SyncTopUp(t *testing.T) {
 			NextChargeAt:    &someDate2,
 		}
 
-		call := xm.On("GenerateId").Return(xid, nil)
 		am.On("GetDirectCharge", ctx, "id").Return(nil, nil).Once()
 		am.On("GetRecurrentChargeV2", ctx, "id").Return(&rc, nil).Once()
 		sc, _ := json.Marshal(map[string]interface{}{"id": "id"})
-		sm.On("CreateEvent", ctx, Event{
+		levent := common.Event{
 			ID:               xid,
 			LCOrganizationID: lcoid,
-			Type:             EventTypeError,
-			Action:           EventActionSyncTopUp,
+			Type:             common.EventTypeError,
+			Action:           common.EventActionSyncTopUp,
 			Payload:          sc,
 			Error:            "assert.AnError general error for testing",
-		}).Return(nil).Once()
+		}
+		em.On("ToEvent", ctx, lcoid, common.EventActionSyncTopUp, common.EventTypeInfo, map[string]interface{}{"id": "id"}).Return(levent).Once()
+		em.On("ToError", context.Background(), common.ToErrorParams{
+			Event: levent,
+			Err:   assert.AnError,
+		}).Return(assert.AnError).Once()
 		sm.On("InitRecurrentTopUpRequiredValues", ctx, InitRecurrentTopUpRequiredValuesParams{
 			CurrentToppedUpAt: someDate,
 			NextTopUpAt:       someDate2,
@@ -2561,7 +2647,6 @@ func TestService_SyncTopUp(t *testing.T) {
 		assert.ErrorIs(t, err, assert.AnError)
 
 		assertExpectations(t)
-		call.Unset()
 	})
 
 	t.Run("success on init recurrent top up values row not found", func(t *testing.T) {
@@ -2610,18 +2695,19 @@ func TestService_SyncTopUp(t *testing.T) {
 			NextTopUpAt:       &someDate2,
 		}
 
-		call := xm.On("GenerateId").Return(xid, nil)
 		am.On("GetDirectCharge", ctx, "id").Return(nil, nil).Once()
 		am.On("GetRecurrentChargeV2", ctx, "id").Return(&rc, nil).Once()
 		sm.On("UpsertTopUp", ctx, topUp).Return(&topUp, nil).Once()
 		sc, _ := json.Marshal(topUp)
-		sm.On("CreateEvent", ctx, Event{
+		levent := common.Event{
 			ID:               xid,
 			LCOrganizationID: lcoid,
-			Type:             EventTypeInfo,
-			Action:           EventActionSyncTopUp,
+			Type:             common.EventTypeInfo,
+			Action:           common.EventActionSyncTopUp,
 			Payload:          sc,
-		}).Return(nil).Once()
+		}
+		em.On("ToEvent", ctx, lcoid, common.EventActionSyncTopUp, common.EventTypeInfo, map[string]interface{}{"id": "id"}).Return(levent).Once()
+		em.On("CreateEvent", ctx, levent).Return(nil).Once()
 		sm.On("InitRecurrentTopUpRequiredValues", ctx, InitRecurrentTopUpRequiredValuesParams{
 			CurrentToppedUpAt: someDate,
 			NextTopUpAt:       someDate2,
@@ -2641,7 +2727,6 @@ func TestService_SyncTopUp(t *testing.T) {
 		assert.Equal(t, topUp.ConfirmationUrl, topUp.ConfirmationUrl)
 
 		assertExpectations(t)
-		call.Unset()
 	})
 }
 
@@ -2724,7 +2809,6 @@ func TestService_SyncOrCancelAllPendingTopUpRequests(t *testing.T) {
 		}
 
 		sm.On("GetTopUpsByOrganizationIDAndStatus", ctx, lcoid, TopUpStatusPending).Return([]TopUp{topUp1, topUp2}, nil).Once()
-		call := xm.On("GenerateId").Return(xid, nil)
 		am.On("GetDirectCharge", ctx, "id1").Return(nil, nil).Once()
 		am.On("GetRecurrentChargeV2", ctx, "id1").Return(&rc1, nil).Once()
 		am.On("GetDirectCharge", ctx, "id2").Return(&rc2, nil).Once()
@@ -2733,20 +2817,25 @@ func TestService_SyncOrCancelAllPendingTopUpRequests(t *testing.T) {
 		sm.On("UpsertTopUp", ctx, topUp2).Return(&topUp2, nil).Once()
 		sc1, _ := json.Marshal(topUp1)
 		sc2, _ := json.Marshal(topUp2)
-		sm.On("CreateEvent", ctx, Event{
+		levent1 := common.Event{
 			ID:               xid,
 			LCOrganizationID: lcoid,
-			Type:             EventTypeInfo,
-			Action:           EventActionSyncTopUp,
+			Type:             common.EventTypeInfo,
+			Action:           common.EventActionSyncTopUp,
 			Payload:          sc1,
-		}).Return(nil).Once()
-		sm.On("CreateEvent", ctx, Event{
+		}
+		em.On("ToEvent", ctx, lcoid, common.EventActionSyncTopUp, common.EventTypeInfo, map[string]interface{}{"id": "id1"}).Return(levent1).Once()
+		em.On("CreateEvent", ctx, levent1).Return(nil).Once()
+		levent2 := common.Event{
 			ID:               xid,
 			LCOrganizationID: lcoid,
-			Type:             EventTypeInfo,
-			Action:           EventActionSyncTopUp,
+			Type:             common.EventTypeInfo,
+			Action:           common.EventActionSyncTopUp,
 			Payload:          sc2,
-		}).Return(nil).Once()
+		}
+		em.On("ToEvent", ctx, lcoid, common.EventActionSyncTopUp, common.EventTypeInfo, map[string]interface{}{"id": "id2"}).Return(levent2).Once()
+		em.On("CreateEvent", ctx, levent2).Return(nil).Once()
+
 		sm.On("InitRecurrentTopUpRequiredValues", ctx, InitRecurrentTopUpRequiredValuesParams{
 			CurrentToppedUpAt: someDate,
 			NextTopUpAt:       someDate2,
@@ -2758,7 +2847,6 @@ func TestService_SyncOrCancelAllPendingTopUpRequests(t *testing.T) {
 		assert.Nil(t, err)
 
 		assertExpectations(t)
-		call.Unset()
 	})
 
 	t.Run("success recurrent and direct pending", func(t *testing.T) {
@@ -2845,7 +2933,6 @@ func TestService_SyncOrCancelAllPendingTopUpRequests(t *testing.T) {
 		topUp2.UpdatedAt = now
 
 		sm.On("GetTopUpsByOrganizationIDAndStatus", ctx, lcoid, TopUpStatusPending).Return([]TopUp{topUp1, topUp2}, nil).Once()
-		call := xm.On("GenerateId").Return(xid, nil)
 		am.On("GetDirectCharge", ctx, "id1").Return(nil, nil).Once()
 		am.On("GetRecurrentChargeV2", ctx, "id1").Return(&rc1, nil).Once()
 		am.On("GetDirectCharge", ctx, "id2").Return(&rc2, nil).Once()
@@ -2854,20 +2941,24 @@ func TestService_SyncOrCancelAllPendingTopUpRequests(t *testing.T) {
 		sm.On("UpsertTopUp", ctx, oTopUp2).Return(&topUp2, nil).Once()
 		sc1, _ := json.Marshal(oTopUp1)
 		sc2, _ := json.Marshal(oTopUp2)
-		sm.On("CreateEvent", ctx, Event{
+		levent1 := common.Event{
 			ID:               xid,
 			LCOrganizationID: lcoid,
-			Type:             EventTypeInfo,
-			Action:           EventActionSyncTopUp,
+			Type:             common.EventTypeInfo,
+			Action:           common.EventActionSyncTopUp,
 			Payload:          sc1,
-		}).Return(nil).Once()
-		sm.On("CreateEvent", ctx, Event{
+		}
+		em.On("ToEvent", ctx, lcoid, common.EventActionSyncTopUp, common.EventTypeInfo, map[string]interface{}{"id": "id1"}).Return(levent1).Once()
+		em.On("CreateEvent", ctx, levent1).Return(nil).Once()
+		levent2 := common.Event{
 			ID:               xid,
 			LCOrganizationID: lcoid,
-			Type:             EventTypeInfo,
-			Action:           EventActionSyncTopUp,
+			Type:             common.EventTypeInfo,
+			Action:           common.EventActionSyncTopUp,
 			Payload:          sc2,
-		}).Return(nil).Once()
+		}
+		em.On("ToEvent", ctx, lcoid, common.EventActionSyncTopUp, common.EventTypeInfo, map[string]interface{}{"id": "id2"}).Return(levent2).Once()
+		em.On("CreateEvent", ctx, levent2).Return(nil).Once()
 		sm.On("InitRecurrentTopUpRequiredValues", ctx, InitRecurrentTopUpRequiredValuesParams{
 			CurrentToppedUpAt: now,
 			NextTopUpAt:       someDate2,
@@ -2879,7 +2970,6 @@ func TestService_SyncOrCancelAllPendingTopUpRequests(t *testing.T) {
 		assert.Nil(t, err)
 
 		assertExpectations(t)
-		call.Unset()
 	})
 
 	t.Run("force cancel all old pending", func(t *testing.T) {
@@ -2960,7 +3050,6 @@ func TestService_SyncOrCancelAllPendingTopUpRequests(t *testing.T) {
 		}
 
 		sm.On("GetTopUpsByOrganizationIDAndStatus", ctx, lcoid, TopUpStatusPending).Return([]TopUp{topUp1, topUp2}, nil).Once()
-		call := xm.On("GenerateId").Return(xid, nil)
 		am.On("GetDirectCharge", ctx, "id1").Return(nil, nil).Once()
 		am.On("GetRecurrentChargeV2", ctx, "id1").Return(&rc1, nil).Once()
 		am.On("GetDirectCharge", ctx, "id2").Return(&rc2, nil).Once()
@@ -2981,34 +3070,45 @@ func TestService_SyncOrCancelAllPendingTopUpRequests(t *testing.T) {
 		sc2, _ := json.Marshal(topUp2)
 		sc11, _ := json.Marshal(map[string]interface{}{"id": "id1", "status": TopUpStatusCancelled})
 		sc22, _ := json.Marshal(map[string]interface{}{"id": "id2", "status": TopUpStatusCancelled})
-		sm.On("CreateEvent", ctx, Event{
+
+		levent1 := common.Event{
 			ID:               xid,
 			LCOrganizationID: lcoid,
-			Type:             EventTypeInfo,
-			Action:           EventActionSyncTopUp,
+			Type:             common.EventTypeInfo,
+			Action:           common.EventActionSyncTopUp,
 			Payload:          sc1,
-		}).Return(nil).Once()
-		sm.On("CreateEvent", ctx, Event{
+		}
+		em.On("ToEvent", ctx, lcoid, common.EventActionSyncTopUp, common.EventTypeInfo, map[string]interface{}{"id": "id1"}).Return(levent1).Once()
+		em.On("CreateEvent", ctx, levent1).Return(nil).Once()
+		levent2 := common.Event{
 			ID:               xid,
 			LCOrganizationID: lcoid,
-			Type:             EventTypeInfo,
-			Payload:          sc11,
-			Action:           EventActionForceCancelCharge,
-		}).Return(nil).Once()
-		sm.On("CreateEvent", ctx, Event{
-			ID:               xid,
-			LCOrganizationID: lcoid,
-			Type:             EventTypeInfo,
-			Action:           EventActionSyncTopUp,
+			Type:             common.EventTypeInfo,
+			Action:           common.EventActionSyncTopUp,
 			Payload:          sc2,
-		}).Return(nil).Once()
-		sm.On("CreateEvent", ctx, Event{
+		}
+		em.On("ToEvent", ctx, lcoid, common.EventActionSyncTopUp, common.EventTypeInfo, map[string]interface{}{"id": "id2"}).Return(levent2).Once()
+		em.On("CreateEvent", ctx, levent2).Return(nil).Once()
+
+		levent11 := common.Event{
 			ID:               xid,
 			LCOrganizationID: lcoid,
-			Type:             EventTypeInfo,
+			Type:             common.EventTypeInfo,
+			Action:           common.EventActionForceCancelCharge,
+			Payload:          sc11,
+		}
+		em.On("ToEvent", ctx, lcoid, common.EventActionForceCancelCharge, common.EventTypeInfo, map[string]interface{}{"id": "id1", "status": TopUpStatusCancelled}).Return(levent11).Once()
+		em.On("CreateEvent", ctx, levent11).Return(nil).Once()
+		levent22 := common.Event{
+			ID:               xid,
+			LCOrganizationID: lcoid,
+			Type:             common.EventTypeInfo,
+			Action:           common.EventActionForceCancelCharge,
 			Payload:          sc22,
-			Action:           EventActionForceCancelCharge,
-		}).Return(nil).Once()
+		}
+		em.On("ToEvent", ctx, lcoid, common.EventActionForceCancelCharge, common.EventTypeInfo, map[string]interface{}{"id": "id2", "status": TopUpStatusCancelled}).Return(levent22).Once()
+		em.On("CreateEvent", ctx, levent22).Return(nil).Once()
+
 		sm.On("InitRecurrentTopUpRequiredValues", ctx, InitRecurrentTopUpRequiredValuesParams{
 			CurrentToppedUpAt: someDate,
 			NextTopUpAt:       someDate2,
@@ -3020,7 +3120,6 @@ func TestService_SyncOrCancelAllPendingTopUpRequests(t *testing.T) {
 		assert.Nil(t, err)
 
 		assertExpectations(t)
-		call.Unset()
 	})
 
 	t.Run("success recurrent and error direct", func(t *testing.T) {
@@ -3101,7 +3200,6 @@ func TestService_SyncOrCancelAllPendingTopUpRequests(t *testing.T) {
 		}
 
 		sm.On("GetTopUpsByOrganizationIDAndStatus", ctx, lcoid, TopUpStatusPending).Return([]TopUp{topUp1, topUp2}, nil).Once()
-		call := xm.On("GenerateId").Return(xid, nil)
 		am.On("GetDirectCharge", ctx, "id1").Return(nil, nil).Once()
 		am.On("GetRecurrentChargeV2", ctx, "id1").Return(&rc1, nil).Once()
 		am.On("GetDirectCharge", ctx, "id2").Return(nil, assert.AnError).Once()
@@ -3109,21 +3207,31 @@ func TestService_SyncOrCancelAllPendingTopUpRequests(t *testing.T) {
 		sm.On("UpsertTopUp", ctx, topUp1).Return(&topUp1, nil).Once()
 		sc1, _ := json.Marshal(topUp1)
 		sc2, _ := json.Marshal(map[string]interface{}{"id": "id2"})
-		sm.On("CreateEvent", ctx, Event{
+
+		levent1 := common.Event{
 			ID:               xid,
 			LCOrganizationID: lcoid,
-			Type:             EventTypeInfo,
-			Action:           EventActionSyncTopUp,
+			Type:             common.EventTypeInfo,
+			Action:           common.EventActionSyncTopUp,
 			Payload:          sc1,
-		}).Return(nil).Once()
-		sm.On("CreateEvent", ctx, Event{
+		}
+		em.On("ToEvent", ctx, lcoid, common.EventActionSyncTopUp, common.EventTypeInfo, map[string]interface{}{"id": "id1"}).Return(levent1).Once()
+		em.On("CreateEvent", ctx, levent1).Return(nil).Once()
+
+		levent := common.Event{
 			ID:               xid,
 			LCOrganizationID: lcoid,
-			Type:             EventTypeError,
-			Action:           EventActionSyncTopUp,
+			Type:             common.EventTypeError,
+			Action:           common.EventActionSyncTopUp,
 			Payload:          sc2,
 			Error:            "assert.AnError general error for testing",
-		}).Return(nil).Once()
+		}
+		em.On("ToEvent", ctx, lcoid, common.EventActionSyncTopUp, common.EventTypeInfo, map[string]interface{}{"id": "id2"}).Return(levent).Once()
+		em.On("ToError", context.Background(), common.ToErrorParams{
+			Event: levent,
+			Err:   assert.AnError,
+		}).Return(assert.AnError).Once()
+
 		sm.On("InitRecurrentTopUpRequiredValues", ctx, InitRecurrentTopUpRequiredValuesParams{
 			CurrentToppedUpAt: someDate,
 			NextTopUpAt:       someDate2,
@@ -3135,44 +3243,5 @@ func TestService_SyncOrCancelAllPendingTopUpRequests(t *testing.T) {
 		assert.ErrorIs(t, err, assert.AnError)
 
 		assertExpectations(t)
-		call.Unset()
-	})
-}
-
-func TestService_ToEvent(t *testing.T) {
-	t.Run("success id from context", func(t *testing.T) {
-		id := "id-from-context"
-		localCtx := context.WithValue(context.Background(), LedgerEventIDCtxKey{}, id)
-		lcoid := "lcOrganizationID"
-		action := EventActionSyncTopUp
-		eventType := EventTypeInfo
-		payload := map[string]interface{}{"lorem": "ipsum"}
-
-		event := s.ToEvent(localCtx, lcoid, action, eventType, payload)
-
-		assert.Equal(t, eventType, event.Type)
-		assert.Equal(t, id, event.ID)
-		assert.Equal(t, action, event.Action)
-		assert.Equal(t, lcoid, event.LCOrganizationID)
-
-		assertExpectations(t)
-	})
-	t.Run("success no id in context", func(t *testing.T) {
-		id := "id-not-from-context"
-		lcoid := "lcOrganizationID"
-		action := EventActionSyncTopUp
-		eventType := EventTypeInfo
-		payload := map[string]interface{}{"lorem": "ipsum"}
-
-		call := xm.On("GenerateId").Return(id, nil)
-		event := s.ToEvent(context.Background(), lcoid, action, eventType, payload)
-
-		assert.Equal(t, eventType, event.Type)
-		assert.Equal(t, id, event.ID)
-		assert.Equal(t, action, event.Action)
-		assert.Equal(t, lcoid, event.LCOrganizationID)
-
-		assertExpectations(t)
-		call.Unset()
 	})
 }

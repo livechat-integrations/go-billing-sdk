@@ -195,4 +195,4 @@ func TestNewSQLClient_CreateCharge(t *testing.T) {
 	})
 }
 
-// TODO implement more tests
+// TODO implement other tests

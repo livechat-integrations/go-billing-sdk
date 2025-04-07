@@ -17,6 +17,16 @@ type ActiveSubscription struct {
 	DeletedAt        pgtype.Timestamptz
 }
 
+type BillingEvent struct {
+	ID               string
+	LcOrganizationID string
+	Type             string
+	Action           string
+	Payload          []byte
+	Error            pgtype.Text
+	CreatedAt        pgtype.Timestamptz
+}
+
 type Charge struct {
 	ID               string
 	LcOrganizationID string

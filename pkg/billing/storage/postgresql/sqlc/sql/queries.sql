@@ -50,3 +50,7 @@ WHERE id = $1;
 SELECT *
 FROM charges
 WHERE lc_organization_id = $1;
+
+-- name: CreateEvent :exec
+INSERT INTO billing_events(id, lc_organization_id, type, action, payload, error, created_at)
+VALUES ($1, $2, $3, $4, $5, $6, NOW());

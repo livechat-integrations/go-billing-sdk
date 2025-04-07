@@ -11,6 +11,7 @@ import (
 
 	"github.com/livechat-integrations/go-billing-sdk/pkg/billing"
 	"github.com/livechat-integrations/go-billing-sdk/pkg/billing/storage/postgresql/sqlc"
+	"github.com/livechat-integrations/go-billing-sdk/pkg/common"
 	"github.com/livechat-integrations/go-billing-sdk/pkg/common/livechat"
 )
 
@@ -134,4 +135,22 @@ func (r *PostgresqlPGX) GetChargesByOrganizationID(ctx context.Context, lcID str
 		charges = append(charges, *row.ToBillingCharge())
 	}
 	return charges, nil
+}
+
+func (r *PostgresqlPGX) CreateEvent(ctx context.Context, e common.Event) error {
+	err := r.queries.CreateEvent(ctx, sqlc.CreateEventParams{
+		ID:               e.ID,
+		LcOrganizationID: e.LCOrganizationID,
+		Type:             string(e.Type),
+		Action:           string(e.Action),
+		Payload:          e.Payload,
+		Error: pgtype.Text{
+			String: e.Error,
+			Valid:  true,
+		},
+	})
+	if err != nil {
+		return err
+	}
+	return nil
 }

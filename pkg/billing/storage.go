@@ -3,6 +3,7 @@ package billing
 import (
 	"context"
 
+	"github.com/livechat-integrations/go-billing-sdk/pkg/common"
 	"github.com/livechat-integrations/go-billing-sdk/pkg/common/livechat"
 )
 
@@ -16,4 +17,5 @@ type Storage interface {
 	GetSubscriptionsByOrganizationID(ctx context.Context, lcID string) ([]Subscription, error)
 	DeleteSubscriptionByChargeID(ctx context.Context, id string) error
 	GetChargesByOrganizationID(ctx context.Context, lcID string) ([]Charge, error)
+	CreateEvent(ctx context.Context, event common.Event) error
 }
