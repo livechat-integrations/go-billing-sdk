@@ -148,6 +148,10 @@ func (s *Service) IsPremium(ctx context.Context, id string) (bool, error) {
 	return len(sub) > 0 && sub[0].IsActive(), nil
 }
 
+func (s *Service) GetPremium(ctx context.Context, id string) ([]Subscription, error) {
+	return s.storage.GetSubscriptionsByOrganizationID(ctx, id)
+}
+
 func (s *Service) CreateSubscription(ctx context.Context, lcOrganizationID string, chargeID string, planName string) error {
 	event := s.eventService.ToEvent(ctx, lcOrganizationID, common.EventActionCreateSubscription, common.EventTypeInfo, map[string]interface{}{"planName": planName, "chargeID": chargeID})
 	plan := s.plans.GetPlan(planName)
