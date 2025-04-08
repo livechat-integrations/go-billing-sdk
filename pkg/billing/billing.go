@@ -11,10 +11,19 @@ import (
 )
 
 type (
-	BillingEventIDCtxKey        struct{}
-	BillingLicenseIDCtxKey      struct{}
-	BillingOrganizationIDCtxKey struct{}
+	BillingEventIDCtxKey              struct{}
+	BillingLicenseIDCtxKey            struct{}
+	BillingOrganizationIDCtxKey       struct{}
+	BillingSubscriptionPlanNameCtxKey struct{}
 )
+
+type BillingInterface interface {
+	DeleteSubscriptionWithCharge(ctx context.Context, lcOrganizationID string, chargeID string) error
+	SyncRecurrentCharge(ctx context.Context, lcOrganizationID string, id string) error
+	CreateSubscription(ctx context.Context, lcOrganizationID string, chargeID string, planName string) error
+	GetChargesByOrganizationID(ctx context.Context, lcOrganizationID string) ([]Charge, error)
+	GetActiveSubscriptionsByOrganizationID(ctx context.Context, lcOrganizationID string) ([]Subscription, error)
+}
 
 type Service struct {
 	idProvider   common.IdProviderInterface
@@ -148,8 +157,8 @@ func (s *Service) IsPremium(ctx context.Context, id string) (bool, error) {
 	return len(sub) > 0 && sub[0].IsActive(), nil
 }
 
-func (s *Service) GetPremium(ctx context.Context, id string) ([]Subscription, error) {
-	subs, err := s.storage.GetSubscriptionsByOrganizationID(ctx, id)
+func (s *Service) GetActiveSubscriptionsByOrganizationID(ctx context.Context, lcOrganizationID string) ([]Subscription, error) {
+	subs, err := s.storage.GetSubscriptionsByOrganizationID(ctx, lcOrganizationID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get subscriptions by organization id: %w", err)
 	}
@@ -212,7 +221,7 @@ func (s *Service) CreateSubscription(ctx context.Context, lcOrganizationID strin
 
 func (s *Service) DeleteSubscriptionWithCharge(ctx context.Context, lcOrganizationID string, chargeID string) error {
 	event := s.eventService.ToEvent(ctx, lcOrganizationID, common.EventActionDeleteSubscriptionWithCharge, common.EventTypeInfo, map[string]interface{}{"chargeID": chargeID})
-	if err := s.storage.DeleteSubscriptionByChargeID(ctx, chargeID); err != nil {
+	if err := s.storage.DeleteSubscriptionByChargeID(ctx, lcOrganizationID, chargeID); err != nil {
 		event.Type = common.EventTypeError
 		return s.eventService.ToError(ctx, common.ToErrorParams{
 			Event: event,
@@ -233,8 +242,8 @@ func (s *Service) DeleteSubscriptionWithCharge(ctx context.Context, lcOrganizati
 	return nil
 }
 
-func (s *Service) GetChargesByOrganizationID(ctx context.Context, lcID string) ([]Charge, error) {
-	rows, err := s.storage.GetChargesByOrganizationID(ctx, lcID)
+func (s *Service) GetChargesByOrganizationID(ctx context.Context, lcOrganizationID string) ([]Charge, error) {
+	rows, err := s.storage.GetChargesByOrganizationID(ctx, lcOrganizationID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get charges by organization id: %w", err)
 	}

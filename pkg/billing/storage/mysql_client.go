@@ -28,11 +28,6 @@ func (RealClock) After(d time.Duration) <-chan time.Time { return time.After(d) 
 
 const slowlogTreshold = time.Second
 
-var (
-	ErrChargeNotFound       = errors.New("charge not found")
-	ErrSubscriptionNotFound = errors.New("subscription not found")
-)
-
 type MySQLClient interface {
 	Exec(ctx context.Context, query string, args ...interface{}) (*lcMySQL.Meta, error)
 	Query(ctx context.Context, query string, args ...interface{}) (*lcMySQL.Results, error)
@@ -96,14 +91,14 @@ func (sql *SQLClient) GetCharge(ctx context.Context, id string) (*billing.Charge
 		return nil, fmt.Errorf("couldn't select charge from DB: %w", err)
 	}
 	if res.Count() != 1 {
-		return nil, ErrChargeNotFound
+		return nil, billing.ErrChargeNotFound
 	}
 	var charges []*SQLCharge
 	if err := res.CastTo(&charges); err != nil {
 		return nil, fmt.Errorf("couldn't cast result to sql charge: %w", err)
 	}
 	if charges[0] == nil {
-		return nil, ErrChargeNotFound
+		return nil, billing.ErrChargeNotFound
 	}
 	return ToBillingCharge(charges[0]), nil
 }
@@ -119,7 +114,7 @@ func (sql *SQLClient) UpdateChargePayload(ctx context.Context, id string, payloa
 		return fmt.Errorf("couldn't update charge: %w", err)
 	}
 	if res.RowsAffected == 0 {
-		return ErrChargeNotFound
+		return billing.ErrChargeNotFound
 	}
 
 	return nil
@@ -131,7 +126,7 @@ func (sql *SQLClient) DeleteCharge(ctx context.Context, id string) error {
 		return fmt.Errorf("couldn't delete charge: %w", err)
 	}
 	if res.RowsAffected == 0 {
-		return ErrChargeNotFound
+		return billing.ErrChargeNotFound
 	}
 
 	return nil
@@ -169,13 +164,13 @@ func (sql *SQLClient) GetSubscriptionsByOrganizationID(ctx context.Context, lcID
 	return subscriptions, nil
 }
 
-func (sql *SQLClient) DeleteSubscriptionByChargeID(ctx context.Context, id string) error {
-	res, err := sql.sqlClient.Exec(ctx, "UPDATE subscriptions SET deleted_at = ? WHERE charge_id = $1", sql.clock.Now(), id)
+func (sql *SQLClient) DeleteSubscriptionByChargeID(ctx context.Context, lcID string, id string) error {
+	res, err := sql.sqlClient.Exec(ctx, "UPDATE subscriptions SET deleted_at = ? WHERE charge_id = ? AND lc_organization_id = ?", sql.clock.Now(), id, lcID)
 	if err != nil {
 		return fmt.Errorf("couldn't delete subsctiption: %w", err)
 	}
 	if res.RowsAffected == 0 {
-		return ErrSubscriptionNotFound
+		return billing.ErrSubscriptionNotFound
 	}
 
 	return nil

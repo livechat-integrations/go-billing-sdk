@@ -117,8 +117,16 @@ func (r *PostgresqlPGX) DeleteCharge(ctx context.Context, id string) error {
 	return r.queries.DeleteCharge(ctx, id)
 }
 
-func (r *PostgresqlPGX) DeleteSubscriptionByChargeID(ctx context.Context, id string) error {
-	return r.queries.DeleteSubscriptionByChargeID(ctx, pgtype.Text{String: id, Valid: true})
+func (r *PostgresqlPGX) DeleteSubscriptionByChargeID(ctx context.Context, lcID string, id string) error {
+	err := r.queries.DeleteSubscriptionByChargeID(ctx, sqlc.DeleteSubscriptionByChargeIDParams{
+		ChargeID:         pgtype.Text{String: id, Valid: true},
+		LcOrganizationID: lcID,
+	})
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return billing.ErrSubscriptionNotFound
+	}
+
+	return err
 }
 
 func (r *PostgresqlPGX) GetChargesByOrganizationID(ctx context.Context, lcID string) ([]billing.Charge, error) {

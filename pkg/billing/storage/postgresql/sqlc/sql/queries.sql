@@ -39,7 +39,8 @@ WHERE charge_id = $1;
 -- name: DeleteSubscriptionByChargeID :exec
 UPDATE subscriptions
 SET deleted_at = now()
-WHERE charge_id = $1;
+WHERE charge_id = $1
+AND lc_organization_id = $2;
 
 -- name: DeleteCharge :exec
 UPDATE charges

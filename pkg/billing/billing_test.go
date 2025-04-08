@@ -32,16 +32,18 @@ var s = Service{
 var ctx = context.Background()
 
 var assertExpectations = func(t *testing.T) {
-	mock.AssertExpectationsForObjects(t, am, sm, em, xm)
+	mock.AssertExpectationsForObjects(t, am, sm, em, xm, bm)
 	am.Calls = nil
 	sm.Calls = nil
 	em.Calls = nil
 	xm.Calls = nil
+	bm.Calls = nil
 
 	am.ExpectedCalls = nil
 	sm.ExpectedCalls = nil
 	em.ExpectedCalls = nil
 	xm.ExpectedCalls = nil
+	bm.ExpectedCalls = nil
 }
 
 type xIdMock struct {
@@ -138,7 +140,7 @@ func (m *storageMock) DeleteCharge(ctx context.Context, id string) error {
 	panic("implement me")
 }
 
-func (m *storageMock) DeleteSubscriptionByChargeID(ctx context.Context, id string) error {
+func (m *storageMock) DeleteSubscriptionByChargeID(ctx context.Context, LCOrganizationID string, id string) error {
 	//TODO implement me
 	panic("implement me")
 }
@@ -609,14 +611,14 @@ func TestService_IsPremium(t *testing.T) {
 	})
 }
 
-func TestService_GetPremium(t *testing.T) {
+func TestService_GetActiveSubscriptionsByOrganizationID(t *testing.T) {
 	t.Run("success when no LC charge", func(t *testing.T) {
 		rsubs := []Subscription{{
 			ID: "id",
 		}}
 		sm.On("GetSubscriptionsByOrganizationID", ctx, "id").Return(rsubs, nil).Once()
 
-		subs, err := s.GetPremium(context.Background(), "id")
+		subs, err := s.GetActiveSubscriptionsByOrganizationID(context.Background(), "id")
 
 		assert.Len(t, subs, 1)
 		assert.True(t, subs[0].IsActive())
@@ -642,7 +644,7 @@ func TestService_GetPremium(t *testing.T) {
 		}}
 		sm.On("GetSubscriptionsByOrganizationID", ctx, "id").Return(rsubs, nil).Once()
 
-		subs, err := s.GetPremium(context.Background(), "id")
+		subs, err := s.GetActiveSubscriptionsByOrganizationID(context.Background(), "id")
 
 		assert.Len(t, subs, 1)
 		assert.True(t, subs[0].IsActive())
@@ -668,7 +670,7 @@ func TestService_GetPremium(t *testing.T) {
 		}}
 		sm.On("GetSubscriptionsByOrganizationID", ctx, "id").Return(rsubs, nil).Once()
 
-		subs, err := s.GetPremium(context.Background(), "id")
+		subs, err := s.GetActiveSubscriptionsByOrganizationID(context.Background(), "id")
 
 		assert.Len(t, subs, 0)
 		assert.Nil(t, err)
@@ -679,7 +681,7 @@ func TestService_GetPremium(t *testing.T) {
 		var rsubs []Subscription
 		sm.On("GetSubscriptionsByOrganizationID", ctx, "id").Return(rsubs, nil).Once()
 
-		subs, err := s.GetPremium(context.Background(), "id")
+		subs, err := s.GetActiveSubscriptionsByOrganizationID(context.Background(), "id")
 
 		assert.Len(t, subs, 0)
 		assert.Nil(t, err)
@@ -689,7 +691,7 @@ func TestService_GetPremium(t *testing.T) {
 	t.Run("error", func(t *testing.T) {
 		sm.On("GetSubscriptionsByOrganizationID", ctx, "id").Return(nil, assert.AnError).Once()
 
-		subs, err := s.GetPremium(context.Background(), "id")
+		subs, err := s.GetActiveSubscriptionsByOrganizationID(context.Background(), "id")
 
 		assert.Nil(t, subs)
 		assert.ErrorIs(t, err, assert.AnError)

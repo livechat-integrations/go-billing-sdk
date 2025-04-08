@@ -96,10 +96,16 @@ const deleteSubscriptionByChargeID = `-- name: DeleteSubscriptionByChargeID :exe
 UPDATE subscriptions
 SET deleted_at = now()
 WHERE charge_id = $1
+AND lc_organization_id = $2
 `
 
-func (q *Queries) DeleteSubscriptionByChargeID(ctx context.Context, chargeID pgtype.Text) error {
-	_, err := q.db.Exec(ctx, deleteSubscriptionByChargeID, chargeID)
+type DeleteSubscriptionByChargeIDParams struct {
+	ChargeID         pgtype.Text
+	LcOrganizationID string
+}
+
+func (q *Queries) DeleteSubscriptionByChargeID(ctx context.Context, arg DeleteSubscriptionByChargeIDParams) error {
+	_, err := q.db.Exec(ctx, deleteSubscriptionByChargeID, arg.ChargeID, arg.LcOrganizationID)
 	return err
 }
 

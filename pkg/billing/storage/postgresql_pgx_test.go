@@ -261,20 +261,20 @@ func TestPostgresqlPGX_DeleteCharge(t *testing.T) {
 func TestPostgresqlPGX_DeleteSubscriptionByChargeID(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		dbMock.ExpectExec("UPDATE subscriptions SET deleted_at = now()").
-			WithArgs(pgtype.Text{String: "1", Valid: true}).
+			WithArgs(pgtype.Text{String: "1", Valid: true}, "lcoid").
 			WillReturnResult(pgxmock.NewResult("UPDATE", 1)).Times(1)
 
-		err := s.DeleteSubscriptionByChargeID(context.Background(), "1")
+		err := s.DeleteSubscriptionByChargeID(context.Background(), "lcoid", "1")
 		assert.NoError(t, err)
 		assert.NoError(t, dbMock.ExpectationsWereMet())
 	})
 
 	t.Run("error", func(t *testing.T) {
 		dbMock.ExpectExec("UPDATE subscriptions SET deleted_at = now()").
-			WithArgs(pgtype.Text{String: "1", Valid: true}).Times(1).
+			WithArgs(pgtype.Text{String: "1", Valid: true}, "lcoid").Times(1).
 			WillReturnError(assert.AnError)
 
-		err := s.DeleteSubscriptionByChargeID(context.Background(), "1")
+		err := s.DeleteSubscriptionByChargeID(context.Background(), "lcoid", "1")
 		assert.Error(t, err)
 		assert.NoError(t, dbMock.ExpectationsWereMet())
 	})
