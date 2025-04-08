@@ -52,7 +52,7 @@ func (c Subscription) IsActive() bool {
 		return true
 	}
 
-	var p livechat.BaseChargeV2
+	var p livechat.BaseCharge
 	_ = json.Unmarshal(c.Charge.Payload, &p)
 	return c.Charge.CanceledAt == nil && (p.Status == "active" || p.Status == "success")
 }

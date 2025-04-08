@@ -149,7 +149,18 @@ func (s *Service) IsPremium(ctx context.Context, id string) (bool, error) {
 }
 
 func (s *Service) GetPremium(ctx context.Context, id string) ([]Subscription, error) {
-	return s.storage.GetSubscriptionsByOrganizationID(ctx, id)
+	subs, err := s.storage.GetSubscriptionsByOrganizationID(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get subscriptions by organization id: %w", err)
+	}
+
+	res := []Subscription{}
+	for _, sub := range subs {
+		if sub.IsActive() {
+			res = append(res, sub)
+		}
+	}
+	return res, nil
 }
 
 func (s *Service) CreateSubscription(ctx context.Context, lcOrganizationID string, chargeID string, planName string) error {

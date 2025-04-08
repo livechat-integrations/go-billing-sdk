@@ -609,6 +609,95 @@ func TestService_IsPremium(t *testing.T) {
 	})
 }
 
+func TestService_GetPremium(t *testing.T) {
+	t.Run("success when no LC charge", func(t *testing.T) {
+		rsubs := []Subscription{{
+			ID: "id",
+		}}
+		sm.On("GetSubscriptionsByOrganizationID", ctx, "id").Return(rsubs, nil).Once()
+
+		subs, err := s.GetPremium(context.Background(), "id")
+
+		assert.Len(t, subs, 1)
+		assert.True(t, subs[0].IsActive())
+		assert.Nil(t, err)
+
+		assertExpectations(t)
+	})
+	t.Run("success when LC charge is active", func(t *testing.T) {
+		baseCharge := livechat.RecurrentCharge{
+			BaseCharge: livechat.BaseCharge{
+				ID:     "id",
+				Status: "active",
+			},
+		}
+		payload, _ := json.Marshal(baseCharge)
+		rsubs := []Subscription{{
+			ID: "id",
+			Charge: &Charge{
+				ID:      "id",
+				Type:    ChargeTypeRecurring,
+				Payload: payload,
+			},
+		}}
+		sm.On("GetSubscriptionsByOrganizationID", ctx, "id").Return(rsubs, nil).Once()
+
+		subs, err := s.GetPremium(context.Background(), "id")
+
+		assert.Len(t, subs, 1)
+		assert.True(t, subs[0].IsActive())
+		assert.Nil(t, err)
+
+		assertExpectations(t)
+	})
+	t.Run("success when LC charge is not active", func(t *testing.T) {
+		baseCharge := livechat.RecurrentCharge{
+			BaseCharge: livechat.BaseCharge{
+				ID:     "id",
+				Status: "accepted",
+			},
+		}
+		payload, _ := json.Marshal(baseCharge)
+		rsubs := []Subscription{{
+			ID: "id",
+			Charge: &Charge{
+				ID:      "id",
+				Type:    ChargeTypeRecurring,
+				Payload: payload,
+			},
+		}}
+		sm.On("GetSubscriptionsByOrganizationID", ctx, "id").Return(rsubs, nil).Once()
+
+		subs, err := s.GetPremium(context.Background(), "id")
+
+		assert.Len(t, subs, 0)
+		assert.Nil(t, err)
+
+		assertExpectations(t)
+	})
+	t.Run("no subscriptions", func(t *testing.T) {
+		var rsubs []Subscription
+		sm.On("GetSubscriptionsByOrganizationID", ctx, "id").Return(rsubs, nil).Once()
+
+		subs, err := s.GetPremium(context.Background(), "id")
+
+		assert.Len(t, subs, 0)
+		assert.Nil(t, err)
+
+		assertExpectations(t)
+	})
+	t.Run("error", func(t *testing.T) {
+		sm.On("GetSubscriptionsByOrganizationID", ctx, "id").Return(nil, assert.AnError).Once()
+
+		subs, err := s.GetPremium(context.Background(), "id")
+
+		assert.Nil(t, subs)
+		assert.ErrorIs(t, err, assert.AnError)
+
+		assertExpectations(t)
+	})
+}
+
 func TestService_SyncRecurrentCharge(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		sm.On("GetCharge", ctx, "id").Return(&Charge{
