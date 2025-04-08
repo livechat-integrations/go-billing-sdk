@@ -14,12 +14,15 @@ import (
 var sm = new(storageMock)
 var xm = new(xIdMock)
 
+type (
+	TestEventIDCtxKey struct{}
+)
+
 var s = Service{
 	idProvider:    xm,
 	storage:       sm,
-	eventIdCtxKey: "ledgerCTXKey",
+	eventIdCtxKey: TestEventIDCtxKey{},
 }
-var ctx = context.Background()
 
 var assertExpectations = func(t *testing.T) {
 	mock.AssertExpectationsForObjects(t, xm, sm)
@@ -50,7 +53,7 @@ func (m *storageMock) CreateEvent(ctx context.Context, event Event) error {
 
 func TestNewService(t *testing.T) {
 	t.Run("NewService", func(t *testing.T) {
-		newService := NewService(&storageMock{}, &xIdMock{}, "ledgerCTXKey")
+		newService := NewService(&storageMock{}, &xIdMock{}, TestEventIDCtxKey{})
 
 		assert.NotNil(t, newService)
 		assertExpectations(t)
@@ -60,7 +63,7 @@ func TestNewService(t *testing.T) {
 func TestService_ToEvent(t *testing.T) {
 	t.Run("success id from context", func(t *testing.T) {
 		id := "id-from-context"
-		localCtx := context.WithValue(context.Background(), "ledgerCTXKey", id)
+		localCtx := context.WithValue(context.Background(), TestEventIDCtxKey{}, id)
 		lcoid := "lcOrganizationID"
 		action := EventActionSyncTopUp
 		eventType := EventTypeInfo
