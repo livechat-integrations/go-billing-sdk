@@ -8,6 +8,8 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	"github.com/livechat-integrations/go-billing-sdk/common"
 )
 
 const BillingAPIBaseURL = "https://billing.livechatinc.com"
@@ -95,12 +97,10 @@ type httpCaller interface {
 	Do(req *http.Request) (*http.Response, error)
 }
 
-type TokenFn func(ctx context.Context) (string, error)
-
 type Api struct {
 	HttpClient httpCaller
 	ApiBaseURL string
-	TokenFn    TokenFn
+	TokenFn    common.TokenFn
 }
 
 type CreateDirectChargeParams struct {

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/livechat-integrations/go-billing-sdk/common"
 	"github.com/livechat-integrations/go-billing-sdk/internal/livechat"
 	"github.com/livechat-integrations/go-billing-sdk/pkg/events"
 )
@@ -35,7 +36,7 @@ type Service struct {
 	masterOrgID  string
 }
 
-func NewService(eventService events.EventService, idProvider events.IdProviderInterface, httpClient *http.Client, livechatEnvironment string, tokenFn livechat.TokenFn, storage Storage, plans Plans, returnUrl, masterOrgID string) *Service {
+func NewService(eventService events.EventService, idProvider events.IdProviderInterface, httpClient *http.Client, livechatEnvironment string, tokenFn common.TokenFn, storage Storage, plans Plans, returnUrl, masterOrgID string) *Service {
 	a := &livechat.Api{
 		HttpClient: httpClient,
 		ApiBaseURL: events.EnvURL(livechat.BillingAPIBaseURL, livechatEnvironment),
