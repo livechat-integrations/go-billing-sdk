@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/livechat-integrations/go-billing-sdk/pkg/common"
+	"github.com/livechat-integrations/go-billing-sdk/pkg/events"
 )
 
 var (
@@ -37,7 +37,7 @@ type Storage interface {
 	GetTopUpsByOrganizationID(ctx context.Context, organizationID string) ([]TopUp, error)
 	UpdateTopUpStatus(ctx context.Context, params UpdateTopUpStatusParams) error
 	GetTopUpByIDAndType(ctx context.Context, params GetTopUpByIDAndTypeParams) (*TopUp, error)
-	CreateEvent(ctx context.Context, event common.Event) error
+	CreateEvent(ctx context.Context, event events.Event) error
 	GetTopUpsByOrganizationIDAndStatus(ctx context.Context, organizationID string, status TopUpStatus) ([]TopUp, error)
 	UpsertTopUp(ctx context.Context, topUp TopUp) (*TopUp, error)
 	InitRecurrentTopUpRequiredValues(ctx context.Context, params InitRecurrentTopUpRequiredValuesParams) error

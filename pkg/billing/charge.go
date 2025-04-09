@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/livechat-integrations/go-billing-sdk/pkg/common/livechat"
+	"github.com/livechat-integrations/go-billing-sdk/internal/livechat"
 )
 
 type ChargeType string

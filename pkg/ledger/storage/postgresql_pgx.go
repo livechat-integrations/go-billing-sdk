@@ -9,7 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/livechat-integrations/go-billing-sdk/pkg/common"
+	"github.com/livechat-integrations/go-billing-sdk/pkg/events"
 	"github.com/livechat-integrations/go-billing-sdk/pkg/ledger"
 	"github.com/livechat-integrations/go-billing-sdk/pkg/ledger/storage/postgresql/sqlc"
 )
@@ -164,7 +164,7 @@ func (r *PostgresqlPGX) GetTopUpByIDAndType(ctx context.Context, params ledger.G
 	return t.ToLedgerTopUp()
 }
 
-func (r *PostgresqlPGX) CreateEvent(ctx context.Context, e common.Event) error {
+func (r *PostgresqlPGX) CreateEvent(ctx context.Context, e events.Event) error {
 	err := r.queries.CreateEvent(ctx, sqlc.CreateEventParams{
 		ID:               e.ID,
 		LcOrganizationID: e.LCOrganizationID,

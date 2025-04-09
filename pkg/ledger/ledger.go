@@ -11,8 +11,8 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	"github.com/livechat-integrations/go-billing-sdk/pkg/common"
-	"github.com/livechat-integrations/go-billing-sdk/pkg/common/livechat"
+	"github.com/livechat-integrations/go-billing-sdk/internal/livechat"
+	"github.com/livechat-integrations/go-billing-sdk/pkg/events"
 )
 
 type LedgerInterface interface {
@@ -44,18 +44,18 @@ type (
 )
 
 type Service struct {
-	idProvider   common.IdProviderInterface
+	idProvider   events.IdProviderInterface
 	billingAPI   livechat.ApiInterface
-	eventService common.EventService
+	eventService events.EventService
 	storage      Storage
 	returnURL    string
 	masterOrgID  string
 }
 
-func NewService(eventService common.EventService, idProvider common.IdProviderInterface, httpClient *http.Client, livechatEnvironment string, tokenFn livechat.TokenFn, storage Storage, returnUrl, masterOrgID string) *Service {
+func NewService(eventService events.EventService, idProvider events.IdProviderInterface, httpClient *http.Client, livechatEnvironment string, tokenFn livechat.TokenFn, storage Storage, returnUrl, masterOrgID string) *Service {
 	a := &livechat.Api{
 		HttpClient: httpClient,
-		ApiBaseURL: common.EnvURL(livechat.BillingAPIBaseURL, livechatEnvironment),
+		ApiBaseURL: events.EnvURL(livechat.BillingAPIBaseURL, livechatEnvironment),
 		TokenFn:    tokenFn,
 	}
 
@@ -77,7 +77,7 @@ type CreateChargeParams struct {
 }
 
 func (s *Service) CreateCharge(ctx context.Context, params CreateChargeParams) (string, error) {
-	event := s.eventService.ToEvent(ctx, params.OrganizationID, common.EventActionCreateCharge, common.EventTypeInfo, params)
+	event := s.eventService.ToEvent(ctx, params.OrganizationID, events.EventActionCreateCharge, events.EventTypeInfo, params)
 	charge := Charge{
 		ID:               s.GetUniqueID(),
 		Amount:           params.Amount,
@@ -85,8 +85,8 @@ func (s *Service) CreateCharge(ctx context.Context, params CreateChargeParams) (
 		LCOrganizationID: params.OrganizationID,
 	}
 	if err := s.storage.CreateCharge(ctx, charge); err != nil {
-		event.Type = common.EventTypeError
-		return "", s.eventService.ToError(ctx, common.ToErrorParams{
+		event.Type = events.EventTypeError
+		return "", s.eventService.ToError(ctx, events.ToErrorParams{
 			Event: event,
 			Err:   fmt.Errorf("failed to create charge in database: %w", err),
 		})
@@ -114,7 +114,7 @@ type TopUpConfig struct {
 }
 
 func (s *Service) CreateTopUpRequest(ctx context.Context, params CreateTopUpRequestParams) (*TopUp, error) {
-	event := s.eventService.ToEvent(ctx, params.OrganizationID, common.EventActionCreateTopUp, common.EventTypeInfo, params)
+	event := s.eventService.ToEvent(ctx, params.OrganizationID, events.EventActionCreateTopUp, events.EventTypeInfo, params)
 	isTest := params.Test || params.OrganizationID == s.masterOrgID
 	config := ChargeConfig{
 		ReturnUrl: &s.returnURL,
@@ -139,15 +139,15 @@ func (s *Service) CreateTopUpRequest(ctx context.Context, params CreateTopUpRequ
 		Config:         config,
 	})
 	if err != nil {
-		event.Type = common.EventTypeError
-		return nil, s.eventService.ToError(ctx, common.ToErrorParams{
+		event.Type = events.EventTypeError
+		return nil, s.eventService.ToError(ctx, events.ToErrorParams{
 			Event: event,
 			Err:   fmt.Errorf("failed to create top up billing charge: %w", err),
 		})
 	}
 	if cr.RawCharge == nil || cr.ChargeID == nil || cr.ConfirmationUrl == nil {
-		event.Type = common.EventTypeError
-		return nil, s.eventService.ToError(ctx, common.ToErrorParams{
+		event.Type = events.EventTypeError
+		return nil, s.eventService.ToError(ctx, events.ToErrorParams{
 			Event: event,
 			Err:   fmt.Errorf("failed to create billing charge: empty charge id"),
 		})
@@ -171,8 +171,8 @@ func (s *Service) CreateTopUpRequest(ctx context.Context, params CreateTopUpRequ
 
 	tu, err := s.storage.UpsertTopUp(ctx, topUp)
 	if err != nil {
-		event.Type = common.EventTypeError
-		return nil, s.eventService.ToError(ctx, common.ToErrorParams{
+		event.Type = events.EventTypeError
+		return nil, s.eventService.ToError(ctx, events.ToErrorParams{
 			Event: event,
 			Err:   fmt.Errorf("failed to create database top up: %w", err),
 		})
@@ -196,14 +196,14 @@ func (s *Service) GetTopUps(ctx context.Context, organizationID string) ([]TopUp
 }
 
 func (s *Service) CancelTopUpRequest(ctx context.Context, organizationID string, ID string) error {
-	event := s.eventService.ToEvent(ctx, organizationID, common.EventActionCancelTopUp, common.EventTypeInfo, map[string]interface{}{"id": ID})
+	event := s.eventService.ToEvent(ctx, organizationID, events.EventActionCancelTopUp, events.EventTypeInfo, map[string]interface{}{"id": ID})
 	topUp, err := s.storage.GetTopUpByIDAndType(ctx, GetTopUpByIDAndTypeParams{
 		ID:   ID,
 		Type: TopUpTypeRecurrent,
 	})
 	if err != nil {
-		event.Type = common.EventTypeError
-		return s.eventService.ToError(ctx, common.ToErrorParams{
+		event.Type = events.EventTypeError
+		return s.eventService.ToError(ctx, events.ToErrorParams{
 			Event: event,
 			Err:   err,
 		})
@@ -216,8 +216,8 @@ func (s *Service) CancelTopUpRequest(ctx context.Context, organizationID string,
 
 	_, err = s.billingAPI.CancelRecurrentCharge(ctx, ID)
 	if err != nil {
-		event.Type = common.EventTypeError
-		return s.eventService.ToError(ctx, common.ToErrorParams{
+		event.Type = events.EventTypeError
+		return s.eventService.ToError(ctx, events.ToErrorParams{
 			Event: event,
 			Err:   err,
 		})
@@ -235,8 +235,8 @@ func (s *Service) CancelTopUpRequest(ctx context.Context, organizationID string,
 			return ErrTopUpNotFound
 		}
 
-		event.Type = common.EventTypeError
-		return s.eventService.ToError(ctx, common.ToErrorParams{
+		event.Type = events.EventTypeError
+		return s.eventService.ToError(ctx, events.ToErrorParams{
 			Event: event,
 			Err:   err,
 		})
@@ -248,7 +248,7 @@ func (s *Service) CancelTopUpRequest(ctx context.Context, organizationID string,
 }
 
 func (s *Service) ForceCancelTopUp(ctx context.Context, topUp TopUp) error {
-	event := s.eventService.ToEvent(ctx, topUp.LCOrganizationID, common.EventActionForceCancelCharge, common.EventTypeInfo, map[string]interface{}{"id": topUp.ID, "status": TopUpStatusCancelled})
+	event := s.eventService.ToEvent(ctx, topUp.LCOrganizationID, events.EventActionForceCancelCharge, events.EventTypeInfo, map[string]interface{}{"id": topUp.ID, "status": TopUpStatusCancelled})
 	err := s.storage.UpdateTopUpStatus(ctx, UpdateTopUpStatusParams{
 		ID:                topUp.ID,
 		Status:            TopUpStatusCancelled,
@@ -261,8 +261,8 @@ func (s *Service) ForceCancelTopUp(ctx context.Context, topUp TopUp) error {
 			return ErrTopUpNotFound
 		}
 
-		event.Type = common.EventTypeError
-		return s.eventService.ToError(ctx, common.ToErrorParams{
+		event.Type = events.EventTypeError
+		return s.eventService.ToError(ctx, events.ToErrorParams{
 			Event: event,
 			Err:   err,
 		})
@@ -272,7 +272,7 @@ func (s *Service) ForceCancelTopUp(ctx context.Context, topUp TopUp) error {
 }
 
 func (s *Service) CancelCharge(ctx context.Context, organizationID string, ID string) error {
-	event := s.eventService.ToEvent(ctx, organizationID, common.EventActionCancelCharge, common.EventTypeInfo, map[string]interface{}{"id": ID})
+	event := s.eventService.ToEvent(ctx, organizationID, events.EventActionCancelCharge, events.EventTypeInfo, map[string]interface{}{"id": ID})
 	err := s.storage.UpdateChargeStatus(ctx, ID, ChargeStatusCancelled)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
@@ -280,8 +280,8 @@ func (s *Service) CancelCharge(ctx context.Context, organizationID string, ID st
 			_ = s.eventService.CreateEvent(ctx, event)
 			return ErrChargeNotFound
 		}
-		event.Type = common.EventTypeError
-		return s.eventService.ToError(ctx, common.ToErrorParams{
+		event.Type = events.EventTypeError
+		return s.eventService.ToError(ctx, events.ToErrorParams{
 			Event: event,
 			Err:   err,
 		})
@@ -297,7 +297,7 @@ func (s *Service) GetTopUpsByOrganizationIDAndStatus(ctx context.Context, organi
 }
 
 func (s *Service) SyncTopUp(ctx context.Context, organizationID string, ID string) (*TopUp, error) {
-	event := s.eventService.ToEvent(ctx, organizationID, common.EventActionSyncTopUp, common.EventTypeInfo, map[string]interface{}{"id": ID})
+	event := s.eventService.ToEvent(ctx, organizationID, events.EventActionSyncTopUp, events.EventTypeInfo, map[string]interface{}{"id": ID})
 	var baseCharge livechat.BaseChargeV2
 	var fullCharge any
 	var chargeType TopUpType
@@ -366,23 +366,23 @@ func (s *Service) SyncTopUp(ctx context.Context, organizationID string, ID strin
 		return nil
 	})
 	if err := eg.Wait(); err != nil && !isDirect && !isRecurrent {
-		event.Type = common.EventTypeError
-		return nil, s.eventService.ToError(ctx, common.ToErrorParams{
+		event.Type = events.EventTypeError
+		return nil, s.eventService.ToError(ctx, events.ToErrorParams{
 			Event: event,
 			Err:   err,
 		})
 	}
 	if isDirect && isRecurrent {
-		event.Type = common.EventTypeError
-		return nil, s.eventService.ToError(ctx, common.ToErrorParams{
+		event.Type = events.EventTypeError
+		return nil, s.eventService.ToError(ctx, events.ToErrorParams{
 			Event: event,
 			Err:   fmt.Errorf("charge conflict"),
 		})
 	}
 
 	if fullCharge == nil {
-		event.Type = common.EventTypeError
-		return nil, s.eventService.ToError(ctx, common.ToErrorParams{
+		event.Type = events.EventTypeError
+		return nil, s.eventService.ToError(ctx, events.ToErrorParams{
 			Event: event,
 			Err:   fmt.Errorf("charge not found"),
 		})
@@ -390,8 +390,8 @@ func (s *Service) SyncTopUp(ctx context.Context, organizationID string, ID strin
 
 	u, err := url.Parse(baseCharge.ReturnURL)
 	if err != nil {
-		event.Type = common.EventTypeError
-		return nil, s.eventService.ToError(ctx, common.ToErrorParams{
+		event.Type = events.EventTypeError
+		return nil, s.eventService.ToError(ctx, events.ToErrorParams{
 			Event: event,
 			Err:   err,
 		})
@@ -403,8 +403,8 @@ func (s *Service) SyncTopUp(ctx context.Context, organizationID string, ID strin
 
 	p, err := json.Marshal(fullCharge)
 	if err != nil {
-		event.Type = common.EventTypeError
-		return nil, s.eventService.ToError(ctx, common.ToErrorParams{
+		event.Type = events.EventTypeError
+		return nil, s.eventService.ToError(ctx, events.ToErrorParams{
 			Event: event,
 			Err:   err,
 		})
@@ -427,8 +427,8 @@ func (s *Service) SyncTopUp(ctx context.Context, organizationID string, ID strin
 		})
 		if err != nil {
 			if !errors.Is(err, ErrNotFound) {
-				event.Type = common.EventTypeError
-				return nil, s.eventService.ToError(ctx, common.ToErrorParams{
+				event.Type = events.EventTypeError
+				return nil, s.eventService.ToError(ctx, events.ToErrorParams{
 					Event: event,
 					Err:   err,
 				})
@@ -438,8 +438,8 @@ func (s *Service) SyncTopUp(ctx context.Context, organizationID string, ID strin
 
 	uTopUp, err := s.storage.UpsertTopUp(ctx, topUp)
 	if err != nil {
-		event.Type = common.EventTypeError
-		return nil, s.eventService.ToError(ctx, common.ToErrorParams{
+		event.Type = events.EventTypeError
+		return nil, s.eventService.ToError(ctx, events.ToErrorParams{
 			Event: event,
 			Err:   err,
 		})

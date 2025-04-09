@@ -8,11 +8,11 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/livechat-integrations/go-billing-sdk/pkg/billing"
-	"github.com/livechat-integrations/go-billing-sdk/pkg/common/livechat"
-
 	"github.com/pashagolub/pgxmock/v4"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/livechat-integrations/go-billing-sdk/internal/livechat"
+	"github.com/livechat-integrations/go-billing-sdk/pkg/billing"
 )
 
 var dbMock, _ = pgxmock.NewConn()

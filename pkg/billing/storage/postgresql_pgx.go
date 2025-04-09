@@ -9,10 +9,10 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/livechat-integrations/go-billing-sdk/internal/livechat"
 	"github.com/livechat-integrations/go-billing-sdk/pkg/billing"
 	"github.com/livechat-integrations/go-billing-sdk/pkg/billing/storage/postgresql/sqlc"
-	"github.com/livechat-integrations/go-billing-sdk/pkg/common"
-	"github.com/livechat-integrations/go-billing-sdk/pkg/common/livechat"
+	"github.com/livechat-integrations/go-billing-sdk/pkg/events"
 )
 
 type PGXConn interface {
@@ -145,7 +145,7 @@ func (r *PostgresqlPGX) GetChargesByOrganizationID(ctx context.Context, lcID str
 	return charges, nil
 }
 
-func (r *PostgresqlPGX) CreateEvent(ctx context.Context, e common.Event) error {
+func (r *PostgresqlPGX) CreateEvent(ctx context.Context, e events.Event) error {
 	err := r.queries.CreateEvent(ctx, sqlc.CreateEventParams{
 		ID:               e.ID,
 		LcOrganizationID: e.LCOrganizationID,

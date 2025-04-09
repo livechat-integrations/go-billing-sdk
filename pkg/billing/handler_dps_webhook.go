@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/livechat-integrations/go-billing-sdk/pkg/common"
+	"github.com/livechat-integrations/go-billing-sdk/pkg/events"
 )
 
 type DPSWebhookRequest struct {
@@ -22,15 +22,15 @@ type DPSWebhookRequest struct {
 
 type Handler struct {
 	billing      BillingInterface
-	idProvider   common.IdProviderInterface
-	eventService common.EventService
+	idProvider   events.IdProviderInterface
+	eventService events.EventService
 }
 
 type HandlerInterface interface {
 	HandleDPSWebhook(ctx context.Context, req DPSWebhookRequest) error
 }
 
-func NewHandler(eventService common.EventService, billing BillingInterface, idProvider common.IdProviderInterface) *Handler {
+func NewHandler(eventService events.EventService, billing BillingInterface, idProvider events.IdProviderInterface) *Handler {
 	return &Handler{
 		billing:      billing,
 		idProvider:   idProvider,
@@ -48,11 +48,11 @@ func (h *Handler) HandleDPSWebhook(ctx context.Context, req DPSWebhookRequest) e
 
 	switch req.Event {
 	case "application_uninstalled":
-		event := h.eventService.ToEvent(ctx, req.LCOrganizationID, common.EventActionDPSWebhookApplicationUninstalled, common.EventTypeInfo, req)
+		event := h.eventService.ToEvent(ctx, req.LCOrganizationID, events.EventActionDPSWebhookApplicationUninstalled, events.EventTypeInfo, req)
 		charges, err := h.billing.GetChargesByOrganizationID(ctx, req.LCOrganizationID)
 		if err != nil {
-			event.Type = common.EventTypeError
-			return h.eventService.ToError(ctx, common.ToErrorParams{
+			event.Type = events.EventTypeError
+			return h.eventService.ToError(ctx, events.ToErrorParams{
 				Event: event,
 				Err:   err,
 			})
@@ -60,8 +60,8 @@ func (h *Handler) HandleDPSWebhook(ctx context.Context, req DPSWebhookRequest) e
 
 		for _, charge := range charges {
 			if err := h.billing.DeleteSubscriptionWithCharge(ctx, req.LCOrganizationID, charge.ID); err != nil {
-				event.Type = common.EventTypeError
-				return h.eventService.ToError(ctx, common.ToErrorParams{
+				event.Type = events.EventTypeError
+				return h.eventService.ToError(ctx, events.ToErrorParams{
 					Event: event,
 					Err:   fmt.Errorf("delete subscription with charge: %w", err),
 				})
@@ -69,10 +69,10 @@ func (h *Handler) HandleDPSWebhook(ctx context.Context, req DPSWebhookRequest) e
 		}
 		_ = h.eventService.CreateEvent(ctx, event)
 	case "payment_collected", "payment_activated":
-		event := h.eventService.ToEvent(ctx, req.LCOrganizationID, common.EventActionDPSWebhookPayment, common.EventTypeInfo, req)
+		event := h.eventService.ToEvent(ctx, req.LCOrganizationID, events.EventActionDPSWebhookPayment, events.EventTypeInfo, req)
 		if err := h.billing.SyncRecurrentCharge(ctx, req.LCOrganizationID, chargeID); err != nil {
-			event.Type = common.EventTypeError
-			return h.eventService.ToError(ctx, common.ToErrorParams{
+			event.Type = events.EventTypeError
+			return h.eventService.ToError(ctx, events.ToErrorParams{
 				Event: event,
 				Err:   fmt.Errorf("sync recurrent charge: %w", err),
 			})
@@ -80,27 +80,27 @@ func (h *Handler) HandleDPSWebhook(ctx context.Context, req DPSWebhookRequest) e
 
 		planName, ok := ctx.Value(BillingSubscriptionPlanNameCtxKey{}).(string)
 		if !ok || planName == "" {
-			event.Type = common.EventTypeError
-			return h.eventService.ToError(ctx, common.ToErrorParams{
+			event.Type = events.EventTypeError
+			return h.eventService.ToError(ctx, events.ToErrorParams{
 				Event: event,
 				Err:   fmt.Errorf("no plan name found in context"),
 			})
 		}
 
 		if err := h.billing.CreateSubscription(ctx, req.LCOrganizationID, chargeID, planName); err != nil {
-			event.Type = common.EventTypeError
-			return h.eventService.ToError(ctx, common.ToErrorParams{
+			event.Type = events.EventTypeError
+			return h.eventService.ToError(ctx, events.ToErrorParams{
 				Event: event,
 				Err:   fmt.Errorf("create subscription: %w", err),
 			})
 		}
 		_ = h.eventService.CreateEvent(ctx, event)
 	case "payment_cancelled":
-		event := h.eventService.ToEvent(ctx, req.LCOrganizationID, common.EventActionDPSWebhookPayment, common.EventTypeInfo, req)
+		event := h.eventService.ToEvent(ctx, req.LCOrganizationID, events.EventActionDPSWebhookPayment, events.EventTypeInfo, req)
 
 		if err := h.billing.DeleteSubscriptionWithCharge(ctx, req.LCOrganizationID, chargeID); err != nil {
-			event.Type = common.EventTypeError
-			return h.eventService.ToError(ctx, common.ToErrorParams{
+			event.Type = events.EventTypeError
+			return h.eventService.ToError(ctx, events.ToErrorParams{
 				Event: event,
 				Err:   fmt.Errorf("delete subscription with charge: %w", err),
 			})

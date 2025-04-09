@@ -11,9 +11,9 @@ import (
 	lcMySQL "github.com/livechat/go-mysql"
 	"github.com/rcrowley/go-metrics"
 
+	"github.com/livechat-integrations/go-billing-sdk/internal/livechat"
 	"github.com/livechat-integrations/go-billing-sdk/pkg/billing"
-	"github.com/livechat-integrations/go-billing-sdk/pkg/common"
-	"github.com/livechat-integrations/go-billing-sdk/pkg/common/livechat"
+	"github.com/livechat-integrations/go-billing-sdk/pkg/events"
 )
 
 type Clock interface {
@@ -196,7 +196,7 @@ func (sql *SQLClient) GetChargesByOrganizationID(ctx context.Context, lcID strin
 	return charges, nil
 }
 
-func (sql *SQLClient) CreateEvent(ctx context.Context, e common.Event) error {
+func (sql *SQLClient) CreateEvent(ctx context.Context, e events.Event) error {
 	rawPayload, err := json.Marshal(e.Payload)
 	if err != nil {
 		return err

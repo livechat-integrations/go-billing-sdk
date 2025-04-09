@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/livechat-integrations/go-billing-sdk/pkg/common"
-	"github.com/livechat-integrations/go-billing-sdk/pkg/common/livechat"
+	"github.com/livechat-integrations/go-billing-sdk/internal/livechat"
+	"github.com/livechat-integrations/go-billing-sdk/pkg/events"
 )
 
 type (
@@ -26,19 +26,19 @@ type BillingInterface interface {
 }
 
 type Service struct {
-	idProvider   common.IdProviderInterface
+	idProvider   events.IdProviderInterface
 	billingAPI   livechat.ApiInterface
-	eventService common.EventService
+	eventService events.EventService
 	storage      Storage
 	plans        Plans
 	returnURL    string
 	masterOrgID  string
 }
 
-func NewService(eventService common.EventService, idProvider common.IdProviderInterface, httpClient *http.Client, livechatEnvironment string, tokenFn livechat.TokenFn, storage Storage, plans Plans, returnUrl, masterOrgID string) *Service {
+func NewService(eventService events.EventService, idProvider events.IdProviderInterface, httpClient *http.Client, livechatEnvironment string, tokenFn livechat.TokenFn, storage Storage, plans Plans, returnUrl, masterOrgID string) *Service {
 	a := &livechat.Api{
 		HttpClient: httpClient,
-		ApiBaseURL: common.EnvURL(livechat.BillingAPIBaseURL, livechatEnvironment),
+		ApiBaseURL: events.EnvURL(livechat.BillingAPIBaseURL, livechatEnvironment),
 		TokenFn:    tokenFn,
 	}
 
@@ -54,7 +54,7 @@ func NewService(eventService common.EventService, idProvider common.IdProviderIn
 }
 
 func (s *Service) CreateRecurrentCharge(ctx context.Context, name string, price int, lcOrganizationID string) (string, error) {
-	event := s.eventService.ToEvent(ctx, lcOrganizationID, common.EventActionCreateCharge, common.EventTypeInfo, map[string]interface{}{"name": name, "price": price})
+	event := s.eventService.ToEvent(ctx, lcOrganizationID, events.EventActionCreateCharge, events.EventTypeInfo, map[string]interface{}{"name": name, "price": price})
 	lcCharge, err := s.billingAPI.CreateRecurrentCharge(ctx, livechat.CreateRecurrentChargeParams{
 		Name:      name,
 		ReturnURL: s.returnURL,
@@ -65,16 +65,16 @@ func (s *Service) CreateRecurrentCharge(ctx context.Context, name string, price 
 	})
 
 	if err != nil {
-		event.Type = common.EventTypeError
-		return "", s.eventService.ToError(ctx, common.ToErrorParams{
+		event.Type = events.EventTypeError
+		return "", s.eventService.ToError(ctx, events.ToErrorParams{
 			Event: event,
 			Err:   fmt.Errorf("failed to create recurrent charge via lc: %w", err),
 		})
 	}
 
 	if lcCharge == nil {
-		event.Type = common.EventTypeError
-		return "", s.eventService.ToError(ctx, common.ToErrorParams{
+		event.Type = events.EventTypeError
+		return "", s.eventService.ToError(ctx, events.ToErrorParams{
 			Event: event,
 			Err:   fmt.Errorf("failed to create recurrent charge via lc: charge is nil"),
 		})
@@ -88,8 +88,8 @@ func (s *Service) CreateRecurrentCharge(ctx context.Context, name string, price 
 		Payload:          rawCharge,
 	}
 	if err = s.storage.CreateCharge(ctx, charge); err != nil {
-		event.Type = common.EventTypeError
-		return "", s.eventService.ToError(ctx, common.ToErrorParams{
+		event.Type = events.EventTypeError
+		return "", s.eventService.ToError(ctx, events.ToErrorParams{
 			Event: event,
 			Err:   fmt.Errorf("failed to create charge in database: %w", err),
 		})
@@ -102,19 +102,19 @@ func (s *Service) CreateRecurrentCharge(ctx context.Context, name string, price 
 }
 
 func (s *Service) SyncRecurrentCharge(ctx context.Context, lcOrganizationID string, id string) error {
-	event := s.eventService.ToEvent(ctx, lcOrganizationID, common.EventActionSyncRecurrentCharge, common.EventTypeInfo, map[string]interface{}{"id": id})
+	event := s.eventService.ToEvent(ctx, lcOrganizationID, events.EventActionSyncRecurrentCharge, events.EventTypeInfo, map[string]interface{}{"id": id})
 	charge, err := s.storage.GetCharge(ctx, id)
 	if err != nil {
-		event.Type = common.EventTypeError
-		return s.eventService.ToError(ctx, common.ToErrorParams{
+		event.Type = events.EventTypeError
+		return s.eventService.ToError(ctx, events.ToErrorParams{
 			Event: event,
 			Err:   fmt.Errorf("failed to get charge: %w", err),
 		})
 	}
 
 	if charge == nil {
-		event.Type = common.EventTypeError
-		return s.eventService.ToError(ctx, common.ToErrorParams{
+		event.Type = events.EventTypeError
+		return s.eventService.ToError(ctx, events.ToErrorParams{
 			Event: event,
 			Err:   fmt.Errorf("charge not found"),
 		})
@@ -122,16 +122,16 @@ func (s *Service) SyncRecurrentCharge(ctx context.Context, lcOrganizationID stri
 
 	lcCharge, err := s.billingAPI.GetRecurrentCharge(ctx, id)
 	if err != nil {
-		event.Type = common.EventTypeError
-		return s.eventService.ToError(ctx, common.ToErrorParams{
+		event.Type = events.EventTypeError
+		return s.eventService.ToError(ctx, events.ToErrorParams{
 			Event: event,
 			Err:   fmt.Errorf("failed to get recurrent charge: %w", err),
 		})
 	}
 
 	if err = s.storage.UpdateChargePayload(ctx, id, lcCharge.BaseCharge); err != nil {
-		event.Type = common.EventTypeError
-		return s.eventService.ToError(ctx, common.ToErrorParams{
+		event.Type = events.EventTypeError
+		return s.eventService.ToError(ctx, events.ToErrorParams{
 			Event: event,
 			Err:   fmt.Errorf("failed to update charge payload: %w", err),
 		})
@@ -173,11 +173,11 @@ func (s *Service) GetActiveSubscriptionsByOrganizationID(ctx context.Context, lc
 }
 
 func (s *Service) CreateSubscription(ctx context.Context, lcOrganizationID string, chargeID string, planName string) error {
-	event := s.eventService.ToEvent(ctx, lcOrganizationID, common.EventActionCreateSubscription, common.EventTypeInfo, map[string]interface{}{"planName": planName, "chargeID": chargeID})
+	event := s.eventService.ToEvent(ctx, lcOrganizationID, events.EventActionCreateSubscription, events.EventTypeInfo, map[string]interface{}{"planName": planName, "chargeID": chargeID})
 	plan := s.plans.GetPlan(planName)
 	if plan == nil {
-		event.Type = common.EventTypeError
-		return s.eventService.ToError(ctx, common.ToErrorParams{
+		event.Type = events.EventTypeError
+		return s.eventService.ToError(ctx, events.ToErrorParams{
 			Event: event,
 			Err:   fmt.Errorf("plan not found"),
 		})
@@ -185,16 +185,16 @@ func (s *Service) CreateSubscription(ctx context.Context, lcOrganizationID strin
 
 	charge, err := s.storage.GetCharge(ctx, chargeID)
 	if err != nil {
-		event.Type = common.EventTypeError
-		return s.eventService.ToError(ctx, common.ToErrorParams{
+		event.Type = events.EventTypeError
+		return s.eventService.ToError(ctx, events.ToErrorParams{
 			Event: event,
 			Err:   fmt.Errorf("failed to get charge by organization id: %w", err),
 		})
 	}
 
 	if charge == nil {
-		event.Type = common.EventTypeError
-		return s.eventService.ToError(ctx, common.ToErrorParams{
+		event.Type = events.EventTypeError
+		return s.eventService.ToError(ctx, events.ToErrorParams{
 			Event: event,
 			Err:   fmt.Errorf("charge not found"),
 		})
@@ -206,8 +206,8 @@ func (s *Service) CreateSubscription(ctx context.Context, lcOrganizationID strin
 		LCOrganizationID: lcOrganizationID,
 		PlanName:         planName,
 	}); err != nil {
-		event.Type = common.EventTypeError
-		return s.eventService.ToError(ctx, common.ToErrorParams{
+		event.Type = events.EventTypeError
+		return s.eventService.ToError(ctx, events.ToErrorParams{
 			Event: event,
 			Err:   fmt.Errorf("failed to create subscription in database: %w", err),
 		})
@@ -220,18 +220,18 @@ func (s *Service) CreateSubscription(ctx context.Context, lcOrganizationID strin
 }
 
 func (s *Service) DeleteSubscriptionWithCharge(ctx context.Context, lcOrganizationID string, chargeID string) error {
-	event := s.eventService.ToEvent(ctx, lcOrganizationID, common.EventActionDeleteSubscriptionWithCharge, common.EventTypeInfo, map[string]interface{}{"chargeID": chargeID})
+	event := s.eventService.ToEvent(ctx, lcOrganizationID, events.EventActionDeleteSubscriptionWithCharge, events.EventTypeInfo, map[string]interface{}{"chargeID": chargeID})
 	if err := s.storage.DeleteSubscriptionByChargeID(ctx, lcOrganizationID, chargeID); err != nil {
-		event.Type = common.EventTypeError
-		return s.eventService.ToError(ctx, common.ToErrorParams{
+		event.Type = events.EventTypeError
+		return s.eventService.ToError(ctx, events.ToErrorParams{
 			Event: event,
 			Err:   fmt.Errorf("failed to delete subscription: %w", err),
 		})
 	}
 
 	if err := s.storage.DeleteCharge(ctx, chargeID); err != nil {
-		event.Type = common.EventTypeError
-		return s.eventService.ToError(ctx, common.ToErrorParams{
+		event.Type = events.EventTypeError
+		return s.eventService.ToError(ctx, events.ToErrorParams{
 			Event: event,
 			Err:   fmt.Errorf("failed to delete charge: %w", err),
 		})
