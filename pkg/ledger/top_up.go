@@ -16,12 +16,14 @@ type TopUpStatus string
 
 const (
 	TopUpStatusPending    TopUpStatus = "pending"
+	TopUpStatusSuccess    TopUpStatus = "success"
 	TopUpStatusActive     TopUpStatus = "active"
 	TopUpStatusProcessing TopUpStatus = "processing"
 	TopUpStatusCancelled  TopUpStatus = "cancelled"
 	TopUpStatusFailed     TopUpStatus = "failed"
 	TopUpStatusDeclined   TopUpStatus = "declined"
 	TopUpStatusFrozen     TopUpStatus = "frozen"
+	TopUpStatusPastDue    TopUpStatus = "past_due"
 )
 
 type TopUp struct {

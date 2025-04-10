@@ -35,7 +35,7 @@ type BaseCharge struct {
 	CreatedAt         *time.Time `json:"created_at"`
 }
 
-type BaseChargeV2 struct {
+type BaseChargeV3 struct {
 	ID                  string     `json:"id"`
 	BuyerLicenseID      int        `json:"buyer_license_id"`
 	BuyerEntityID       string     `json:"buyer_entity_id"`
@@ -59,7 +59,7 @@ type BaseChargeV2 struct {
 }
 
 type DirectCharge struct {
-	BaseChargeV2
+	BaseChargeV3
 	Quantity int `json:"quantity"`
 }
 
@@ -73,8 +73,8 @@ type RecurrentCharge struct {
 	NextChargeAt    *time.Time `json:"next_charge_at"`
 }
 
-type RecurrentChargeV2 struct {
-	BaseChargeV2
+type RecurrentChargeV3 struct {
+	BaseChargeV3
 	TrialDays       int        `json:"trial_days"`
 	Months          int        `json:"months"`
 	TrialEndsAt     *time.Time `json:"trial_ends_at"`
@@ -87,10 +87,10 @@ type ApiInterface interface {
 	CreateDirectCharge(ctx context.Context, params CreateDirectChargeParams) (*DirectCharge, error)
 	GetDirectCharge(ctx context.Context, id string) (*DirectCharge, error)
 	CreateRecurrentCharge(ctx context.Context, params CreateRecurrentChargeParams) (*RecurrentCharge, error)
-	CreateRecurrentChargeV2(ctx context.Context, params CreateRecurrentChargeV2Params) (*RecurrentChargeV2, error)
+	CreateRecurrentChargeV3(ctx context.Context, params CreateRecurrentChargeV3Params) (*RecurrentChargeV3, error)
 	GetRecurrentCharge(ctx context.Context, id string) (*RecurrentCharge, error)
-	GetRecurrentChargeV2(ctx context.Context, id string) (*RecurrentChargeV2, error)
-	CancelRecurrentCharge(ctx context.Context, id string) (*RecurrentChargeV2, error)
+	GetRecurrentChargeV3(ctx context.Context, id string) (*RecurrentChargeV3, error)
+	CancelRecurrentChargeV3(ctx context.Context, id string) (*RecurrentChargeV3, error)
 }
 
 type httpCaller interface {
@@ -184,7 +184,7 @@ func (a *Api) CreateRecurrentCharge(ctx context.Context, params CreateRecurrentC
 	return asRecurrentCharge(resp)
 }
 
-type CreateRecurrentChargeV2Params struct {
+type CreateRecurrentChargeV3Params struct {
 	Name              string
 	ReturnURL         string
 	Price             float32
@@ -194,7 +194,7 @@ type CreateRecurrentChargeV2Params struct {
 	CommissionPercent *int
 }
 
-func (a *Api) CreateRecurrentChargeV2(ctx context.Context, params CreateRecurrentChargeV2Params) (*RecurrentChargeV2, error) {
+func (a *Api) CreateRecurrentChargeV3(ctx context.Context, params CreateRecurrentChargeV3Params) (*RecurrentChargeV3, error) {
 	type payload struct {
 		Name              string  `json:"name"`
 		Price             float32 `json:"price"`
@@ -204,7 +204,7 @@ func (a *Api) CreateRecurrentChargeV2(ctx context.Context, params CreateRecurren
 		Months            int     `json:"months,omitempty"`
 		CommissionPercent *int    `json:"commission_percent,omitempty"`
 	}
-	resp, err := a.call(ctx, "POST", "/v2/recurrent_charge/livechat", payload{
+	resp, err := a.call(ctx, "POST", "/v3/recurrent_charge/livechat", payload{
 		Name:              params.Name,
 		Price:             params.Price,
 		ReturnURL:         params.ReturnURL,
@@ -217,7 +217,7 @@ func (a *Api) CreateRecurrentChargeV2(ctx context.Context, params CreateRecurren
 		return nil, err
 	}
 
-	return asRecurrentChargeV2(resp)
+	return asRecurrentChargeV3(resp)
 }
 
 func (a *Api) GetRecurrentCharge(ctx context.Context, id string) (*RecurrentCharge, error) {
@@ -229,22 +229,22 @@ func (a *Api) GetRecurrentCharge(ctx context.Context, id string) (*RecurrentChar
 	return asRecurrentCharge(resp)
 }
 
-func (a *Api) GetRecurrentChargeV2(ctx context.Context, id string) (*RecurrentChargeV2, error) {
-	resp, err := a.call(ctx, "GET", "/v2/recurrent_charge/livechat/"+id, nil)
+func (a *Api) GetRecurrentChargeV3(ctx context.Context, id string) (*RecurrentChargeV3, error) {
+	resp, err := a.call(ctx, "GET", "/v3/recurrent_charge/livechat/"+id, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	return asRecurrentChargeV2(resp)
+	return asRecurrentChargeV3(resp)
 }
 
-func (a *Api) CancelRecurrentCharge(ctx context.Context, id string) (*RecurrentChargeV2, error) {
+func (a *Api) CancelRecurrentChargeV3(ctx context.Context, id string) (*RecurrentChargeV3, error) {
 	resp, err := a.call(ctx, "PUT", fmt.Sprintf("/v2/recurrent_charge/livechat/%s/cancel", id), nil)
 	if err != nil {
 		return nil, err
 	}
 
-	return asRecurrentChargeV2(resp)
+	return asRecurrentChargeV3(resp)
 }
 
 func asDirectCharge(body []byte) (*DirectCharge, error) {
@@ -265,8 +265,8 @@ func asRecurrentCharge(body []byte) (*RecurrentCharge, error) {
 	return &rc, nil
 }
 
-func asRecurrentChargeV2(body []byte) (*RecurrentChargeV2, error) {
-	var rc RecurrentChargeV2
+func asRecurrentChargeV3(body []byte) (*RecurrentChargeV3, error) {
+	var rc RecurrentChargeV3
 	if err := json.Unmarshal(body, &rc); err != nil {
 		return nil, err
 	}

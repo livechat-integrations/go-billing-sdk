@@ -56,14 +56,14 @@ func TestAPI_CreateRecurrentCharge(t *testing.T) {
 	})
 }
 
-func TestAPI_CreateRecurrentChargeV2(t *testing.T) {
+func TestAPI_CreateRecurrentChargeV3(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		hm.On("Do", mock.Anything).Return(&http.Response{
 			StatusCode: 201,
 			Body:       io.NopCloser(strings.NewReader(`{"id":"1","price":2000}`)),
 		}, nil).Once()
 
-		charge, err := a.CreateRecurrentChargeV2(context.Background(), CreateRecurrentChargeV2Params{
+		charge, err := a.CreateRecurrentChargeV3(context.Background(), CreateRecurrentChargeV3Params{
 			Price: float32(20.000),
 		})
 		assert.NoError(t, err)
@@ -76,7 +76,7 @@ func TestAPI_CreateRecurrentChargeV2(t *testing.T) {
 			Body:       io.NopCloser(strings.NewReader(``)),
 		}, nil).Once()
 
-		charge, err := a.CreateRecurrentChargeV2(context.Background(), CreateRecurrentChargeV2Params{})
+		charge, err := a.CreateRecurrentChargeV3(context.Background(), CreateRecurrentChargeV3Params{})
 		assert.Error(t, err)
 		assert.Nil(t, charge)
 	})

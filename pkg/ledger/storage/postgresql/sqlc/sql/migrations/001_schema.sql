@@ -1,18 +1,16 @@
-CREATE TABLE IF NOT EXISTS ledger_charges
+CREATE TABLE IF NOT EXISTS ledger_ledger
 (
-    id                 varchar(36) UNIQUE PRIMARY KEY,
+    id                 varchar(255) UNIQUE PRIMARY KEY,
     amount             numeric(9,3) NOT NULL,
     lc_organization_id varchar(36) NOT NULL,
-    status             varchar(255) NOT NULL,
-    created_at         TIMESTAMPTZ  NOT NULL DEFAULT now(),
-    updated_at         TIMESTAMPTZ
+    payload            jsonb,
+    created_at         TIMESTAMPTZ  NOT NULL DEFAULT now()
     );
-CREATE INDEX ON ledger_charges (status);
-CREATE INDEX ON ledger_charges (lc_organization_id);
+CREATE INDEX ON ledger_ledger (lc_organization_id);
 
 CREATE TABLE IF NOT EXISTS ledger_top_ups
 (
-    id                 varchar(36) NOT NULL,
+    id                 varchar(36) UNIQUE PRIMARY KEY,
     amount             numeric(9,3) NOT NULL,
     lc_organization_id varchar(36) NOT NULL,
     type               varchar(255) NOT NULL,
@@ -22,11 +20,8 @@ CREATE TABLE IF NOT EXISTS ledger_top_ups
     current_topped_up_at TIMESTAMPTZ DEFAULT NULL,
     next_top_up_at     TIMESTAMPTZ DEFAULT NULL,
     created_at         TIMESTAMPTZ  NOT NULL DEFAULT now(),
-    updated_at         TIMESTAMPTZ,
-    unique_at TIMESTAMPTZ NOT NULL
+    updated_at         TIMESTAMPTZ
     );
-ALTER TABLE ledger_top_ups
-    ADD CONSTRAINT ledger_top_ups_pkey UNIQUE (id, unique_at);
 CREATE INDEX ON ledger_top_ups (status);
 CREATE INDEX ON ledger_top_ups (lc_organization_id);
 

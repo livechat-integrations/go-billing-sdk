@@ -17,13 +17,14 @@ const (
 type EventAction string
 
 const (
+	EventActionCreateCharge                     EventAction = "create_charge"
 	EventActionDeleteSubscriptionWithCharge     EventAction = "delete_subscription_with_charge"
 	EventActionSyncRecurrentCharge              EventAction = "sync_recurrent_charge"
 	EventActionCreateSubscription               EventAction = "create_subscription"
-	EventActionCreateCharge                     EventAction = "create_charge"
+	EventActionCreateOperation                  EventAction = "create_operation"
+	EventActionTopUp                            EventAction = "top_up"
 	EventActionCreateTopUp                      EventAction = "create_top_up"
 	EventActionCancelTopUp                      EventAction = "cancel_top_up"
-	EventActionCancelCharge                     EventAction = "cancel_charge_event"
 	EventActionForceCancelCharge                EventAction = "force_cancel_charge_event"
 	EventActionDPSWebhookApplicationUninstalled EventAction = "dps_webhook_event_application_uninstalled"
 	EventActionDPSWebhookPayment                EventAction = "dps_webhook_event_payment"

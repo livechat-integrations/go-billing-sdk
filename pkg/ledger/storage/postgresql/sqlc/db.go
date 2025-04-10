@@ -6,19 +6,18 @@ import (
 	"github.com/livechat-integrations/go-billing-sdk/pkg/ledger"
 )
 
-func (c *LedgerCharge) ToLedgerCharge() (*ledger.Charge, error) {
-	v, err := c.Amount.Float64Value()
+func (o *LedgerLedger) ToLedgerOperation() (*ledger.Operation, error) {
+	v, err := o.Amount.Float64Value()
 	if err != nil {
 		return nil, err
 	}
 
-	return &ledger.Charge{
-		ID:               c.ID,
-		LCOrganizationID: c.LcOrganizationID,
+	return &ledger.Operation{
+		ID:               o.ID,
+		LCOrganizationID: o.LcOrganizationID,
 		Amount:           float32(v.Float64),
-		Status:           ledger.ChargeStatus(c.Status),
-		CreatedAt:        c.CreatedAt.Time,
-		UpdatedAt:        c.UpdatedAt.Time,
+		Payload:          o.Payload,
+		CreatedAt:        o.CreatedAt.Time,
 	}, nil
 }
 
