@@ -103,6 +103,48 @@ func (q *Queries) GetOrganizationBalance(ctx context.Context, lcOrganizationID s
 	return amount, err
 }
 
+const getRecurrentTopUpsWhereStatusNotIn = `-- name: GetRecurrentTopUpsWhereStatusNotIn :many
+SELECT id, amount, lc_organization_id, type, status, lc_charge, confirmation_url, current_topped_up_at, next_top_up_at, created_at, updated_at
+FROM ledger_top_ups
+WHERE type = 'recurrent'
+  AND NOT (status = ANY($1::text[]))
+  AND ((next_top_up_at IS NOT NULL AND next_top_up_at <= NOW() AND status = 'active') || status != 'active')
+ORDER BY created_at ASC
+    LIMIT 200
+`
+
+func (q *Queries) GetRecurrentTopUpsWhereStatusNotIn(ctx context.Context, dollar_1 []string) ([]LedgerTopUp, error) {
+	rows, err := q.db.Query(ctx, getRecurrentTopUpsWhereStatusNotIn, dollar_1)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LedgerTopUp
+	for rows.Next() {
+		var i LedgerTopUp
+		if err := rows.Scan(
+			&i.ID,
+			&i.Amount,
+			&i.LcOrganizationID,
+			&i.Type,
+			&i.Status,
+			&i.LcCharge,
+			&i.ConfirmationUrl,
+			&i.CurrentToppedUpAt,
+			&i.NextTopUpAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getTopUpByIDAndOrganizationID = `-- name: GetTopUpByIDAndOrganizationID :one
 SELECT id, amount, lc_organization_id, type, status, lc_charge, confirmation_url, current_topped_up_at, next_top_up_at, created_at, updated_at
 FROM ledger_top_ups
@@ -254,9 +296,9 @@ const getTopUpsByTypeWhereStatusNotIn = `-- name: GetTopUpsByTypeWhereStatusNotI
 SELECT id, amount, lc_organization_id, type, status, lc_charge, confirmation_url, current_topped_up_at, next_top_up_at, created_at, updated_at
 FROM ledger_top_ups
 WHERE type = $1
-  AND status != ANY($2::string[])
+  AND NOT (status = ANY($2::text[]))
 ORDER BY created_at ASC
-LIMIT 200
+    LIMIT 200
 `
 
 type GetTopUpsByTypeWhereStatusNotInParams struct {

@@ -450,6 +450,65 @@ func TestPostgresqlPGX_GetTopUpsByTypeWhereStatusNotIn(t *testing.T) {
 	})
 }
 
+func TestPostgresqlPGX_GetRecurrentTopUpsWhereStatusNotIn(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
+		amount := float32(3.14)
+		status := ledger.TopUpStatusActive
+		topUpType := ledger.TopUpTypeRecurrent
+		v := pgtype.Numeric{}
+		_ = v.Scan(fmt.Sprintf("%f", amount))
+		url := "some_url"
+		someDate, _ := time.Parse(time.DateTime, "2025-03-14 12:31:56")
+		someDate2, _ := time.Parse(time.DateTime, "2025-06-14 12:31:56")
+		dbMock.ExpectQuery("GetRecurrentTopUpsWhereStatusNotIn :many SELECT id, amount, lc_organization_id, type, status, lc_charge, confirmation_url, current_topped_up_at, next_top_up_at, created_at, updated_at").
+			WithArgs([]string{string(ledger.TopUpStatusCancelled), string(ledger.TopUpStatusFailed)}).
+			WillReturnRows(
+				pgxmock.NewRows([]string{"id", "amount", "lc_organization_id", "type", "status", "lc_charge", "confirmation_url", "current_topped_up_at", "next_top_up_at", "created_at", "updated_at"}).
+					AddRow("1", v, "lcOrganizationID", string(topUpType), string(status), []byte("{}"), url, pgtype.Timestamptz{Time: someDate, Valid: true}, pgtype.Timestamptz{Time: someDate2, Valid: true}, nil, nil)).Times(1)
+
+		topUps, err := s.GetRecurrentTopUpsWhereStatusNotIn(context.Background(), []ledger.TopUpStatus{ledger.TopUpStatusCancelled, ledger.TopUpStatusFailed})
+		assert.NoError(t, err)
+		assert.Len(t, topUps, 1)
+		assert.Equal(t, "1", topUps[0].ID)
+		assert.Equal(t, status, topUps[0].Status)
+		assert.Equal(t, amount, topUps[0].Amount)
+		assert.Equal(t, topUpType, topUps[0].Type)
+		assert.Equal(t, "lcOrganizationID", topUps[0].LCOrganizationID)
+		assert.Equal(t, json.RawMessage("{}"), topUps[0].LCCharge)
+		assert.Equal(t, url, topUps[0].ConfirmationUrl)
+		assert.Equal(t, someDate, *topUps[0].CurrentToppedUpAt)
+		assert.Equal(t, someDate2, *topUps[0].NextTopUpAt)
+
+		assert.NoError(t, dbMock.ExpectationsWereMet())
+	})
+
+	t.Run("no rows", func(t *testing.T) {
+		amount := float32(3.14)
+		v := pgtype.Numeric{}
+		_ = v.Scan(fmt.Sprintf("%f", amount))
+		dbMock.ExpectQuery("GetRecurrentTopUpsWhereStatusNotIn :many SELECT id, amount, lc_organization_id, type, status, lc_charge, confirmation_url, current_topped_up_at, next_top_up_at, created_at, updated_at").
+			WithArgs([]string{string(ledger.TopUpStatusCancelled), string(ledger.TopUpStatusFailed)}).Times(1).
+			WillReturnError(pgx.ErrNoRows)
+		topUps, err := s.GetRecurrentTopUpsWhereStatusNotIn(context.Background(), []ledger.TopUpStatus{ledger.TopUpStatusCancelled, ledger.TopUpStatusFailed})
+		assert.NoError(t, err)
+		assert.Len(t, topUps, 0)
+		assert.NoError(t, dbMock.ExpectationsWereMet())
+	})
+
+	t.Run("error", func(t *testing.T) {
+		amount := float32(3.14)
+		v := pgtype.Numeric{}
+		_ = v.Scan(fmt.Sprintf("%f", amount))
+		dbMock.ExpectQuery("GetRecurrentTopUpsWhereStatusNotIn :many SELECT id, amount, lc_organization_id, type, status, lc_charge, confirmation_url, current_topped_up_at, next_top_up_at, created_at, updated_at").
+			WithArgs([]string{string(ledger.TopUpStatusCancelled), string(ledger.TopUpStatusFailed)}).Times(1).
+			WillReturnError(assert.AnError)
+		topUps, err := s.GetRecurrentTopUpsWhereStatusNotIn(context.Background(), []ledger.TopUpStatus{ledger.TopUpStatusCancelled, ledger.TopUpStatusFailed})
+		assert.ErrorIs(t, err, assert.AnError)
+		assert.Len(t, topUps, 0)
+		assert.NoError(t, dbMock.ExpectationsWereMet())
+	})
+}
+
 func TestPostgresqlSQLC_GetTopUpsByOrganizationIDAndStatus(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		amount := float32(3.14)

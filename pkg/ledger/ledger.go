@@ -25,7 +25,7 @@ type LedgerInterface interface {
 	GetTopUpsByOrganizationIDAndStatus(ctx context.Context, organizationID string, status TopUpStatus) ([]TopUp, error)
 	GetTopUpByIDAndOrganizationID(ctx context.Context, organizationID string, ID string) (*TopUp, error)
 	SyncTopUp(ctx context.Context, topUp TopUp) (*TopUp, error)
-	SyncOrCancelTopUpRequests(ctx context.Context, organizationID string) error
+	SyncOrCancelTopUpRequests(ctx context.Context) error
 }
 
 var (
@@ -447,13 +447,10 @@ func (s *Service) SyncOrCancelTopUpRequests(ctx context.Context) error {
 		return err
 	}
 
-	topUps, err = s.storage.GetTopUpsByTypeWhereStatusNotIn(ctx, GetTopUpsByTypeWhereStatusNotInParams{
-		Type: TopUpTypeRecurrent,
-		Statuses: []TopUpStatus{
-			TopUpStatusCancelled,
-			TopUpStatusFailed,
-			TopUpStatusDeclined,
-		},
+	topUps, err = s.storage.GetRecurrentTopUpsWhereStatusNotIn(ctx, []TopUpStatus{
+		TopUpStatusCancelled,
+		TopUpStatusFailed,
+		TopUpStatusDeclined,
 	})
 	if err != nil {
 		return err
@@ -469,7 +466,9 @@ func (s *Service) SyncOrCancelTopUpRequests(ctx context.Context) error {
 
 func (s *Service) syncOrCancelDirectTopUpRequests(ctx context.Context, topUps []TopUp) error {
 	for _, topUp := range topUps {
-		tu, err := s.SyncTopUp(ctx, topUp)
+		organizationCtx := context.WithValue(ctx, LedgerOrganizationIDCtxKey{}, topUp.LCOrganizationID)
+		organizationCtx = context.WithValue(organizationCtx, LedgerEventIDCtxKey{}, s.idProvider.GenerateId())
+		tu, err := s.SyncTopUp(organizationCtx, topUp)
 		if err != nil {
 			return err
 		}
@@ -478,7 +477,7 @@ func (s *Service) syncOrCancelDirectTopUpRequests(ctx context.Context, topUps []
 		}
 		monthAgo := time.Now().AddDate(0, -1, 0)
 		if tu.Type == TopUpTypeDirect && monthAgo.After(tu.CreatedAt) {
-			err = s.ForceCancelTopUp(ctx, *tu)
+			err = s.ForceCancelTopUp(organizationCtx, *tu)
 			if err != nil {
 				return err
 			}
@@ -490,17 +489,19 @@ func (s *Service) syncOrCancelDirectTopUpRequests(ctx context.Context, topUps []
 
 func (s *Service) syncOrCancelRecurrentTopUpRequests(ctx context.Context, topUps []TopUp) error {
 	for _, topUp := range topUps {
-		tu, err := s.SyncTopUp(ctx, topUp)
+		organizationCtx := context.WithValue(ctx, LedgerOrganizationIDCtxKey{}, topUp.LCOrganizationID)
+		organizationCtx = context.WithValue(organizationCtx, LedgerEventIDCtxKey{}, s.idProvider.GenerateId())
+		tu, err := s.SyncTopUp(organizationCtx, topUp)
 		if err != nil {
 			return err
 		}
-		if tu.Status == TopUpStatusActive || tu.Status == TopUpStatusCancelled || tu.Status == TopUpStatusFailed || tu.Status == TopUpStatusDeclined {
+		if tu.Status == TopUpStatusActive || tu.Status == TopUpStatusCancelled || tu.Status == TopUpStatusFailed || tu.Status == TopUpStatusFrozen || tu.Status == TopUpStatusDeclined {
 			continue
 		}
 
 		monthAgo := time.Now().AddDate(0, -1, 0)
 		if tu.Type == TopUpTypeRecurrent && tu.CurrentToppedUpAt != nil && monthAgo.After(*tu.CurrentToppedUpAt) {
-			err = s.ForceCancelTopUp(ctx, *tu)
+			err = s.ForceCancelTopUp(organizationCtx, *tu)
 			if err != nil {
 				return err
 			}

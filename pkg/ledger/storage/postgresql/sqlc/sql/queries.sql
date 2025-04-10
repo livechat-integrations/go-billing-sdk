@@ -25,9 +25,18 @@ ORDER BY created_at DESC;
 SELECT *
 FROM ledger_top_ups
 WHERE type = $1
-  AND status != ANY($2::string[])
+  AND NOT (status = ANY($2::text[]))
 ORDER BY created_at ASC
-LIMIT 200;
+    LIMIT 200;
+
+-- name: GetRecurrentTopUpsWhereStatusNotIn :many
+SELECT *
+FROM ledger_top_ups
+WHERE type = 'recurrent'
+  AND NOT (status = ANY($1::text[]))
+  AND ((next_top_up_at IS NOT NULL AND next_top_up_at <= NOW() AND status = 'active') || status != 'active')
+ORDER BY created_at ASC
+    LIMIT 200;
 
 -- name: GetLedgerOperationsByOrganizationID :many
 SELECT *

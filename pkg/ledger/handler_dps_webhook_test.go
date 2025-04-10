@@ -65,7 +65,7 @@ func (l *ledgerMock) TopUp(ctx context.Context, topUp TopUp) (string, error) {
 	return args.String(0), args.Error(1)
 }
 
-func (l *ledgerMock) SyncOrCancelTopUpRequests(ctx context.Context, organizationID string) error {
+func (l *ledgerMock) SyncOrCancelTopUpRequests(ctx context.Context) error {
 	//TODO implement me
 	panic("implement me")
 }

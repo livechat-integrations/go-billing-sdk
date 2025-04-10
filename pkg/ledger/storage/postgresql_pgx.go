@@ -75,21 +75,14 @@ func (r *PostgresqlPGX) GetBalance(ctx context.Context, organizationID string) (
 
 func (r *PostgresqlPGX) GetTopUpsByOrganizationID(ctx context.Context, organizationID string) ([]ledger.TopUp, error) {
 	var ts []ledger.TopUp
-	rows, err := r.queries.GetTopUpsByOrganizationID(ctx, organizationID)
+	dbTopUps, err := r.queries.GetTopUpsByOrganizationID(ctx, organizationID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ts, nil
 		}
 		return nil, err
 	}
-	for _, row := range rows {
-		t, err := row.ToLedgerTopUp()
-		if err != nil {
-			return nil, err
-		}
-		ts = append(ts, *t)
-	}
-	return ts, nil
+	return ToTopUps(dbTopUps)
 }
 
 func (r *PostgresqlPGX) UpdateTopUpStatus(ctx context.Context, params ledger.UpdateTopUpStatusParams) error {
@@ -146,7 +139,7 @@ func (r *PostgresqlPGX) CreateEvent(ctx context.Context, e events.Event) error {
 }
 
 func (r *PostgresqlPGX) GetTopUpsByOrganizationIDAndStatus(ctx context.Context, organizationID string, status ledger.TopUpStatus) ([]ledger.TopUp, error) {
-	rts, err := r.queries.GetTopUpsByOrganizationIDAndStatus(ctx, sqlc.GetTopUpsByOrganizationIDAndStatusParams{
+	dbTopUps, err := r.queries.GetTopUpsByOrganizationIDAndStatus(ctx, sqlc.GetTopUpsByOrganizationIDAndStatusParams{
 		LcOrganizationID: organizationID,
 		Status:           string(status),
 	})
@@ -156,17 +149,7 @@ func (r *PostgresqlPGX) GetTopUpsByOrganizationIDAndStatus(ctx context.Context, 
 		}
 		return nil, err
 	}
-
-	var topUps []ledger.TopUp
-	for _, rt := range rts {
-		topUp, err := rt.ToLedgerTopUp()
-		if err != nil {
-			return nil, err
-		}
-		topUps = append(topUps, *topUp)
-	}
-
-	return topUps, nil
+	return ToTopUps(dbTopUps)
 }
 
 func (r *PostgresqlPGX) GetTopUpByIDAndOrganizationID(ctx context.Context, organizationID string, id string) (*ledger.TopUp, error) {
@@ -198,15 +181,22 @@ func (r *PostgresqlPGX) GetTopUpsByTypeWhereStatusNotIn(ctx context.Context, par
 		}
 		return nil, err
 	}
-	var topUps []ledger.TopUp
-	for _, rt := range dbTopUps {
-		topUp, err := rt.ToLedgerTopUp()
-		if err != nil {
-			return nil, err
-		}
-		topUps = append(topUps, *topUp)
+	return ToTopUps(dbTopUps)
+}
+
+func (r *PostgresqlPGX) GetRecurrentTopUpsWhereStatusNotIn(ctx context.Context, statuses []ledger.TopUpStatus) ([]ledger.TopUp, error) {
+	var stringStatuses []string
+	for _, s := range statuses {
+		stringStatuses = append(stringStatuses, string(s))
 	}
-	return topUps, nil
+	dbTopUps, err := r.queries.GetRecurrentTopUpsWhereStatusNotIn(ctx, stringStatuses)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return []ledger.TopUp{}, nil
+		}
+		return nil, err
+	}
+	return ToTopUps(dbTopUps)
 }
 
 func (r *PostgresqlPGX) UpsertTopUp(ctx context.Context, topUp ledger.TopUp) (*ledger.TopUp, error) {
@@ -253,4 +243,16 @@ func ToPGNumeric(n *float32) pgtype.Numeric {
 	_ = v.Scan(fmt.Sprintf("%f", *n))
 
 	return v
+}
+
+func ToTopUps(dbTopUps []sqlc.LedgerTopUp) ([]ledger.TopUp, error) {
+	var topUps []ledger.TopUp
+	for _, rt := range dbTopUps {
+		topUp, err := rt.ToLedgerTopUp()
+		if err != nil {
+			return nil, err
+		}
+		topUps = append(topUps, *topUp)
+	}
+	return topUps, nil
 }

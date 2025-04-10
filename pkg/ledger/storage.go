@@ -40,6 +40,7 @@ type Storage interface {
 	GetTopUpsByOrganizationID(ctx context.Context, organizationID string) ([]TopUp, error)
 	GetTopUpByIDAndOrganizationID(ctx context.Context, organizationID string, id string) (*TopUp, error)
 	GetTopUpsByTypeWhereStatusNotIn(ctx context.Context, params GetTopUpsByTypeWhereStatusNotInParams) ([]TopUp, error)
+	GetRecurrentTopUpsWhereStatusNotIn(ctx context.Context, statuses []TopUpStatus) ([]TopUp, error)
 	UpdateTopUpStatus(ctx context.Context, params UpdateTopUpStatusParams) error
 	GetTopUpByIDAndType(ctx context.Context, params GetTopUpByIDAndTypeParams) (*TopUp, error)
 	CreateEvent(ctx context.Context, event events.Event) error
