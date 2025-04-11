@@ -59,6 +59,48 @@ func (q *Queries) CreateLedgerOperation(ctx context.Context, arg CreateLedgerOpe
 	return err
 }
 
+const getDirectTopUpsWithoutOperations = `-- name: GetDirectTopUpsWithoutOperations :many
+SELECT tups.id, tups.amount, tups.lc_organization_id, tups.type, tups.status, tups.lc_charge, tups.confirmation_url, tups.current_topped_up_at, tups.next_top_up_at, tups.created_at, tups.updated_at
+FROM ledger_top_ups tups
+LEFT JOIN ledger_ledger lgr ON tups.id = lgr.id AND tups.lc_organization_id = lgr.lc_organization_id
+WHERE tups.type = 'direct'
+    AND tups.status = 'success'
+    AND lgr.id IS NULL
+LIMIT 100
+`
+
+func (q *Queries) GetDirectTopUpsWithoutOperations(ctx context.Context) ([]LedgerTopUp, error) {
+	rows, err := q.db.Query(ctx, getDirectTopUpsWithoutOperations)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LedgerTopUp
+	for rows.Next() {
+		var i LedgerTopUp
+		if err := rows.Scan(
+			&i.ID,
+			&i.Amount,
+			&i.LcOrganizationID,
+			&i.Type,
+			&i.Status,
+			&i.LcCharge,
+			&i.ConfirmationUrl,
+			&i.CurrentToppedUpAt,
+			&i.NextTopUpAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getLedgerOperationsByOrganizationID = `-- name: GetLedgerOperationsByOrganizationID :many
 SELECT id, amount, lc_organization_id, payload, created_at
 FROM ledger_ledger

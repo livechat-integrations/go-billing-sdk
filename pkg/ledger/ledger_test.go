@@ -132,6 +132,11 @@ type storageMock struct {
 	mock.Mock
 }
 
+func (m *storageMock) GetDirectTopUpsWithoutOperations(ctx context.Context) ([]TopUp, error) {
+	args := m.Called(ctx)
+	return args.Get(0).([]TopUp), args.Error(1)
+}
+
 func (m *storageMock) GetRecurrentTopUpsWhereStatusNotIn(ctx context.Context, statuses []TopUpStatus) ([]TopUp, error) {
 	args := m.Called(ctx, statuses)
 	return args.Get(0).([]TopUp), args.Error(1)
@@ -2502,6 +2507,7 @@ func TestService_SyncOrCancelTopUpRequests(t *testing.T) {
 			LCCharge:         jrc2,
 		}
 
+		sm.On("GetDirectTopUpsWithoutOperations", ctx).Return([]TopUp{}, nil).Once()
 		sm.On("GetTopUpsByTypeWhereStatusNotIn", ctx, GetTopUpsByTypeWhereStatusNotInParams{
 			Type: TopUpTypeDirect,
 			Statuses: []TopUpStatus{
@@ -2540,6 +2546,104 @@ func TestService_SyncOrCancelTopUpRequests(t *testing.T) {
 		}
 		em.On("ToEvent", orgCtx, lcoid, events.EventActionSyncTopUp, events.EventTypeInfo, topUp2).Return(levent2).Once()
 		em.On("CreateEvent", orgCtx, levent2).Return(nil).Once()
+
+		err := s.SyncOrCancelTopUpRequests(context.Background())
+
+		assert.Nil(t, err)
+
+		assertExpectations(t)
+	})
+
+	t.Run("success direct without operations", func(t *testing.T) {
+		amount := float32(5.234)
+		lcoid := "lcOrganizationID"
+		confUrl := "http://www.google.com/confirmation"
+		orgCtx := context.WithValue(ctx, LedgerOrganizationIDCtxKey{}, lcoid)
+		orgCtx = context.WithValue(orgCtx, LedgerEventIDCtxKey{}, xid)
+		xm.On("GenerateId").Return(xid).Once()
+
+		rc2 := livechat.DirectCharge{
+			BaseChargeV3: livechat.BaseChargeV3{
+				ID:                "id2",
+				BuyerLicenseID:    123,
+				BuyerEntityID:     "321",
+				SellerClientID:    "213",
+				OrderClientID:     "123",
+				OrderLicenseID:    "123",
+				OrderEntityID:     "123",
+				Name:              "some",
+				Price:             amount * 100,
+				ReturnURL:         "http://www.google.com",
+				Test:              false,
+				PerAccount:        false,
+				Status:            "success",
+				ConfirmationURL:   confUrl,
+				CommissionPercent: 10,
+			},
+			Quantity: 1,
+		}
+
+		jrc2, _ := json.Marshal(rc2)
+
+		operation := Operation{
+			ID:               "id2",
+			LCOrganizationID: lcoid,
+			Amount:           amount,
+			Payload:          jrc2,
+		}
+
+		topUp2 := TopUp{
+			ID:               "id2",
+			LCOrganizationID: lcoid,
+			Status:           TopUpStatusSuccess,
+			Amount:           amount,
+			Type:             TopUpTypeDirect,
+			ConfirmationUrl:  confUrl,
+			LCCharge:         jrc2,
+		}
+
+		sm.On("GetDirectTopUpsWithoutOperations", ctx).Return([]TopUp{topUp2}, nil).Once()
+		sm.On("GetTopUpsByTypeWhereStatusNotIn", ctx, GetTopUpsByTypeWhereStatusNotInParams{
+			Type: TopUpTypeDirect,
+			Statuses: []TopUpStatus{
+				TopUpStatusSuccess,
+				TopUpStatusCancelled,
+				TopUpStatusFailed,
+				TopUpStatusDeclined,
+			},
+		}).Return([]TopUp{}, nil).Once()
+		sm.On("GetRecurrentTopUpsWhereStatusNotIn", ctx, []TopUpStatus{
+			TopUpStatusCancelled,
+			TopUpStatusFailed,
+			TopUpStatusDeclined,
+		}).Return([]TopUp{}, nil).Once()
+
+		sm.On("GetTopUpByIDAndType", orgCtx, GetTopUpByIDAndTypeParams{
+			ID:   topUp2.ID,
+			Type: topUp2.Type,
+		}).Return(&topUp2, nil).Once()
+		sm.On("CreateLedgerOperation", orgCtx, operation).Return(nil).Once()
+		sc, _ := json.Marshal(operation)
+		opEvent := events.Event{
+			ID:               xid,
+			LCOrganizationID: lcoid,
+			Type:             events.EventTypeInfo,
+			Action:           events.EventActionCreateOperation,
+			Payload:          sc,
+		}
+		em.On("CreateEvent", orgCtx, opEvent).Return(nil).Once()
+		em.On("ToEvent", orgCtx, lcoid, events.EventActionCreateOperation, events.EventTypeInfo, operation).Return(opEvent).Once()
+
+		sct, _ := json.Marshal(topUp2)
+		topEvent := events.Event{
+			ID:               xid,
+			LCOrganizationID: lcoid,
+			Type:             events.EventTypeInfo,
+			Action:           events.EventActionTopUp,
+			Payload:          sct,
+		}
+		em.On("CreateEvent", orgCtx, topEvent).Return(nil).Once()
+		em.On("ToEvent", orgCtx, lcoid, events.EventActionTopUp, events.EventTypeInfo, topUp2).Return(topEvent).Once()
 
 		err := s.SyncOrCancelTopUpRequests(context.Background())
 
@@ -2632,6 +2736,7 @@ func TestService_SyncOrCancelTopUpRequests(t *testing.T) {
 			UpdatedAt:        now,
 		}
 
+		sm.On("GetDirectTopUpsWithoutOperations", ctx).Return([]TopUp{}, nil).Once()
 		sm.On("GetTopUpsByTypeWhereStatusNotIn", ctx, GetTopUpsByTypeWhereStatusNotInParams{
 			Type: TopUpTypeDirect,
 			Statuses: []TopUpStatus{
@@ -2770,6 +2875,7 @@ func TestService_SyncOrCancelTopUpRequests(t *testing.T) {
 			LCCharge:         jrc2,
 		}
 
+		sm.On("GetDirectTopUpsWithoutOperations", ctx).Return([]TopUp{}, nil).Once()
 		sm.On("GetTopUpsByTypeWhereStatusNotIn", ctx, GetTopUpsByTypeWhereStatusNotInParams{
 			Type: TopUpTypeDirect,
 			Statuses: []TopUpStatus{
@@ -2983,6 +3089,7 @@ func TestService_SyncOrCancelTopUpRequests(t *testing.T) {
 			LCCharge:         jrc2,
 		}
 
+		sm.On("GetDirectTopUpsWithoutOperations", ctx).Return([]TopUp{}, nil).Once()
 		sm.On("GetTopUpsByTypeWhereStatusNotIn", ctx, GetTopUpsByTypeWhereStatusNotInParams{
 			Type: TopUpTypeDirect,
 			Statuses: []TopUpStatus{

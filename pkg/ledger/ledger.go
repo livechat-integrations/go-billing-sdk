@@ -461,6 +461,19 @@ func (s *Service) SyncOrCancelTopUpRequests(ctx context.Context) error {
 		return err
 	}
 
+	topUps, err = s.storage.GetDirectTopUpsWithoutOperations(ctx)
+	if err != nil {
+		return err
+	}
+	for _, topUp := range topUps {
+		organizationCtx := context.WithValue(ctx, LedgerOrganizationIDCtxKey{}, topUp.LCOrganizationID)
+		organizationCtx = context.WithValue(organizationCtx, LedgerEventIDCtxKey{}, s.idProvider.GenerateId())
+		_, err := s.TopUp(organizationCtx, topUp)
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 

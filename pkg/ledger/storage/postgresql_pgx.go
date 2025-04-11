@@ -144,10 +144,7 @@ func (r *PostgresqlPGX) GetTopUpsByOrganizationIDAndStatus(ctx context.Context, 
 		Status:           string(status),
 	})
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return []ledger.TopUp{}, nil
-		}
-		return nil, err
+		return HandleTopUpsError(err)
 	}
 	return ToTopUps(dbTopUps)
 }
@@ -176,10 +173,7 @@ func (r *PostgresqlPGX) GetTopUpsByTypeWhereStatusNotIn(ctx context.Context, par
 		Column2: statuses,
 	})
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return []ledger.TopUp{}, nil
-		}
-		return nil, err
+		return HandleTopUpsError(err)
 	}
 	return ToTopUps(dbTopUps)
 }
@@ -191,10 +185,15 @@ func (r *PostgresqlPGX) GetRecurrentTopUpsWhereStatusNotIn(ctx context.Context, 
 	}
 	dbTopUps, err := r.queries.GetRecurrentTopUpsWhereStatusNotIn(ctx, stringStatuses)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return []ledger.TopUp{}, nil
-		}
-		return nil, err
+		return HandleTopUpsError(err)
+	}
+	return ToTopUps(dbTopUps)
+}
+
+func (r *PostgresqlPGX) GetDirectTopUpsWithoutOperations(ctx context.Context) ([]ledger.TopUp, error) {
+	dbTopUps, err := r.queries.GetDirectTopUpsWithoutOperations(ctx)
+	if err != nil {
+		return HandleTopUpsError(err)
 	}
 	return ToTopUps(dbTopUps)
 }
@@ -255,4 +254,11 @@ func ToTopUps(dbTopUps []sqlc.LedgerTopUp) ([]ledger.TopUp, error) {
 		topUps = append(topUps, *topUp)
 	}
 	return topUps, nil
+}
+
+func HandleTopUpsError(err error) ([]ledger.TopUp, error) {
+	if errors.Is(err, pgx.ErrNoRows) {
+		return []ledger.TopUp{}, nil
+	}
+	return nil, err
 }

@@ -45,6 +45,16 @@ WHERE lc_organization_id = $1
 ORDER BY created_at DESC
 ;
 
+-- name: GetDirectTopUpsWithoutOperations :many
+SELECT tups.*
+FROM ledger_top_ups tups
+LEFT JOIN ledger_ledger lgr ON tups.id = lgr.id AND tups.lc_organization_id = lgr.lc_organization_id
+WHERE tups.type = 'direct'
+    AND tups.status = 'success'
+    AND lgr.id IS NULL
+LIMIT 100
+;
+
 -- name: UpdateTopUpRequestStatus :exec
 UPDATE ledger_top_ups
 SET status = $1, updated_at = now()
