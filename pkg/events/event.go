@@ -24,7 +24,7 @@ const (
 	EventActionCreateOperation                  EventAction = "create_operation"
 	EventActionTopUp                            EventAction = "top_up"
 	EventActionCreateTopUp                      EventAction = "create_top_up"
-	EventActionCancelTopUp                      EventAction = "cancel_top_up"
+	EventActionCancelRecurrentTopUp             EventAction = "cancel_recurrent_top_up"
 	EventActionForceCancelCharge                EventAction = "force_cancel_charge_event"
 	EventActionDPSWebhookApplicationUninstalled EventAction = "dps_webhook_event_application_uninstalled"
 	EventActionDPSWebhookPayment                EventAction = "dps_webhook_event_payment"

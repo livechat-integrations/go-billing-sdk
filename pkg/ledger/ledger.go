@@ -115,15 +115,52 @@ func (s *Service) TopUp(ctx context.Context, topUp TopUp) (string, error) {
 			Err:   fmt.Errorf("top up has wrong status: %s", dbTopUp.Status),
 		})
 	}
-	id := topUp.ID
-	if topUp.Type == TopUpTypeRecurrent && topUp.CurrentToppedUpAt != nil {
-		id = fmt.Sprintf("%s-%d", id, topUp.CurrentToppedUpAt.UnixMicro())
+
+	if dbTopUp.Type == TopUpTypeRecurrent {
+		var charge livechat.RecurrentChargeV3
+		err = json.Unmarshal(dbTopUp.LCCharge, &charge)
+		if err != nil {
+			event.Type = events.EventTypeError
+			return "", s.eventService.ToError(ctx, events.ToErrorParams{
+				Event: event,
+				Err:   err,
+			})
+		}
+		if charge.NextChargeAt == nil || charge.CurrentChargeAt == nil {
+			event.Type = events.EventTypeError
+			return "", s.eventService.ToError(ctx, events.ToErrorParams{
+				Event: event,
+				Err:   fmt.Errorf("no charge at current time"),
+			})
+		}
+		dbTopUp.NextTopUpAt = charge.NextChargeAt
+		dbTopUp.CurrentToppedUpAt = charge.CurrentChargeAt
+		dbTopUp, err = s.storage.UpsertTopUp(ctx, *dbTopUp)
+		if err != nil {
+			event.Type = events.EventTypeError
+			return "", s.eventService.ToError(ctx, events.ToErrorParams{
+				Event: event,
+				Err:   err,
+			})
+		}
+		if dbTopUp == nil {
+			event.Type = events.EventTypeError
+			return "", s.eventService.ToError(ctx, events.ToErrorParams{
+				Event: event,
+				Err:   fmt.Errorf("upsert top up error"),
+			})
+		}
+	}
+
+	id := dbTopUp.ID
+	if dbTopUp.Type == TopUpTypeRecurrent && dbTopUp.CurrentToppedUpAt != nil {
+		id = fmt.Sprintf("%s-%d", id, dbTopUp.CurrentToppedUpAt.UnixMicro())
 	}
 	operation := Operation{
 		ID:               id,
-		Amount:           topUp.Amount,
-		LCOrganizationID: topUp.LCOrganizationID,
-		Payload:          topUp.LCCharge,
+		Amount:           dbTopUp.Amount,
+		LCOrganizationID: dbTopUp.LCOrganizationID,
+		Payload:          dbTopUp.LCCharge,
 	}
 	_, err = s.createOperation(ctx, operation)
 	if err != nil {
@@ -237,7 +274,7 @@ func (s *Service) GetTopUps(ctx context.Context, organizationID string) ([]TopUp
 }
 
 func (s *Service) CancelTopUpRequest(ctx context.Context, organizationID string, ID string) error {
-	event := s.eventService.ToEvent(ctx, organizationID, events.EventActionCancelTopUp, events.EventTypeInfo, map[string]interface{}{"id": ID})
+	event := s.eventService.ToEvent(ctx, organizationID, events.EventActionCancelRecurrentTopUp, events.EventTypeInfo, map[string]interface{}{"id": ID})
 	topUp, err := s.storage.GetTopUpByIDAndType(ctx, GetTopUpByIDAndTypeParams{
 		ID:   ID,
 		Type: TopUpTypeRecurrent,
@@ -388,8 +425,6 @@ func (s *Service) SyncTopUp(ctx context.Context, topUp TopUp) (*TopUp, error) {
 		case "past_due":
 			topUp.Status = TopUpStatusPastDue
 		}
-		topUp.CurrentToppedUpAt = c.CurrentChargeAt
-		topUp.NextTopUpAt = c.NextChargeAt
 	}
 
 	if fullCharge == nil {
