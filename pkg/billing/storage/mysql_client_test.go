@@ -106,7 +106,7 @@ func TestNewSQLClient_CreateCharge(t *testing.T) {
 
 		ctx := context.Background()
 		cm.On("Now").Return(now).Once()
-		dm.On("Exec", ctx, "INSERT INTO charges(id, type, payload, lc_organization_id, created_at) VALUES (?, ?, ?, ?, ?)", []interface{}{charge.ID, string(charge.Type), charge.LCOrganizationID, rawPayload, now}).Return(&res, nil).Once()
+		dm.On("Exec", ctx, "INSERT INTO charges(id, type, payload, lc_organization_id, created_at) VALUES (?, ?, ?, ?, ?)", []interface{}{charge.ID, string(charge.Type), rawPayload, charge.LCOrganizationID, now}).Return(&res, nil).Once()
 
 		err := mysqlClient.CreateCharge(context.Background(), billing.Charge{
 			ID:               charge.ID,
@@ -146,7 +146,7 @@ func TestNewSQLClient_CreateCharge(t *testing.T) {
 
 		ctx := context.Background()
 		cm.On("Now").Return(now).Once()
-		dm.On("Exec", ctx, "INSERT INTO charges(id, type, payload, lc_organization_id, created_at) VALUES (?, ?, ?, ?, ?)", []interface{}{charge.ID, string(charge.Type), charge.LCOrganizationID, rawPayload, now}).Return(&res, nil).Once()
+		dm.On("Exec", ctx, "INSERT INTO charges(id, type, payload, lc_organization_id, created_at) VALUES (?, ?, ?, ?, ?)", []interface{}{charge.ID, string(charge.Type), rawPayload, charge.LCOrganizationID, now}).Return(&res, nil).Once()
 
 		err := mysqlClient.CreateCharge(context.Background(), billing.Charge{
 			ID:               charge.ID,
@@ -181,7 +181,7 @@ func TestNewSQLClient_CreateCharge(t *testing.T) {
 
 		ctx := context.Background()
 		cm.On("Now").Return(now).Once()
-		dm.On("Exec", ctx, "INSERT INTO charges(id, type, payload, lc_organization_id, created_at) VALUES (?, ?, ?, ?, ?)", []interface{}{charge.ID, string(charge.Type), charge.LCOrganizationID, rawPayload, now}).Return(nil, assert.AnError).Once()
+		dm.On("Exec", ctx, "INSERT INTO charges(id, type, payload, lc_organization_id, created_at) VALUES (?, ?, ?, ?, ?)", []interface{}{charge.ID, string(charge.Type), rawPayload, charge.LCOrganizationID, now}).Return(nil, assert.AnError).Once()
 
 		err := mysqlClient.CreateCharge(context.Background(), billing.Charge{
 			ID:               charge.ID,
