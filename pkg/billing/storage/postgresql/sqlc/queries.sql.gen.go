@@ -33,6 +33,32 @@ func (q *Queries) CreateCharge(ctx context.Context, arg CreateChargeParams) erro
 	return err
 }
 
+const createEvent = `-- name: CreateEvent :exec
+INSERT INTO billing_events(id, lc_organization_id, type, action, payload, error, created_at)
+VALUES ($1, $2, $3, $4, $5, $6, NOW())
+`
+
+type CreateEventParams struct {
+	ID               string
+	LcOrganizationID string
+	Type             string
+	Action           string
+	Payload          []byte
+	Error            pgtype.Text
+}
+
+func (q *Queries) CreateEvent(ctx context.Context, arg CreateEventParams) error {
+	_, err := q.db.Exec(ctx, createEvent,
+		arg.ID,
+		arg.LcOrganizationID,
+		arg.Type,
+		arg.Action,
+		arg.Payload,
+		arg.Error,
+	)
+	return err
+}
+
 const createSubscription = `-- name: CreateSubscription :exec
 INSERT INTO subscriptions(id, lc_organization_id, plan_name, charge_id, created_at)
 VALUES ($1, $2, $3, $4, NOW())
@@ -70,10 +96,16 @@ const deleteSubscriptionByChargeID = `-- name: DeleteSubscriptionByChargeID :exe
 UPDATE subscriptions
 SET deleted_at = now()
 WHERE charge_id = $1
+AND lc_organization_id = $2
 `
 
-func (q *Queries) DeleteSubscriptionByChargeID(ctx context.Context, chargeID pgtype.Text) error {
-	_, err := q.db.Exec(ctx, deleteSubscriptionByChargeID, chargeID)
+type DeleteSubscriptionByChargeIDParams struct {
+	ChargeID         pgtype.Text
+	LcOrganizationID string
+}
+
+func (q *Queries) DeleteSubscriptionByChargeID(ctx context.Context, arg DeleteSubscriptionByChargeIDParams) error {
+	_, err := q.db.Exec(ctx, deleteSubscriptionByChargeID, arg.ChargeID, arg.LcOrganizationID)
 	return err
 }
 

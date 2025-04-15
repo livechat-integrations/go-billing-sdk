@@ -9,9 +9,10 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/livechat-integrations/go-billing-sdk/internal/livechat"
 	"github.com/livechat-integrations/go-billing-sdk/pkg/billing"
 	"github.com/livechat-integrations/go-billing-sdk/pkg/billing/storage/postgresql/sqlc"
-	"github.com/livechat-integrations/go-billing-sdk/pkg/common/livechat"
+	"github.com/livechat-integrations/go-billing-sdk/pkg/events"
 )
 
 type PGXConn interface {
@@ -116,8 +117,16 @@ func (r *PostgresqlPGX) DeleteCharge(ctx context.Context, id string) error {
 	return r.queries.DeleteCharge(ctx, id)
 }
 
-func (r *PostgresqlPGX) DeleteSubscriptionByChargeID(ctx context.Context, id string) error {
-	return r.queries.DeleteSubscriptionByChargeID(ctx, pgtype.Text{String: id, Valid: true})
+func (r *PostgresqlPGX) DeleteSubscriptionByChargeID(ctx context.Context, lcID string, id string) error {
+	err := r.queries.DeleteSubscriptionByChargeID(ctx, sqlc.DeleteSubscriptionByChargeIDParams{
+		ChargeID:         pgtype.Text{String: id, Valid: true},
+		LcOrganizationID: lcID,
+	})
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return billing.ErrSubscriptionNotFound
+	}
+
+	return err
 }
 
 func (r *PostgresqlPGX) GetChargesByOrganizationID(ctx context.Context, lcID string) ([]billing.Charge, error) {
@@ -134,4 +143,22 @@ func (r *PostgresqlPGX) GetChargesByOrganizationID(ctx context.Context, lcID str
 		charges = append(charges, *row.ToBillingCharge())
 	}
 	return charges, nil
+}
+
+func (r *PostgresqlPGX) CreateEvent(ctx context.Context, e events.Event) error {
+	err := r.queries.CreateEvent(ctx, sqlc.CreateEventParams{
+		ID:               e.ID,
+		LcOrganizationID: e.LCOrganizationID,
+		Type:             string(e.Type),
+		Action:           string(e.Action),
+		Payload:          e.Payload,
+		Error: pgtype.Text{
+			String: e.Error,
+			Valid:  true,
+		},
+	})
+	if err != nil {
+		return err
+	}
+	return nil
 }

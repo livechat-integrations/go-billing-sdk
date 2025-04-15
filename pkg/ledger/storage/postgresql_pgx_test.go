@@ -12,6 +12,7 @@ import (
 	"github.com/pashagolub/pgxmock/v4"
 	"github.com/stretchr/testify/assert"
 
+	"github.com/livechat-integrations/go-billing-sdk/pkg/events"
 	"github.com/livechat-integrations/go-billing-sdk/pkg/ledger"
 )
 
@@ -532,8 +533,8 @@ func TestPostgresqlSQLC_CreateEvent(t *testing.T) {
 		emptyRawPayload, _ := json.Marshal(json.RawMessage("{}"))
 		id := "1"
 		lcoid := "lcOrganizationID"
-		action := ledger.EventActionCancelCharge
-		eventType := ledger.EventTypeError
+		action := events.EventActionCancelCharge
+		eventType := events.EventTypeError
 		em := "lorem ipsum"
 		dbMock.ExpectExec("INSERT INTO ledger_events").
 			WithArgs(id, lcoid, string(eventType), string(action), emptyRawPayload, pgtype.Text{
@@ -542,7 +543,7 @@ func TestPostgresqlSQLC_CreateEvent(t *testing.T) {
 			}).
 			WillReturnResult(pgxmock.NewResult("INSERT", 1)).Times(1)
 
-		err := s.CreateEvent(context.Background(), ledger.Event{
+		err := s.CreateEvent(context.Background(), events.Event{
 			ID:               id,
 			LCOrganizationID: lcoid,
 			Type:             eventType,
@@ -558,8 +559,8 @@ func TestPostgresqlSQLC_CreateEvent(t *testing.T) {
 		emptyRawPayload, _ := json.Marshal(json.RawMessage("{}"))
 		id := "1"
 		lcoid := "lcOrganizationID"
-		action := ledger.EventActionCancelCharge
-		eventType := ledger.EventTypeError
+		action := events.EventActionCancelCharge
+		eventType := events.EventTypeError
 		em := ""
 		dbMock.ExpectExec("INSERT INTO ledger_events").
 			WithArgs(id, lcoid, string(eventType), string(action), emptyRawPayload, pgtype.Text{
@@ -568,7 +569,7 @@ func TestPostgresqlSQLC_CreateEvent(t *testing.T) {
 			}).Times(1).
 			WillReturnError(assert.AnError)
 
-		err := s.CreateEvent(context.Background(), ledger.Event{
+		err := s.CreateEvent(context.Background(), events.Event{
 			ID:               id,
 			LCOrganizationID: lcoid,
 			Type:             eventType,

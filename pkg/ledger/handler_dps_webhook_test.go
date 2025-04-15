@@ -9,13 +9,16 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+
+	"github.com/livechat-integrations/go-billing-sdk/pkg/events"
 )
 
 var lm = new(ledgerMock)
 
 var h = Handler{
-	ledger:     lm,
-	idProvider: xm,
+	eventService: em,
+	ledger:       lm,
+	idProvider:   xm,
 }
 
 var lcoid = "lcOrganizationID"
@@ -92,24 +95,9 @@ func (l *ledgerMock) GetTopUpsByOrganizationIDAndStatus(ctx context.Context, org
 	return args.Get(0).([]TopUp), args.Error(1)
 }
 
-func (l *ledgerMock) ToError(ctx context.Context, params ToErrorParams) error {
-	args := l.Called(ctx, params)
-	return args.Error(0)
-}
-
-func (l *ledgerMock) ToEvent(ctx context.Context, organizationID string, action EventAction, eventType EventType, payload any) Event {
-	args := l.Called(ctx, organizationID, action, eventType, payload)
-	return args.Get(0).(Event)
-}
-
 func (l *ledgerMock) GetUniqueID() string {
 	//TODO implement me
 	panic("implement me")
-}
-
-func (l *ledgerMock) CreateEvent(ctx context.Context, event Event) error {
-	args := l.Called(ctx, event)
-	return args.Error(0)
 }
 
 func (l *ledgerMock) UpdateTopUpStatus(ctx context.Context, organizationID string, ID string, status TopUpStatus) error {
@@ -127,7 +115,7 @@ func (l *ledgerMock) SyncTopUp(ctx context.Context, organizationID string, ID st
 
 func TestNewHandler(t *testing.T) {
 	t.Run("NewHandler", func(t *testing.T) {
-		newService := NewHandler(&ledgerMock{}, &xIdMock{})
+		newService := NewHandler(&eventMock{}, &ledgerMock{}, &xIdMock{})
 
 		assert.NotNil(t, newService)
 		assertExpectations(t)
@@ -142,7 +130,7 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 		someDate2, _ := time.Parse(time.DateTime, "2025-06-14 12:31:56")
 		paymentID := "x1c2v3"
 		userID := "s98f"
-		call := xm.On("GenerateId").Return(xid, nil)
+		xm.On("GenerateId").Return(xid, nil)
 
 		req := DPSWebhookRequest{
 			ApplicationID:    "123",
@@ -176,26 +164,25 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 			NextTopUpAt:       &someDate2,
 		}
 		sc, _ := json.Marshal(req)
-		levent := Event{
+		levent := events.Event{
 			ID:               xid,
 			LCOrganizationID: lcoid,
-			Type:             EventTypeInfo,
-			Action:           EventActionDPSWebhookApplicationUninstalled,
+			Type:             events.EventTypeInfo,
+			Action:           events.EventActionDPSWebhookApplicationUninstalled,
 			Payload:          sc,
 		}
 
 		lm.On("GetTopUpsByOrganizationIDAndStatus", ledgerCtx, lcoid, TopUpStatusActive).Return([]TopUp{top1, top2}, nil).Once()
 		lm.On("ForceCancelTopUp", ledgerCtx, top1).Return(nil).Once()
 		lm.On("ForceCancelTopUp", ledgerCtx, top2).Return(nil).Once()
-		lm.On("ToEvent", ledgerCtx, lcoid, EventActionDPSWebhookApplicationUninstalled, EventTypeInfo, req).Return(levent).Once()
-		lm.On("CreateEvent", ledgerCtx, levent).Return(nil).Once()
+		em.On("ToEvent", ledgerCtx, lcoid, events.EventActionDPSWebhookApplicationUninstalled, events.EventTypeInfo, req).Return(levent).Once()
+		em.On("CreateEvent", ledgerCtx, levent).Return(nil).Once()
 
 		err := h.HandleDPSWebhook(context.Background(), req)
 
 		assert.Nil(t, err)
 
 		assertExpectations(t)
-		call.Unset()
 	})
 
 	t.Run("success application_uninstalled no top ups", func(t *testing.T) {
@@ -203,7 +190,7 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 		someDate, _ := time.Parse(time.DateTime, "2025-03-14 12:31:56")
 		paymentID := "x1c2v3"
 		userID := "s98f"
-		call := xm.On("GenerateId").Return(xid, nil)
+		xm.On("GenerateId").Return(xid, nil)
 
 		req := DPSWebhookRequest{
 			ApplicationID:    "123",
@@ -220,24 +207,23 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 		}
 
 		sc, _ := json.Marshal(req)
-		levent := Event{
+		levent := events.Event{
 			ID:               xid,
 			LCOrganizationID: lcoid,
-			Type:             EventTypeInfo,
-			Action:           EventActionDPSWebhookApplicationUninstalled,
+			Type:             events.EventTypeInfo,
+			Action:           events.EventActionDPSWebhookApplicationUninstalled,
 			Payload:          sc,
 		}
 
 		lm.On("GetTopUpsByOrganizationIDAndStatus", ledgerCtx, lcoid, TopUpStatusActive).Return([]TopUp{}, nil).Once()
-		lm.On("ToEvent", ledgerCtx, lcoid, EventActionDPSWebhookApplicationUninstalled, EventTypeInfo, req).Return(levent).Once()
-		lm.On("CreateEvent", ledgerCtx, levent).Return(nil).Once()
+		em.On("ToEvent", ledgerCtx, lcoid, events.EventActionDPSWebhookApplicationUninstalled, events.EventTypeInfo, req).Return(levent).Once()
+		em.On("CreateEvent", ledgerCtx, levent).Return(nil).Once()
 
 		err := h.HandleDPSWebhook(context.Background(), req)
 
 		assert.Nil(t, err)
 
 		assertExpectations(t)
-		call.Unset()
 	})
 
 	t.Run("application_uninstalled get top ups error", func(t *testing.T) {
@@ -245,7 +231,7 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 		someDate, _ := time.Parse(time.DateTime, "2025-03-14 12:31:56")
 		paymentID := "x1c2v3"
 		userID := "s98f"
-		call := xm.On("GenerateId").Return(xid, nil)
+		xm.On("GenerateId").Return(xid, nil)
 
 		req := DPSWebhookRequest{
 			ApplicationID:    "123",
@@ -262,20 +248,19 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 		}
 
 		sc, _ := json.Marshal(req)
-		levent := Event{
+		levent := events.Event{
 			ID:               xid,
 			LCOrganizationID: lcoid,
-			Type:             EventTypeError,
-			Action:           EventActionDPSWebhookApplicationUninstalled,
+			Type:             events.EventTypeError,
+			Action:           events.EventActionDPSWebhookApplicationUninstalled,
 			Payload:          sc,
 		}
 
 		lm.On("GetTopUpsByOrganizationIDAndStatus", ledgerCtx, lcoid, TopUpStatusActive).Return(nil, assert.AnError).Once()
-		lm.On("ToEvent", ledgerCtx, lcoid, EventActionDPSWebhookApplicationUninstalled, EventTypeInfo, req).Return(levent).Once()
-		lm.On("CreateEvent", ledgerCtx, levent).Return(nil).Once()
-		lm.On("ToError", ledgerCtx, ToErrorParams{
-			event: levent,
-			err:   assert.AnError,
+		em.On("ToEvent", ledgerCtx, lcoid, events.EventActionDPSWebhookApplicationUninstalled, events.EventTypeInfo, req).Return(levent).Once()
+		em.On("ToError", ledgerCtx, events.ToErrorParams{
+			Event: levent,
+			Err:   assert.AnError,
 		}).Return(assert.AnError).Once()
 
 		err := h.HandleDPSWebhook(context.Background(), req)
@@ -283,7 +268,6 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 		assert.ErrorIs(t, err, assert.AnError)
 
 		assertExpectations(t)
-		call.Unset()
 	})
 
 	t.Run("application_uninstalled force cancel error", func(t *testing.T) {
@@ -293,7 +277,7 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 		someDate2, _ := time.Parse(time.DateTime, "2025-06-14 12:31:56")
 		paymentID := "x1c2v3"
 		userID := "s98f"
-		call := xm.On("GenerateId").Return(xid, nil)
+		xm.On("GenerateId").Return(xid, nil)
 
 		req := DPSWebhookRequest{
 			ApplicationID:    "123",
@@ -327,22 +311,21 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 			NextTopUpAt:       &someDate2,
 		}
 		sc, _ := json.Marshal(req)
-		levent := Event{
+		levent := events.Event{
 			ID:               xid,
 			LCOrganizationID: lcoid,
-			Type:             EventTypeError,
-			Action:           EventActionDPSWebhookApplicationUninstalled,
+			Type:             events.EventTypeError,
+			Action:           events.EventActionDPSWebhookApplicationUninstalled,
 			Payload:          sc,
 		}
 
 		lm.On("GetTopUpsByOrganizationIDAndStatus", ledgerCtx, lcoid, TopUpStatusActive).Return([]TopUp{top1, top2}, nil).Once()
 		lm.On("ForceCancelTopUp", ledgerCtx, top1).Return(nil).Once()
 		lm.On("ForceCancelTopUp", ledgerCtx, top2).Return(assert.AnError).Once()
-		lm.On("ToEvent", ledgerCtx, lcoid, EventActionDPSWebhookApplicationUninstalled, EventTypeInfo, req).Return(levent).Once()
-		lm.On("CreateEvent", ledgerCtx, levent).Return(nil).Once()
-		lm.On("ToError", ledgerCtx, ToErrorParams{
-			event: levent,
-			err:   assert.AnError,
+		em.On("ToEvent", ledgerCtx, lcoid, events.EventActionDPSWebhookApplicationUninstalled, events.EventTypeInfo, req).Return(levent).Once()
+		em.On("ToError", ledgerCtx, events.ToErrorParams{
+			Event: levent,
+			Err:   assert.AnError,
 		}).Return(assert.AnError).Once()
 
 		err := h.HandleDPSWebhook(context.Background(), req)
@@ -350,7 +333,6 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 		assert.ErrorIs(t, err, assert.AnError)
 
 		assertExpectations(t)
-		call.Unset()
 	})
 
 	t.Run("success payment_collected", func(t *testing.T) {
@@ -359,7 +341,7 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 		someDate, _ := time.Parse(time.DateTime, "2025-03-14 12:31:56")
 		paymentID := "x1c2v3"
 		userID := "s98f"
-		call := xm.On("GenerateId").Return(xid, nil)
+		xm.On("GenerateId").Return(xid, nil)
 
 		req := DPSWebhookRequest{
 			ApplicationID:    "123",
@@ -383,33 +365,31 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 			ConfirmationUrl:  "url",
 		}
 		sc, _ := json.Marshal(req)
-		levent := Event{
+		levent := events.Event{
 			ID:               xid,
 			LCOrganizationID: lcoid,
-			Type:             EventTypeInfo,
-			Action:           EventActionDPSWebhookPayment,
+			Type:             events.EventTypeInfo,
+			Action:           events.EventActionDPSWebhookPayment,
 			Payload:          sc,
 		}
 
 		lm.On("SyncTopUp", ledgerCtx, lcoid, paymentID).Return(&top1, nil).Once()
-		lm.On("ToEvent", ledgerCtx, lcoid, EventActionDPSWebhookPayment, EventTypeInfo, req).Return(levent).Once()
-		lm.On("CreateEvent", ledgerCtx, levent).Return(nil).Once()
+		em.On("ToEvent", ledgerCtx, lcoid, events.EventActionDPSWebhookPayment, events.EventTypeInfo, req).Return(levent).Once()
+		em.On("CreateEvent", ledgerCtx, levent).Return(nil).Once()
 
 		err := h.HandleDPSWebhook(context.Background(), req)
 
 		assert.Nil(t, err)
 
 		assertExpectations(t)
-		call.Unset()
 	})
 
 	t.Run("payment_collected wrong payment id", func(t *testing.T) {
-		amount := float32(5.234)
 		eventType := "payment_collected"
 		someDate, _ := time.Parse(time.DateTime, "2025-03-14 12:31:56")
 		paymentID := float32(234.3)
 		userID := "s98f"
-		call := xm.On("GenerateId").Return(xid, nil)
+		xm.On("GenerateId").Return(xid, nil)
 
 		req := DPSWebhookRequest{
 			ApplicationID:    "123",
@@ -424,29 +404,20 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 			},
 			UserID: userID,
 		}
-		top1 := TopUp{
-			ID:               "id1",
-			LCOrganizationID: lcoid,
-			Status:           TopUpStatusActive,
-			Amount:           amount,
-			Type:             TopUpTypeDirect,
-			ConfirmationUrl:  "url",
-		}
+
 		sc, _ := json.Marshal(req)
-		levent := Event{
+		levent := events.Event{
 			ID:               xid,
 			LCOrganizationID: lcoid,
-			Type:             EventTypeError,
-			Action:           EventActionDPSWebhookPayment,
+			Type:             events.EventTypeError,
+			Action:           events.EventActionDPSWebhookPayment,
 			Payload:          sc,
 		}
 
-		lm.On("SyncTopUp", ledgerCtx, lcoid, paymentID).Return(&top1, nil).Once()
-		lm.On("ToEvent", ledgerCtx, lcoid, EventActionDPSWebhookPayment, EventTypeInfo, req).Return(levent).Once()
-		lm.On("CreateEvent", ledgerCtx, levent).Return(nil).Once()
-		lm.On("ToError", ledgerCtx, ToErrorParams{
-			event: levent,
-			err:   fmt.Errorf("payment id field not found in payload"),
+		em.On("ToEvent", ledgerCtx, lcoid, events.EventActionDPSWebhookPayment, events.EventTypeInfo, req).Return(levent).Once()
+		em.On("ToError", ledgerCtx, events.ToErrorParams{
+			Event: levent,
+			Err:   fmt.Errorf("payment id field not found in payload"),
 		}).Return(assert.AnError).Once()
 
 		err := h.HandleDPSWebhook(context.Background(), req)
@@ -454,7 +425,6 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 		assert.ErrorIs(t, err, assert.AnError)
 
 		assertExpectations(t)
-		call.Unset()
 	})
 
 	t.Run("payment_collected sync error", func(t *testing.T) {
@@ -462,7 +432,7 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 		someDate, _ := time.Parse(time.DateTime, "2025-03-14 12:31:56")
 		paymentID := "x1c2v3"
 		userID := "s98f"
-		call := xm.On("GenerateId").Return(xid, nil)
+		xm.On("GenerateId").Return(xid, nil)
 
 		req := DPSWebhookRequest{
 			ApplicationID:    "123",
@@ -478,20 +448,19 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 			UserID: userID,
 		}
 		sc, _ := json.Marshal(req)
-		levent := Event{
+		levent := events.Event{
 			ID:               xid,
 			LCOrganizationID: lcoid,
-			Type:             EventTypeError,
-			Action:           EventActionDPSWebhookPayment,
+			Type:             events.EventTypeError,
+			Action:           events.EventActionDPSWebhookPayment,
 			Payload:          sc,
 		}
 
 		lm.On("SyncTopUp", ledgerCtx, lcoid, paymentID).Return(nil, assert.AnError).Once()
-		lm.On("ToEvent", ledgerCtx, lcoid, EventActionDPSWebhookPayment, EventTypeInfo, req).Return(levent).Once()
-		lm.On("CreateEvent", ledgerCtx, levent).Return(nil).Once()
-		lm.On("ToError", ledgerCtx, ToErrorParams{
-			event: levent,
-			err:   fmt.Errorf("syncing top up: %w", assert.AnError),
+		em.On("ToEvent", ledgerCtx, lcoid, events.EventActionDPSWebhookPayment, events.EventTypeInfo, req).Return(levent).Once()
+		em.On("ToError", ledgerCtx, events.ToErrorParams{
+			Event: levent,
+			Err:   fmt.Errorf("syncing top up: %w", assert.AnError),
 		}).Return(assert.AnError).Once()
 
 		err := h.HandleDPSWebhook(context.Background(), req)
@@ -499,7 +468,6 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 		assert.ErrorIs(t, err, assert.AnError)
 
 		assertExpectations(t)
-		call.Unset()
 	})
 
 	t.Run("success payment_activated", func(t *testing.T) {
@@ -507,7 +475,7 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 		someDate, _ := time.Parse(time.DateTime, "2025-03-14 12:31:56")
 		paymentID := "x1c2v3"
 		userID := "s98f"
-		call := xm.On("GenerateId").Return(xid, nil)
+		xm.On("GenerateId").Return(xid, nil)
 
 		req := DPSWebhookRequest{
 			ApplicationID:    "123",
@@ -528,7 +496,6 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 		assert.Nil(t, err)
 
 		assertExpectations(t)
-		call.Unset()
 	})
 
 	t.Run("success payment_declined", func(t *testing.T) {
@@ -537,7 +504,7 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 		someDate, _ := time.Parse(time.DateTime, "2025-03-14 12:31:56")
 		paymentID := "x1c2v3"
 		userID := "s98f"
-		call := xm.On("GenerateId").Return(xid, nil)
+		xm.On("GenerateId").Return(xid, nil)
 
 		req := DPSWebhookRequest{
 			ApplicationID:    "123",
@@ -561,24 +528,23 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 			ConfirmationUrl:  "url",
 		}
 		sc, _ := json.Marshal(req)
-		levent := Event{
+		levent := events.Event{
 			ID:               xid,
 			LCOrganizationID: lcoid,
-			Type:             EventTypeInfo,
-			Action:           EventActionDPSWebhookPayment,
+			Type:             events.EventTypeInfo,
+			Action:           events.EventActionDPSWebhookPayment,
 			Payload:          sc,
 		}
 
 		lm.On("SyncTopUp", ledgerCtx, lcoid, paymentID).Return(&top1, nil).Once()
-		lm.On("ToEvent", ledgerCtx, lcoid, EventActionDPSWebhookPayment, EventTypeInfo, req).Return(levent).Once()
-		lm.On("CreateEvent", ledgerCtx, levent).Return(nil).Once()
+		em.On("ToEvent", ledgerCtx, lcoid, events.EventActionDPSWebhookPayment, events.EventTypeInfo, req).Return(levent).Once()
+		em.On("CreateEvent", ledgerCtx, levent).Return(nil).Once()
 
 		err := h.HandleDPSWebhook(context.Background(), req)
 
 		assert.Nil(t, err)
 
 		assertExpectations(t)
-		call.Unset()
 	})
 
 	t.Run("success payment_cancelled", func(t *testing.T) {
@@ -587,7 +553,7 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 		someDate, _ := time.Parse(time.DateTime, "2025-03-14 12:31:56")
 		paymentID := "x1c2v3"
 		userID := "s98f"
-		call := xm.On("GenerateId").Return(xid, nil)
+		xm.On("GenerateId").Return(xid, nil)
 
 		req := DPSWebhookRequest{
 			ApplicationID:    "123",
@@ -611,24 +577,23 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 			ConfirmationUrl:  "url",
 		}
 		sc, _ := json.Marshal(req)
-		levent := Event{
+		levent := events.Event{
 			ID:               xid,
 			LCOrganizationID: lcoid,
-			Type:             EventTypeInfo,
-			Action:           EventActionDPSWebhookPayment,
+			Type:             events.EventTypeInfo,
+			Action:           events.EventActionDPSWebhookPayment,
 			Payload:          sc,
 		}
 
 		lm.On("SyncTopUp", ledgerCtx, lcoid, paymentID).Return(&top1, nil).Once()
-		lm.On("ToEvent", ledgerCtx, lcoid, EventActionDPSWebhookPayment, EventTypeInfo, req).Return(levent).Once()
-		lm.On("CreateEvent", ledgerCtx, levent).Return(nil).Once()
+		em.On("ToEvent", ledgerCtx, lcoid, events.EventActionDPSWebhookPayment, events.EventTypeInfo, req).Return(levent).Once()
+		em.On("CreateEvent", ledgerCtx, levent).Return(nil).Once()
 
 		err := h.HandleDPSWebhook(context.Background(), req)
 
 		assert.Nil(t, err)
 
 		assertExpectations(t)
-		call.Unset()
 	})
 
 	t.Run("success force cancel on payment_cancelled sync error", func(t *testing.T) {
@@ -637,7 +602,7 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 		someDate, _ := time.Parse(time.DateTime, "2025-03-14 12:31:56")
 		paymentID := "x1c2v3"
 		userID := "s98f"
-		call := xm.On("GenerateId").Return(xid, nil)
+		xm.On("GenerateId").Return(xid, nil)
 
 		req := DPSWebhookRequest{
 			ApplicationID:    "123",
@@ -653,7 +618,7 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 			UserID: userID,
 		}
 		top1 := TopUp{
-			ID:               "id1",
+			ID:               paymentID,
 			LCOrganizationID: lcoid,
 			Status:           TopUpStatusActive,
 			Amount:           amount,
@@ -661,22 +626,21 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 			ConfirmationUrl:  "url",
 		}
 		sc, _ := json.Marshal(req)
-		levent := Event{
+		levent := events.Event{
 			ID:               xid,
 			LCOrganizationID: lcoid,
-			Type:             EventTypeError,
-			Action:           EventActionDPSWebhookPayment,
+			Type:             events.EventTypeError,
+			Action:           events.EventActionDPSWebhookPayment,
 			Payload:          sc,
 		}
 
 		lm.On("SyncTopUp", ledgerCtx, lcoid, paymentID).Return(nil, assert.AnError).Once()
-		lm.On("ToEvent", ledgerCtx, lcoid, EventActionDPSWebhookPayment, EventTypeInfo, req).Return(levent).Once()
-		lm.On("CreateEvent", ledgerCtx, levent).Return(nil).Once()
+		em.On("ToEvent", ledgerCtx, lcoid, events.EventActionDPSWebhookPayment, events.EventTypeInfo, req).Return(levent).Once()
 		lm.On("GetTopUps", ledgerCtx, lcoid).Return([]TopUp{top1}, nil).Once()
-		lm.On("ForceCancelTopUp", ledgerCtx, lcoid, top1.ID).Return(nil).Once()
-		lm.On("ToError", ledgerCtx, ToErrorParams{
-			event: levent,
-			err:   fmt.Errorf("syncing top up: %w", assert.AnError),
+		lm.On("ForceCancelTopUp", ledgerCtx, top1).Return(nil).Once()
+		em.On("ToError", ledgerCtx, events.ToErrorParams{
+			Event: levent,
+			Err:   fmt.Errorf("syncing top up: %w", assert.AnError),
 		}).Return(assert.AnError).Once()
 
 		err := h.HandleDPSWebhook(context.Background(), req)
@@ -684,7 +648,6 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 		assert.ErrorIs(t, err, assert.AnError)
 
 		assertExpectations(t)
-		call.Unset()
 	})
 
 	t.Run("error force cancel on payment_cancelled sync error payment id not equals top up", func(t *testing.T) {
@@ -693,7 +656,7 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 		someDate, _ := time.Parse(time.DateTime, "2025-03-14 12:31:56")
 		paymentID := "x1c2v3"
 		userID := "s98f"
-		call := xm.On("GenerateId").Return(xid, nil)
+		xm.On("GenerateId").Return(xid, nil)
 
 		req := DPSWebhookRequest{
 			ApplicationID:    "123",
@@ -717,21 +680,20 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 			ConfirmationUrl:  "url",
 		}
 		sc, _ := json.Marshal(req)
-		levent := Event{
+		levent := events.Event{
 			ID:               xid,
 			LCOrganizationID: lcoid,
-			Type:             EventTypeError,
-			Action:           EventActionDPSWebhookPayment,
+			Type:             events.EventTypeError,
+			Action:           events.EventActionDPSWebhookPayment,
 			Payload:          sc,
 		}
 
 		lm.On("SyncTopUp", ledgerCtx, lcoid, paymentID).Return(nil, assert.AnError).Once()
-		lm.On("ToEvent", ledgerCtx, lcoid, EventActionDPSWebhookPayment, EventTypeInfo, req).Return(levent).Once()
-		lm.On("CreateEvent", ledgerCtx, levent).Return(nil).Once()
 		lm.On("GetTopUps", ledgerCtx, lcoid).Return([]TopUp{top1}, nil).Once()
-		lm.On("ToError", ledgerCtx, ToErrorParams{
-			event: levent,
-			err:   fmt.Errorf("syncing top up: %w", assert.AnError),
+		em.On("ToEvent", ledgerCtx, lcoid, events.EventActionDPSWebhookPayment, events.EventTypeInfo, req).Return(levent).Once()
+		em.On("ToError", ledgerCtx, events.ToErrorParams{
+			Event: levent,
+			Err:   fmt.Errorf("syncing top up: %w", assert.AnError),
 		}).Return(assert.AnError).Once()
 
 		err := h.HandleDPSWebhook(context.Background(), req)
@@ -739,7 +701,6 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 		assert.ErrorIs(t, err, assert.AnError)
 
 		assertExpectations(t)
-		call.Unset()
 	})
 
 	t.Run("error force cancel on payment_cancelled sync error", func(t *testing.T) {
@@ -748,7 +709,7 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 		someDate, _ := time.Parse(time.DateTime, "2025-03-14 12:31:56")
 		paymentID := "x1c2v3"
 		userID := "s98f"
-		call := xm.On("GenerateId").Return(xid, nil)
+		xm.On("GenerateId").Return(xid, nil)
 
 		req := DPSWebhookRequest{
 			ApplicationID:    "123",
@@ -780,22 +741,21 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 			ConfirmationUrl:  "url",
 		}
 		sc, _ := json.Marshal(req)
-		levent := Event{
+		levent := events.Event{
 			ID:               xid,
 			LCOrganizationID: lcoid,
-			Type:             EventTypeError,
-			Action:           EventActionDPSWebhookPayment,
+			Type:             events.EventTypeError,
+			Action:           events.EventActionDPSWebhookPayment,
 			Payload:          sc,
 		}
 
 		lm.On("SyncTopUp", ledgerCtx, lcoid, paymentID).Return(nil, assert.AnError).Once()
-		lm.On("ToEvent", ledgerCtx, lcoid, EventActionDPSWebhookPayment, EventTypeInfo, req).Return(levent).Once()
-		lm.On("CreateEvent", ledgerCtx, levent).Return(nil).Once()
+		em.On("ToEvent", ledgerCtx, lcoid, events.EventActionDPSWebhookPayment, events.EventTypeInfo, req).Return(levent).Once()
 		lm.On("GetTopUps", ledgerCtx, lcoid).Return([]TopUp{top1, top2}, nil).Once()
 		lm.On("ForceCancelTopUp", ledgerCtx, top1).Return(assert.AnError).Once()
-		lm.On("ToError", ledgerCtx, ToErrorParams{
-			event: levent,
-			err:   fmt.Errorf("force cancell top up: %w", assert.AnError),
+		em.On("ToError", ledgerCtx, events.ToErrorParams{
+			Event: levent,
+			Err:   fmt.Errorf("force cancell top up: %w", assert.AnError),
 		}).Return(assert.AnError).Once()
 
 		err := h.HandleDPSWebhook(context.Background(), req)
@@ -803,7 +763,6 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 		assert.ErrorIs(t, err, assert.AnError)
 
 		assertExpectations(t)
-		call.Unset()
 	})
 
 	t.Run("error get top up on payment_cancelled sync error", func(t *testing.T) {
@@ -811,7 +770,7 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 		someDate, _ := time.Parse(time.DateTime, "2025-03-14 12:31:56")
 		paymentID := "x1c2v3"
 		userID := "s98f"
-		call := xm.On("GenerateId").Return(xid, nil)
+		xm.On("GenerateId").Return(xid, nil)
 
 		req := DPSWebhookRequest{
 			ApplicationID:    "123",
@@ -827,21 +786,20 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 			UserID: userID,
 		}
 		sc, _ := json.Marshal(req)
-		levent := Event{
+		levent := events.Event{
 			ID:               xid,
 			LCOrganizationID: lcoid,
-			Type:             EventTypeError,
-			Action:           EventActionDPSWebhookPayment,
+			Type:             events.EventTypeError,
+			Action:           events.EventActionDPSWebhookPayment,
 			Payload:          sc,
 		}
 
 		lm.On("SyncTopUp", ledgerCtx, lcoid, paymentID).Return(nil, assert.AnError).Once()
-		lm.On("ToEvent", ledgerCtx, lcoid, EventActionDPSWebhookPayment, EventTypeInfo, req).Return(levent).Once()
-		lm.On("CreateEvent", ledgerCtx, levent).Return(nil).Once()
+		em.On("ToEvent", ledgerCtx, lcoid, events.EventActionDPSWebhookPayment, events.EventTypeInfo, req).Return(levent).Once()
 		lm.On("GetTopUps", ledgerCtx, lcoid).Return(nil, assert.AnError).Once()
-		lm.On("ToError", ledgerCtx, ToErrorParams{
-			event: levent,
-			err:   fmt.Errorf("getting top up: %w", assert.AnError),
+		em.On("ToError", ledgerCtx, events.ToErrorParams{
+			Event: levent,
+			Err:   fmt.Errorf("getting top up: %w", assert.AnError),
 		}).Return(assert.AnError).Once()
 
 		err := h.HandleDPSWebhook(context.Background(), req)
@@ -849,6 +807,5 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 		assert.ErrorIs(t, err, assert.AnError)
 
 		assertExpectations(t)
-		call.Unset()
 	})
 }

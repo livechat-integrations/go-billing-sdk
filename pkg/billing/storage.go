@@ -2,8 +2,15 @@ package billing
 
 import (
 	"context"
+	"errors"
 
-	"github.com/livechat-integrations/go-billing-sdk/pkg/common/livechat"
+	"github.com/livechat-integrations/go-billing-sdk/internal/livechat"
+	"github.com/livechat-integrations/go-billing-sdk/pkg/events"
+)
+
+var (
+	ErrChargeNotFound       = errors.New("charge not found")
+	ErrSubscriptionNotFound = errors.New("subscription not found")
 )
 
 type Storage interface {
@@ -14,6 +21,7 @@ type Storage interface {
 
 	CreateSubscription(ctx context.Context, subscription Subscription) error
 	GetSubscriptionsByOrganizationID(ctx context.Context, lcID string) ([]Subscription, error)
-	DeleteSubscriptionByChargeID(ctx context.Context, id string) error
+	DeleteSubscriptionByChargeID(ctx context.Context, lcID string, id string) error
 	GetChargesByOrganizationID(ctx context.Context, lcID string) ([]Charge, error)
+	CreateEvent(ctx context.Context, event events.Event) error
 }

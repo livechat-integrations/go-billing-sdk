@@ -1,4 +1,4 @@
-package ledger
+package billing
 
 import (
 	"context"
@@ -21,7 +21,7 @@ type DPSWebhookRequest struct {
 }
 
 type Handler struct {
-	ledger       LedgerInterface
+	billing      BillingInterface
 	idProvider   events.IdProviderInterface
 	eventService events.EventService
 }
@@ -30,21 +30,26 @@ type HandlerInterface interface {
 	HandleDPSWebhook(ctx context.Context, req DPSWebhookRequest) error
 }
 
-func NewHandler(eventService events.EventService, ledger LedgerInterface, idProvider events.IdProviderInterface) *Handler {
+func NewHandler(eventService events.EventService, billing BillingInterface, idProvider events.IdProviderInterface) *Handler {
 	return &Handler{
-		ledger:       ledger,
+		billing:      billing,
 		idProvider:   idProvider,
 		eventService: eventService,
 	}
 }
 
 func (h *Handler) HandleDPSWebhook(ctx context.Context, req DPSWebhookRequest) error {
-	ctx = context.WithValue(ctx, LedgerEventIDCtxKey{}, h.idProvider.GenerateId())
-	ctx = context.WithValue(ctx, LedgerOrganizationIDCtxKey{}, req.LCOrganizationID)
+	ctx = context.WithValue(ctx, BillingEventIDCtxKey{}, h.idProvider.GenerateId())
+	ctx = context.WithValue(ctx, BillingOrganizationIDCtxKey{}, req.LCOrganizationID)
+	chargeID, exists := req.Payload["paymentID"].(string)
+	if !exists {
+		return nil
+	}
+
 	switch req.Event {
 	case "application_uninstalled":
 		event := h.eventService.ToEvent(ctx, req.LCOrganizationID, events.EventActionDPSWebhookApplicationUninstalled, events.EventTypeInfo, req)
-		topUps, err := h.ledger.GetTopUpsByOrganizationIDAndStatus(ctx, req.LCOrganizationID, TopUpStatusActive)
+		charges, err := h.billing.GetChargesByOrganizationID(ctx, req.LCOrganizationID)
 		if err != nil {
 			event.Type = events.EventTypeError
 			return h.eventService.ToError(ctx, events.ToErrorParams{
@@ -52,58 +57,54 @@ func (h *Handler) HandleDPSWebhook(ctx context.Context, req DPSWebhookRequest) e
 				Err:   err,
 			})
 		}
-		for _, t := range topUps {
-			if err := h.ledger.ForceCancelTopUp(ctx, t); err != nil {
+
+		for _, charge := range charges {
+			if err := h.billing.DeleteSubscriptionWithCharge(ctx, req.LCOrganizationID, charge.ID); err != nil {
 				event.Type = events.EventTypeError
 				return h.eventService.ToError(ctx, events.ToErrorParams{
 					Event: event,
-					Err:   err,
+					Err:   fmt.Errorf("delete subscription with charge: %w", err),
 				})
 			}
 		}
 		_ = h.eventService.CreateEvent(ctx, event)
-	case "payment_collected", "payment_cancelled", "payment_declined":
+	case "payment_collected", "payment_activated":
 		event := h.eventService.ToEvent(ctx, req.LCOrganizationID, events.EventActionDPSWebhookPayment, events.EventTypeInfo, req)
-		paymentID, ok := req.Payload["paymentID"].(string)
-		if !ok {
+		if err := h.billing.SyncRecurrentCharge(ctx, req.LCOrganizationID, chargeID); err != nil {
 			event.Type = events.EventTypeError
 			return h.eventService.ToError(ctx, events.ToErrorParams{
 				Event: event,
-				Err:   fmt.Errorf("payment id field not found in payload"),
+				Err:   fmt.Errorf("sync recurrent charge: %w", err),
 			})
 		}
-		_, err := h.ledger.SyncTopUp(ctx, req.LCOrganizationID, paymentID)
-		if err != nil {
-			if req.Event == "payment_cancelled" {
-				if tps, err := h.ledger.GetTopUps(ctx, req.LCOrganizationID); err == nil {
-					for _, t := range tps {
-						if paymentID != t.ID {
-							continue
-						}
-						if err := h.ledger.ForceCancelTopUp(ctx, t); err != nil {
-							event.Type = events.EventTypeError
-							return h.eventService.ToError(ctx, events.ToErrorParams{
-								Event: event,
-								Err:   fmt.Errorf("force cancell top up: %w", err),
-							})
-						}
-					}
-				} else {
-					event.Type = events.EventTypeError
-					return h.eventService.ToError(ctx, events.ToErrorParams{
-						Event: event,
-						Err:   fmt.Errorf("getting top up: %w", err),
-					})
-				}
 
-			}
+		planName, ok := ctx.Value(BillingSubscriptionPlanNameCtxKey{}).(string)
+		if !ok || planName == "" {
 			event.Type = events.EventTypeError
 			return h.eventService.ToError(ctx, events.ToErrorParams{
 				Event: event,
-				Err:   fmt.Errorf("syncing top up: %w", err),
+				Err:   fmt.Errorf("no plan name found in context"),
 			})
 		}
 
+		if err := h.billing.CreateSubscription(ctx, req.LCOrganizationID, chargeID, planName); err != nil {
+			event.Type = events.EventTypeError
+			return h.eventService.ToError(ctx, events.ToErrorParams{
+				Event: event,
+				Err:   fmt.Errorf("create subscription: %w", err),
+			})
+		}
+		_ = h.eventService.CreateEvent(ctx, event)
+	case "payment_cancelled":
+		event := h.eventService.ToEvent(ctx, req.LCOrganizationID, events.EventActionDPSWebhookPayment, events.EventTypeInfo, req)
+
+		if err := h.billing.DeleteSubscriptionWithCharge(ctx, req.LCOrganizationID, chargeID); err != nil {
+			event.Type = events.EventTypeError
+			return h.eventService.ToError(ctx, events.ToErrorParams{
+				Event: event,
+				Err:   fmt.Errorf("delete subscription with charge: %w", err),
+			})
+		}
 		_ = h.eventService.CreateEvent(ctx, event)
 	}
 

@@ -39,7 +39,8 @@ WHERE charge_id = $1;
 -- name: DeleteSubscriptionByChargeID :exec
 UPDATE subscriptions
 SET deleted_at = now()
-WHERE charge_id = $1;
+WHERE charge_id = $1
+AND lc_organization_id = $2;
 
 -- name: DeleteCharge :exec
 UPDATE charges
@@ -50,3 +51,7 @@ WHERE id = $1;
 SELECT *
 FROM charges
 WHERE lc_organization_id = $1;
+
+-- name: CreateEvent :exec
+INSERT INTO billing_events(id, lc_organization_id, type, action, payload, error, created_at)
+VALUES ($1, $2, $3, $4, $5, $6, NOW());
