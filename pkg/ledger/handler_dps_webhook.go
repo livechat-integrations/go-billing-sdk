@@ -62,7 +62,7 @@ func (h *Handler) HandleDPSWebhook(ctx context.Context, req DPSWebhookRequest) e
 			}
 		}
 		_ = h.eventService.CreateEvent(ctx, event)
-	case "payment_collected", "payment_cancelled", "payment_declined":
+	case "payment_collected", "payment_activated", "payment_cancelled", "payment_declined":
 		event := h.eventService.ToEvent(ctx, req.LCOrganizationID, events.EventActionDPSWebhookPayment, events.EventTypeInfo, req)
 		paymentID, ok := req.Payload["paymentID"].(string)
 		if !ok {
@@ -72,7 +72,20 @@ func (h *Handler) HandleDPSWebhook(ctx context.Context, req DPSWebhookRequest) e
 				Err:   fmt.Errorf("payment id field not found in payload"),
 			})
 		}
-		_, err := h.ledger.SyncTopUp(ctx, req.LCOrganizationID, paymentID)
+		dbTopUp, err := h.ledger.GetTopUpByIDAndOrganizationID(ctx, req.LCOrganizationID, paymentID)
+		if err != nil {
+			event.Type = events.EventTypeError
+			return h.eventService.ToError(ctx, events.ToErrorParams{
+				Event: event,
+				Err:   err,
+			})
+		}
+		if dbTopUp == nil {
+			event.Error = "top up not found"
+			_ = h.eventService.CreateEvent(ctx, event)
+			return nil
+		}
+		topUp, err := h.ledger.SyncTopUp(ctx, *dbTopUp)
 		if err != nil {
 			if req.Event == "payment_cancelled" {
 				if tps, err := h.ledger.GetTopUps(ctx, req.LCOrganizationID); err == nil {
@@ -102,6 +115,17 @@ func (h *Handler) HandleDPSWebhook(ctx context.Context, req DPSWebhookRequest) e
 				Event: event,
 				Err:   fmt.Errorf("syncing top up: %w", err),
 			})
+		}
+
+		if req.Event == "payment_collected" {
+			_, err2 := h.ledger.TopUp(ctx, *topUp)
+			if err2 != nil {
+				event.Type = events.EventTypeError
+				return h.eventService.ToError(ctx, events.ToErrorParams{
+					Event: event,
+					Err:   fmt.Errorf("top up: %w", err2),
+				})
+			}
 		}
 
 		_ = h.eventService.CreateEvent(ctx, event)

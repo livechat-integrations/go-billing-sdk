@@ -6,10 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/url"
 	"time"
-
-	"golang.org/x/sync/errgroup"
 
 	"github.com/livechat-integrations/go-billing-sdk/common"
 	"github.com/livechat-integrations/go-billing-sdk/internal/livechat"
@@ -17,26 +14,23 @@ import (
 )
 
 type LedgerInterface interface {
+	GetOperations(ctx context.Context, organizationID string) ([]Operation, error)
 	CreateCharge(ctx context.Context, params CreateChargeParams) (string, error)
+	TopUp(ctx context.Context, topUp TopUp) (string, error)
 	CreateTopUpRequest(ctx context.Context, params CreateTopUpRequestParams) (*TopUp, error)
 	GetBalance(ctx context.Context, organizationID string) (float32, error)
 	GetTopUps(ctx context.Context, organizationID string) ([]TopUp, error)
 	CancelTopUpRequest(ctx context.Context, organizationID string, ID string) error
 	ForceCancelTopUp(ctx context.Context, topUp TopUp) error
-	CancelCharge(ctx context.Context, organizationID string, ID string) error
 	GetTopUpsByOrganizationIDAndStatus(ctx context.Context, organizationID string, status TopUpStatus) ([]TopUp, error)
-	GetUniqueID() string
-	SyncTopUp(ctx context.Context, organizationID string, ID string) (*TopUp, error)
-	SyncOrCancelAllPendingTopUpRequests(ctx context.Context, organizationID string) error
+	GetTopUpByIDAndOrganizationID(ctx context.Context, organizationID string, ID string) (*TopUp, error)
+	SyncTopUp(ctx context.Context, topUp TopUp) (*TopUp, error)
+	SyncOrCancelTopUpRequests(ctx context.Context) error
 }
 
 var (
 	ErrChargeNotFound = fmt.Errorf("charge not found")
 	ErrTopUpNotFound  = fmt.Errorf("top up not found")
-)
-
-const (
-	queryChargeIDKey = "ext_charge_id"
 )
 
 type (
@@ -77,26 +71,109 @@ type CreateChargeParams struct {
 	OrganizationID string  `json:"organizationId"`
 }
 
+func (s *Service) GetOperations(ctx context.Context, organizationID string) ([]Operation, error) {
+	return s.storage.GetLedgerOperations(ctx, organizationID)
+}
+
 func (s *Service) CreateCharge(ctx context.Context, params CreateChargeParams) (string, error) {
-	event := s.eventService.ToEvent(ctx, params.OrganizationID, events.EventActionCreateCharge, events.EventTypeInfo, params)
-	charge := Charge{
-		ID:               s.GetUniqueID(),
-		Amount:           params.Amount,
-		Status:           ChargeStatusActive,
+	operation := Operation{
+		ID:               s.idProvider.GenerateId(),
+		Amount:           -params.Amount,
 		LCOrganizationID: params.OrganizationID,
 	}
-	if err := s.storage.CreateCharge(ctx, charge); err != nil {
+	_, err := s.createOperation(ctx, operation)
+	if err != nil {
+		return "", err
+	}
+	return operation.ID, nil
+}
+
+func (s *Service) TopUp(ctx context.Context, topUp TopUp) (string, error) {
+	event := s.eventService.ToEvent(ctx, topUp.LCOrganizationID, events.EventActionTopUp, events.EventTypeInfo, topUp)
+	dbTopUp, err := s.storage.GetTopUpByIDAndType(ctx, GetTopUpByIDAndTypeParams{
+		ID:   topUp.ID,
+		Type: topUp.Type,
+	})
+	if err != nil {
 		event.Type = events.EventTypeError
 		return "", s.eventService.ToError(ctx, events.ToErrorParams{
 			Event: event,
-			Err:   fmt.Errorf("failed to create charge in database: %w", err),
+			Err:   err,
+		})
+	}
+	if dbTopUp == nil {
+		event.Type = events.EventTypeError
+		return "", s.eventService.ToError(ctx, events.ToErrorParams{
+			Event: event,
+			Err:   fmt.Errorf("no existing top up in database"),
+		})
+	}
+	if !(dbTopUp.Status == TopUpStatusSuccess || dbTopUp.Status == TopUpStatusActive) {
+		event.Type = events.EventTypeError
+		return "", s.eventService.ToError(ctx, events.ToErrorParams{
+			Event: event,
+			Err:   fmt.Errorf("top up has wrong status: %s", dbTopUp.Status),
 		})
 	}
 
-	event.SetPayload(charge)
+	if dbTopUp.Type == TopUpTypeRecurrent {
+		var charge livechat.RecurrentChargeV3
+		err = json.Unmarshal(dbTopUp.LCCharge, &charge)
+		if err != nil {
+			event.Type = events.EventTypeError
+			return "", s.eventService.ToError(ctx, events.ToErrorParams{
+				Event: event,
+				Err:   err,
+			})
+		}
+		if charge.NextChargeAt == nil || charge.CurrentChargeAt == nil {
+			event.Type = events.EventTypeError
+			return "", s.eventService.ToError(ctx, events.ToErrorParams{
+				Event: event,
+				Err:   fmt.Errorf("no charge at current time"),
+			})
+		}
+		dbTopUp.NextTopUpAt = charge.NextChargeAt
+		dbTopUp.CurrentToppedUpAt = charge.CurrentChargeAt
+		dbTopUp, err = s.storage.UpsertTopUp(ctx, *dbTopUp)
+		if err != nil {
+			event.Type = events.EventTypeError
+			return "", s.eventService.ToError(ctx, events.ToErrorParams{
+				Event: event,
+				Err:   err,
+			})
+		}
+		if dbTopUp == nil {
+			event.Type = events.EventTypeError
+			return "", s.eventService.ToError(ctx, events.ToErrorParams{
+				Event: event,
+				Err:   fmt.Errorf("upsert top up error"),
+			})
+		}
+	}
+
+	id := dbTopUp.ID
+	if dbTopUp.Type == TopUpTypeRecurrent && dbTopUp.CurrentToppedUpAt != nil {
+		id = fmt.Sprintf("%s-%d", id, dbTopUp.CurrentToppedUpAt.UnixMicro())
+	}
+	operation := Operation{
+		ID:               id,
+		Amount:           dbTopUp.Amount,
+		LCOrganizationID: dbTopUp.LCOrganizationID,
+		Payload:          dbTopUp.LCCharge,
+	}
+	_, err = s.createOperation(ctx, operation)
+	if err != nil {
+		event.Type = events.EventTypeError
+		return "", s.eventService.ToError(ctx, events.ToErrorParams{
+			Event: event,
+			Err:   err,
+		})
+	}
+
 	_ = s.eventService.CreateEvent(ctx, event)
 
-	return charge.ID, nil
+	return operation.ID, nil
 }
 
 type CreateTopUpRequestParams struct {
@@ -197,7 +274,7 @@ func (s *Service) GetTopUps(ctx context.Context, organizationID string) ([]TopUp
 }
 
 func (s *Service) CancelTopUpRequest(ctx context.Context, organizationID string, ID string) error {
-	event := s.eventService.ToEvent(ctx, organizationID, events.EventActionCancelTopUp, events.EventTypeInfo, map[string]interface{}{"id": ID})
+	event := s.eventService.ToEvent(ctx, organizationID, events.EventActionCancelRecurrentTopUp, events.EventTypeInfo, map[string]interface{}{"id": ID})
 	topUp, err := s.storage.GetTopUpByIDAndType(ctx, GetTopUpByIDAndTypeParams{
 		ID:   ID,
 		Type: TopUpTypeRecurrent,
@@ -215,7 +292,7 @@ func (s *Service) CancelTopUpRequest(ctx context.Context, organizationID string,
 		return ErrTopUpNotFound
 	}
 
-	_, err = s.billingAPI.CancelRecurrentCharge(ctx, ID)
+	_, err = s.billingAPI.CancelRecurrentChargeV3(ctx, ID)
 	if err != nil {
 		event.Type = events.EventTypeError
 		return s.eventService.ToError(ctx, events.ToErrorParams{
@@ -225,9 +302,8 @@ func (s *Service) CancelTopUpRequest(ctx context.Context, organizationID string,
 	}
 
 	err = s.storage.UpdateTopUpStatus(ctx, UpdateTopUpStatusParams{
-		ID:                ID,
-		Status:            TopUpStatusCancelled,
-		CurrentToppedUpAt: topUp.CurrentToppedUpAt,
+		ID:     ID,
+		Status: TopUpStatusCancelled,
 	})
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
@@ -251,9 +327,8 @@ func (s *Service) CancelTopUpRequest(ctx context.Context, organizationID string,
 func (s *Service) ForceCancelTopUp(ctx context.Context, topUp TopUp) error {
 	event := s.eventService.ToEvent(ctx, topUp.LCOrganizationID, events.EventActionForceCancelCharge, events.EventTypeInfo, map[string]interface{}{"id": topUp.ID, "status": TopUpStatusCancelled})
 	err := s.storage.UpdateTopUpStatus(ctx, UpdateTopUpStatusParams{
-		ID:                topUp.ID,
-		Status:            TopUpStatusCancelled,
-		CurrentToppedUpAt: topUp.CurrentToppedUpAt,
+		ID:     topUp.ID,
+		Status: TopUpStatusCancelled,
 	})
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
@@ -272,113 +347,84 @@ func (s *Service) ForceCancelTopUp(ctx context.Context, topUp TopUp) error {
 	return nil
 }
 
-func (s *Service) CancelCharge(ctx context.Context, organizationID string, ID string) error {
-	event := s.eventService.ToEvent(ctx, organizationID, events.EventActionCancelCharge, events.EventTypeInfo, map[string]interface{}{"id": ID})
-	err := s.storage.UpdateChargeStatus(ctx, ID, ChargeStatusCancelled)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			event.SetPayload(map[string]interface{}{"id": ID, "result": "charge not found"})
-			_ = s.eventService.CreateEvent(ctx, event)
-			return ErrChargeNotFound
-		}
-		event.Type = events.EventTypeError
-		return s.eventService.ToError(ctx, events.ToErrorParams{
-			Event: event,
-			Err:   err,
-		})
-	}
-
-	event.SetPayload(map[string]interface{}{"id": ID, "result": "success"})
-	_ = s.eventService.CreateEvent(ctx, event)
-	return nil
-}
-
 func (s *Service) GetTopUpsByOrganizationIDAndStatus(ctx context.Context, organizationID string, status TopUpStatus) ([]TopUp, error) {
 	return s.storage.GetTopUpsByOrganizationIDAndStatus(ctx, organizationID, status)
 }
 
-func (s *Service) SyncTopUp(ctx context.Context, organizationID string, ID string) (*TopUp, error) {
-	event := s.eventService.ToEvent(ctx, organizationID, events.EventActionSyncTopUp, events.EventTypeInfo, map[string]interface{}{"id": ID})
-	var baseCharge livechat.BaseChargeV2
-	var fullCharge any
-	var chargeType TopUpType
-	status := TopUpStatusPending
-	topUp := TopUp{
-		LCOrganizationID: organizationID,
-	}
-	isDirect := false
-	isRecurrent := false
+func (s *Service) GetTopUpByIDAndOrganizationID(ctx context.Context, organizationID string, ID string) (*TopUp, error) {
+	return s.storage.GetTopUpByIDAndOrganizationID(ctx, organizationID, ID)
+}
 
-	eg := errgroup.Group{}
-	eg.Go(func() error {
-		c, err := s.billingAPI.GetDirectCharge(ctx, ID)
+func (s *Service) SyncTopUp(ctx context.Context, topUp TopUp) (*TopUp, error) {
+	event := s.eventService.ToEvent(ctx, topUp.LCOrganizationID, events.EventActionSyncTopUp, events.EventTypeInfo, topUp)
+	var baseCharge livechat.BaseChargeV3
+	var fullCharge any
+
+	switch topUp.Type {
+	case TopUpTypeDirect:
+		c, err := s.billingAPI.GetDirectCharge(ctx, topUp.ID)
 		if err != nil {
-			return err
+			event.Type = events.EventTypeError
+			return nil, s.eventService.ToError(ctx, events.ToErrorParams{
+				Event: event,
+				Err:   err,
+			})
 		}
 		if c == nil {
-			return nil
+			event.Type = events.EventTypeError
+			return nil, s.eventService.ToError(ctx, events.ToErrorParams{
+				Event: event,
+				Err:   fmt.Errorf("failed to get LC API direct top up by id: %s", topUp.ID),
+			})
 		}
 		fullCharge = c
-		baseCharge = c.BaseChargeV2
-		chargeType = TopUpTypeDirect
+		baseCharge = c.BaseChargeV3
 		switch baseCharge.Status {
 		case "success":
-			status = TopUpStatusActive
+			topUp.Status = TopUpStatusSuccess
 		case "processed", "accepted":
-			status = TopUpStatusProcessing
+			topUp.Status = TopUpStatusProcessing
 		case "failed":
-			status = TopUpStatusFailed
+			topUp.Status = TopUpStatusFailed
 		case "cancelled":
-			status = TopUpStatusCancelled
+			topUp.Status = TopUpStatusCancelled
 		case "declined":
-			status = TopUpStatusDeclined
+			topUp.Status = TopUpStatusDeclined
 		case "frozen":
-			status = TopUpStatusFrozen
+			topUp.Status = TopUpStatusFrozen
 		}
-		isDirect = true
-		return nil
-	})
-	eg.Go(func() error {
-		c, err := s.billingAPI.GetRecurrentChargeV2(ctx, ID)
+	case TopUpTypeRecurrent:
+		c, err := s.billingAPI.GetRecurrentChargeV3(ctx, topUp.ID)
 		if err != nil {
-			return err
+			event.Type = events.EventTypeError
+			return nil, s.eventService.ToError(ctx, events.ToErrorParams{
+				Event: event,
+				Err:   err,
+			})
 		}
 		if c == nil {
-			return nil
+			event.Type = events.EventTypeError
+			return nil, s.eventService.ToError(ctx, events.ToErrorParams{
+				Event: event,
+				Err:   fmt.Errorf("failed to get LC API recurrent top up by id: %s", topUp.ID),
+			})
 		}
 		fullCharge = c
-		baseCharge = c.BaseChargeV2
-		chargeType = TopUpTypeRecurrent
+		baseCharge = c.BaseChargeV3
 		switch baseCharge.Status {
 		case "active":
-			status = TopUpStatusActive
+			topUp.Status = TopUpStatusActive
 		case "accepted":
-			status = TopUpStatusProcessing
+			topUp.Status = TopUpStatusProcessing
 		case "cancelled":
-			status = TopUpStatusCancelled
+			topUp.Status = TopUpStatusCancelled
 		case "declined":
-			status = TopUpStatusDeclined
+			topUp.Status = TopUpStatusDeclined
 		case "frozen":
-			status = TopUpStatusFrozen
+			topUp.Status = TopUpStatusFrozen
+		case "past_due":
+			topUp.Status = TopUpStatusPastDue
 		}
-		topUp.CurrentToppedUpAt = c.CurrentChargeAt
-		topUp.NextTopUpAt = c.NextChargeAt
-		isRecurrent = true
-		return nil
-	})
-	if err := eg.Wait(); err != nil && !isDirect && !isRecurrent {
-		event.Type = events.EventTypeError
-		return nil, s.eventService.ToError(ctx, events.ToErrorParams{
-			Event: event,
-			Err:   err,
-		})
-	}
-	if isDirect && isRecurrent {
-		event.Type = events.EventTypeError
-		return nil, s.eventService.ToError(ctx, events.ToErrorParams{
-			Event: event,
-			Err:   fmt.Errorf("charge conflict"),
-		})
 	}
 
 	if fullCharge == nil {
@@ -389,19 +435,6 @@ func (s *Service) SyncTopUp(ctx context.Context, organizationID string, ID strin
 		})
 	}
 
-	u, err := url.Parse(baseCharge.ReturnURL)
-	if err != nil {
-		event.Type = events.EventTypeError
-		return nil, s.eventService.ToError(ctx, events.ToErrorParams{
-			Event: event,
-			Err:   err,
-		})
-	}
-	id := u.Query().Get(queryChargeIDKey)
-	if id == "" {
-		id = baseCharge.ID
-	}
-
 	p, err := json.Marshal(fullCharge)
 	if err != nil {
 		event.Type = events.EventTypeError
@@ -410,32 +443,11 @@ func (s *Service) SyncTopUp(ctx context.Context, organizationID string, ID strin
 			Err:   err,
 		})
 	}
-	topUp.ID = id
-	topUp.Type = chargeType
-	topUp.Status = status
 	topUp.LCCharge = p
 	if baseCharge.Price > 0 {
 		topUp.Amount = baseCharge.Price / 100
 	}
 	topUp.ConfirmationUrl = baseCharge.ConfirmationURL
-
-	// make sure that recurrent top up have all required fields initiated before proceeding to status upsert
-	if isRecurrent && topUp.CurrentToppedUpAt != nil {
-		err = s.storage.InitRecurrentTopUpRequiredValues(ctx, InitRecurrentTopUpRequiredValuesParams{
-			CurrentToppedUpAt: *topUp.CurrentToppedUpAt,
-			NextTopUpAt:       *topUp.NextTopUpAt,
-			ID:                topUp.ID,
-		})
-		if err != nil {
-			if !errors.Is(err, ErrNotFound) {
-				event.Type = events.EventTypeError
-				return nil, s.eventService.ToError(ctx, events.ToErrorParams{
-					Event: event,
-					Err:   err,
-				})
-			}
-		}
-	}
 
 	uTopUp, err := s.storage.UpsertTopUp(ctx, topUp)
 	if err != nil {
@@ -451,21 +463,93 @@ func (s *Service) SyncTopUp(ctx context.Context, organizationID string, ID strin
 	return uTopUp, nil
 }
 
-func (s *Service) SyncOrCancelAllPendingTopUpRequests(ctx context.Context, organizationID string) error {
-	topUps, err := s.storage.GetTopUpsByOrganizationIDAndStatus(ctx, organizationID, TopUpStatusPending)
+func (s *Service) SyncOrCancelTopUpRequests(ctx context.Context) error {
+	topUps, err := s.storage.GetTopUpsByTypeWhereStatusNotIn(ctx, GetTopUpsByTypeWhereStatusNotInParams{
+		Type: TopUpTypeDirect,
+		Statuses: []TopUpStatus{
+			TopUpStatusSuccess,
+			TopUpStatusCancelled,
+			TopUpStatusFailed,
+			TopUpStatusDeclined,
+		},
+	})
 	if err != nil {
 		return err
 	}
 
+	err = s.syncOrCancelDirectTopUpRequests(ctx, topUps)
+	if err != nil {
+		return err
+	}
+
+	topUps, err = s.storage.GetRecurrentTopUpsWhereStatusNotIn(ctx, []TopUpStatus{
+		TopUpStatusCancelled,
+		TopUpStatusFailed,
+		TopUpStatusDeclined,
+	})
+	if err != nil {
+		return err
+	}
+
+	err = s.syncOrCancelRecurrentTopUpRequests(ctx, topUps)
+	if err != nil {
+		return err
+	}
+
+	topUps, err = s.storage.GetDirectTopUpsWithoutOperations(ctx)
+	if err != nil {
+		return err
+	}
 	for _, topUp := range topUps {
-		tu, err := s.SyncTopUp(ctx, organizationID, topUp.ID)
+		organizationCtx := context.WithValue(ctx, LedgerOrganizationIDCtxKey{}, topUp.LCOrganizationID)
+		organizationCtx = context.WithValue(organizationCtx, LedgerEventIDCtxKey{}, s.idProvider.GenerateId())
+		_, err := s.TopUp(organizationCtx, topUp)
 		if err != nil {
 			return err
 		}
+	}
+
+	return nil
+}
+
+func (s *Service) syncOrCancelDirectTopUpRequests(ctx context.Context, topUps []TopUp) error {
+	for _, topUp := range topUps {
+		organizationCtx := context.WithValue(ctx, LedgerOrganizationIDCtxKey{}, topUp.LCOrganizationID)
+		organizationCtx = context.WithValue(organizationCtx, LedgerEventIDCtxKey{}, s.idProvider.GenerateId())
+		tu, err := s.SyncTopUp(organizationCtx, topUp)
+		if err != nil {
+			return err
+		}
+		if tu.Status == TopUpStatusSuccess || tu.Status == TopUpStatusCancelled || tu.Status == TopUpStatusFailed || tu.Status == TopUpStatusDeclined {
+			continue
+		}
+		monthAgo := time.Now().AddDate(0, -1, 0)
+		if tu.Type == TopUpTypeDirect && monthAgo.After(tu.CreatedAt) {
+			err = s.ForceCancelTopUp(organizationCtx, *tu)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+func (s *Service) syncOrCancelRecurrentTopUpRequests(ctx context.Context, topUps []TopUp) error {
+	for _, topUp := range topUps {
+		organizationCtx := context.WithValue(ctx, LedgerOrganizationIDCtxKey{}, topUp.LCOrganizationID)
+		organizationCtx = context.WithValue(organizationCtx, LedgerEventIDCtxKey{}, s.idProvider.GenerateId())
+		tu, err := s.SyncTopUp(organizationCtx, topUp)
+		if err != nil {
+			return err
+		}
+		if tu.Status == TopUpStatusActive || tu.Status == TopUpStatusCancelled || tu.Status == TopUpStatusFailed || tu.Status == TopUpStatusFrozen || tu.Status == TopUpStatusDeclined {
+			continue
+		}
 
 		monthAgo := time.Now().AddDate(0, -1, 0)
-		if tu.Status == TopUpStatusPending && monthAgo.After(tu.UpdatedAt) {
-			err = s.ForceCancelTopUp(ctx, *tu)
+		if tu.Type == TopUpTypeRecurrent && tu.CurrentToppedUpAt != nil && monthAgo.After(*tu.CurrentToppedUpAt) {
+			err = s.ForceCancelTopUp(organizationCtx, *tu)
 			if err != nil {
 				return err
 			}
@@ -532,10 +616,10 @@ func (s *Service) createBillingCharge(ctx context.Context, params createBillingC
 		result.ChargeID = &lcCharge.ID
 	case TopUpTypeRecurrent:
 		if params.Config.Months == nil {
-			return nil, fmt.Errorf("failed to create recurrent charge v2 via lc: charge config months is nil")
+			return nil, fmt.Errorf("failed to create recurrent charge V3 via lc: charge config months is nil")
 		}
 		// multiply price by 100 because LC is using integer (1 = 1 cent)
-		recurrentChargeParams := livechat.CreateRecurrentChargeV2Params{
+		recurrentChargeParams := livechat.CreateRecurrentChargeV3Params{
 			Name:      params.Name,
 			ReturnURL: returnUrl,
 			Price:     params.Amount * 100,
@@ -545,13 +629,13 @@ func (s *Service) createBillingCharge(ctx context.Context, params createBillingC
 		if params.Config.TrialDays != nil {
 			recurrentChargeParams.TrialDays = *params.Config.TrialDays
 		}
-		lcCharge, err := s.billingAPI.CreateRecurrentChargeV2(ctx, recurrentChargeParams)
+		lcCharge, err := s.billingAPI.CreateRecurrentChargeV3(ctx, recurrentChargeParams)
 
 		if err != nil {
-			return nil, fmt.Errorf("failed to create recurrent charge v2 via lc: %w", err)
+			return nil, fmt.Errorf("failed to create recurrent charge V3 via lc: %w", err)
 		}
 		if lcCharge == nil {
-			return nil, fmt.Errorf("failed to create recurrent charge v2 via lc: charge is nil")
+			return nil, fmt.Errorf("failed to create recurrent charge V3 via lc: charge is nil")
 		}
 
 		rawCharge, err := json.Marshal(lcCharge)
@@ -568,6 +652,16 @@ func (s *Service) createBillingCharge(ctx context.Context, params createBillingC
 	return &result, nil
 }
 
-func (s *Service) GetUniqueID() string {
-	return s.idProvider.GenerateId()
+func (s *Service) createOperation(ctx context.Context, operation Operation) (*Operation, error) {
+	event := s.eventService.ToEvent(ctx, operation.LCOrganizationID, events.EventActionCreateOperation, events.EventTypeInfo, operation)
+	err := s.storage.CreateLedgerOperation(ctx, operation)
+	if err != nil {
+		event.Type = events.EventTypeError
+		return nil, s.eventService.ToError(ctx, events.ToErrorParams{
+			Event: event,
+			Err:   fmt.Errorf("failed to create ledger operation in database: %w", err),
+		})
+	}
+	_ = s.eventService.CreateEvent(ctx, event)
+	return &operation, nil
 }

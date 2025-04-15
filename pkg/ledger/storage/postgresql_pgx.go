@@ -28,12 +28,12 @@ func NewPostgresqlPGX(conn PGXConn) *PostgresqlPGX {
 	return &PostgresqlPGX{queries: sqlc.New(conn)}
 }
 
-func (r *PostgresqlPGX) CreateCharge(ctx context.Context, c ledger.Charge) error {
-	if err := r.queries.CreateCharge(ctx, sqlc.CreateChargeParams{
+func (r *PostgresqlPGX) CreateLedgerOperation(ctx context.Context, c ledger.Operation) error {
+	if err := r.queries.CreateLedgerOperation(ctx, sqlc.CreateLedgerOperationParams{
 		ID:               c.ID,
 		Amount:           ToPGNumeric(&c.Amount),
-		Status:           string(c.Status),
 		LcOrganizationID: c.LCOrganizationID,
+		Payload:          c.Payload,
 	}); err != nil {
 		return err
 	}
@@ -41,28 +41,27 @@ func (r *PostgresqlPGX) CreateCharge(ctx context.Context, c ledger.Charge) error
 	return nil
 }
 
-func (r *PostgresqlPGX) UpdateChargeStatus(ctx context.Context, ID string, status ledger.ChargeStatus) error {
-	err := r.queries.UpdateChargeStatus(ctx, sqlc.UpdateChargeStatusParams{
-		ID:     ID,
-		Status: string(status),
-	})
+func (r *PostgresqlPGX) GetLedgerOperations(ctx context.Context, organizationID string) ([]ledger.Operation, error) {
+	var ops []ledger.Operation
+	rows, err := r.queries.GetLedgerOperationsByOrganizationID(ctx, organizationID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return ledger.ErrNotFound
+			return ops, nil
 		}
-		return err
+		return nil, err
 	}
-
-	return nil
+	for _, row := range rows {
+		o, err := row.ToLedgerOperation()
+		if err != nil {
+			return nil, err
+		}
+		ops = append(ops, *o)
+	}
+	return ops, nil
 }
 
 func (r *PostgresqlPGX) GetBalance(ctx context.Context, organizationID string) (float32, error) {
-	b, err := r.queries.GetOrganizationBalance(ctx, sqlc.GetOrganizationBalanceParams{
-		LcOrganizationID: organizationID,
-		Status:           string(ledger.TopUpStatusActive),
-		Status_2:         string(ledger.ChargeStatusCancelled),
-		Status_3:         string(ledger.ChargeStatusActive),
-	})
+	b, err := r.queries.GetOrganizationBalance(ctx, organizationID)
 	if err != nil {
 		return float32(0), err
 	}
@@ -76,63 +75,20 @@ func (r *PostgresqlPGX) GetBalance(ctx context.Context, organizationID string) (
 
 func (r *PostgresqlPGX) GetTopUpsByOrganizationID(ctx context.Context, organizationID string) ([]ledger.TopUp, error) {
 	var ts []ledger.TopUp
-	rows, err := r.queries.GetTopUpsByOrganizationID(ctx, organizationID)
+	dbTopUps, err := r.queries.GetTopUpsByOrganizationID(ctx, organizationID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ts, nil
 		}
 		return nil, err
 	}
-	for _, row := range rows {
-		t, err := row.ToLedgerTopUp()
-		if err != nil {
-			return nil, err
-		}
-		ts = append(ts, *t)
-	}
-	return ts, nil
-}
-
-func (r *PostgresqlPGX) InitRecurrentTopUpRequiredValues(ctx context.Context, params ledger.InitRecurrentTopUpRequiredValuesParams) error {
-	p := sqlc.InitTopUpRequiredValuesParams{
-		CurrentToppedUpAt: pgtype.Timestamptz{
-			Time:  params.CurrentToppedUpAt,
-			Valid: true,
-		},
-		NextTopUpAt: pgtype.Timestamptz{
-			Time:  params.NextTopUpAt,
-			Valid: true,
-		},
-		UniqueAt: pgtype.Timestamptz{
-			Time:  params.CurrentToppedUpAt,
-			Valid: true,
-		},
-		ID:     params.ID,
-		Type:   string(ledger.TopUpTypeRecurrent),
-		Status: string(ledger.TopUpStatusPending),
-	}
-
-	err := r.queries.InitTopUpRequiredValues(ctx, p)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return ledger.ErrNotFound
-		}
-		return err
-	}
-	return nil
+	return ToTopUps(dbTopUps)
 }
 
 func (r *PostgresqlPGX) UpdateTopUpStatus(ctx context.Context, params ledger.UpdateTopUpStatusParams) error {
 	p := sqlc.UpdateTopUpRequestStatusParams{
-		ID:       params.ID,
-		Status:   string(params.Status),
-		UniqueAt: pgtype.Timestamptz{},
-	}
-	if params.CurrentToppedUpAt != nil {
-		p.UniqueAt = pgtype.Timestamptz{
-			Time:  *params.CurrentToppedUpAt,
-			Valid: true,
-		}
+		ID:     params.ID,
+		Status: string(params.Status),
 	}
 
 	err := r.queries.UpdateTopUpRequestStatus(ctx, p)
@@ -183,27 +139,63 @@ func (r *PostgresqlPGX) CreateEvent(ctx context.Context, e events.Event) error {
 }
 
 func (r *PostgresqlPGX) GetTopUpsByOrganizationIDAndStatus(ctx context.Context, organizationID string, status ledger.TopUpStatus) ([]ledger.TopUp, error) {
-	rts, err := r.queries.GetTopUpsByOrganizationIDAndStatus(ctx, sqlc.GetTopUpsByOrganizationIDAndStatusParams{
+	dbTopUps, err := r.queries.GetTopUpsByOrganizationIDAndStatus(ctx, sqlc.GetTopUpsByOrganizationIDAndStatusParams{
 		LcOrganizationID: organizationID,
 		Status:           string(status),
 	})
 	if err != nil {
+		return HandleTopUpsError(err)
+	}
+	return ToTopUps(dbTopUps)
+}
+
+func (r *PostgresqlPGX) GetTopUpByIDAndOrganizationID(ctx context.Context, organizationID string, id string) (*ledger.TopUp, error) {
+	topUp, err := r.queries.GetTopUpByIDAndOrganizationID(ctx, sqlc.GetTopUpByIDAndOrganizationIDParams{
+		LcOrganizationID: organizationID,
+		ID:               id,
+	})
+	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return []ledger.TopUp{}, nil
+			return nil, nil
 		}
 		return nil, err
 	}
+	return topUp.ToLedgerTopUp()
+}
 
-	var topUps []ledger.TopUp
-	for _, rt := range rts {
-		topUp, err := rt.ToLedgerTopUp()
-		if err != nil {
-			return nil, err
-		}
-		topUps = append(topUps, *topUp)
+func (r *PostgresqlPGX) GetTopUpsByTypeWhereStatusNotIn(ctx context.Context, params ledger.GetTopUpsByTypeWhereStatusNotInParams) ([]ledger.TopUp, error) {
+	var statuses []string
+	for _, s := range params.Statuses {
+		statuses = append(statuses, string(s))
 	}
+	dbTopUps, err := r.queries.GetTopUpsByTypeWhereStatusNotIn(ctx, sqlc.GetTopUpsByTypeWhereStatusNotInParams{
+		Type:    string(params.Type),
+		Column2: statuses,
+	})
+	if err != nil {
+		return HandleTopUpsError(err)
+	}
+	return ToTopUps(dbTopUps)
+}
 
-	return topUps, nil
+func (r *PostgresqlPGX) GetRecurrentTopUpsWhereStatusNotIn(ctx context.Context, statuses []ledger.TopUpStatus) ([]ledger.TopUp, error) {
+	var stringStatuses []string
+	for _, s := range statuses {
+		stringStatuses = append(stringStatuses, string(s))
+	}
+	dbTopUps, err := r.queries.GetRecurrentTopUpsWhereStatusNotIn(ctx, stringStatuses)
+	if err != nil {
+		return HandleTopUpsError(err)
+	}
+	return ToTopUps(dbTopUps)
+}
+
+func (r *PostgresqlPGX) GetDirectTopUpsWithoutOperations(ctx context.Context) ([]ledger.TopUp, error) {
+	dbTopUps, err := r.queries.GetDirectTopUpsWithoutOperations(ctx)
+	if err != nil {
+		return HandleTopUpsError(err)
+	}
+	return ToTopUps(dbTopUps)
 }
 
 func (r *PostgresqlPGX) UpsertTopUp(ctx context.Context, topUp ledger.TopUp) (*ledger.TopUp, error) {
@@ -219,10 +211,6 @@ func (r *PostgresqlPGX) UpsertTopUp(ctx context.Context, topUp ledger.TopUp) (*l
 
 	if topUp.CurrentToppedUpAt != nil {
 		params.CurrentToppedUpAt = pgtype.Timestamptz{
-			Time:  *topUp.CurrentToppedUpAt,
-			Valid: true,
-		}
-		params.Column9 = pgtype.Timestamptz{
 			Time:  *topUp.CurrentToppedUpAt,
 			Valid: true,
 		}
@@ -254,4 +242,23 @@ func ToPGNumeric(n *float32) pgtype.Numeric {
 	_ = v.Scan(fmt.Sprintf("%f", *n))
 
 	return v
+}
+
+func ToTopUps(dbTopUps []sqlc.LedgerTopUp) ([]ledger.TopUp, error) {
+	var topUps []ledger.TopUp
+	for _, rt := range dbTopUps {
+		topUp, err := rt.ToLedgerTopUp()
+		if err != nil {
+			return nil, err
+		}
+		topUps = append(topUps, *topUp)
+	}
+	return topUps, nil
+}
+
+func HandleTopUpsError(err error) ([]ledger.TopUp, error) {
+	if errors.Is(err, pgx.ErrNoRows) {
+		return []ledger.TopUp{}, nil
+	}
+	return nil, err
 }
