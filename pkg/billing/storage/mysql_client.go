@@ -38,7 +38,7 @@ type SQLCharge struct {
 	ID               string     `json:"id" mysql:"id"`
 	LcOrganizationID string     `json:"lc_organization_id" mysql:"lc_organization_id"`
 	Type             string     `json:"type" mysql:"type"`
-	Payload          []byte     `json:"payload" mysql:"payload"`
+	Payload          string     `json:"payload" mysql:"payload"`
 	CreatedAt        time.Time  `json:"created_at" mysql:"created_at"`
 	DeletedAt        *time.Time `json:"deleted_at" mysql:"deleted_at"`
 }
@@ -51,7 +51,7 @@ type SQLSubscription struct {
 	CreatedAt        time.Time  `json:"created_at" mysql:"created_at"`
 	DeletedAt        *time.Time `json:"deleted_at" mysql:"deleted_at"`
 	Type             string     `json:"type" mysql:"type"`
-	Payload          []byte     `json:"payload" mysql:"payload"`
+	Payload          string     `json:"payload" mysql:"payload"`
 	ChargeCreatedAt  time.Time  `json:"charge_created_at" mysql:"charge_created_at"`
 	ChargeDeletedAt  *time.Time `json:"charge_deleted_at" mysql:"charge_deleted_at"`
 }
@@ -240,7 +240,7 @@ func ToBillingSubscription(r *SQLSubscription) *billing.Subscription {
 		ID:               r.ChargeID,
 		LCOrganizationID: r.LcOrganizationID,
 		Type:             billing.ChargeType(r.Type),
-		Payload:          r.Payload,
+		Payload:          json.RawMessage(r.Payload),
 		CreatedAt:        r.ChargeCreatedAt,
 		CanceledAt:       chargeDeletedAt,
 	}
@@ -258,7 +258,7 @@ func ToBillingCharge(c *SQLCharge) *billing.Charge {
 		ID:               c.ID,
 		LCOrganizationID: c.LcOrganizationID,
 		Type:             billing.ChargeType(c.Type),
-		Payload:          c.Payload,
+		Payload:          json.RawMessage(c.Payload),
 		CreatedAt:        c.CreatedAt,
 		CanceledAt:       canceledAt,
 	}
