@@ -41,6 +41,7 @@ func NewHandler(eventService events.EventService, billing BillingInterface, idPr
 func (h *Handler) HandleDPSWebhook(ctx context.Context, req DPSWebhookRequest) error {
 	ctx = context.WithValue(ctx, BillingEventIDCtxKey{}, h.idProvider.GenerateId())
 	ctx = context.WithValue(ctx, BillingOrganizationIDCtxKey{}, req.LCOrganizationID)
+	ctx = context.WithValue(ctx, BillingLicenseIDCtxKey{}, req.License)
 	chargeID, exists := req.Payload["paymentID"].(string)
 	if !exists {
 		return nil
