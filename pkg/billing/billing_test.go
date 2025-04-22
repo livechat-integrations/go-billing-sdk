@@ -18,6 +18,7 @@ var sm = new(storageMock)
 var em = new(eventMock)
 var xm = new(xIdMock)
 var xid = "2341"
+var lid int32 = 654
 var lcoid = "lcOrganizationID"
 
 var s = Service{

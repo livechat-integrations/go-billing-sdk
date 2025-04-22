@@ -28,6 +28,7 @@ func initCtx() context.Context {
 	wCtx := context.WithValue(context.Background(), BillingSubscriptionPlanNameCtxKey{}, planName)
 	wCtx = context.WithValue(wCtx, BillingEventIDCtxKey{}, xid)
 	wCtx = context.WithValue(wCtx, BillingOrganizationIDCtxKey{}, lcoid)
+	wCtx = context.WithValue(wCtx, BillingLicenseIDCtxKey{}, lid)
 
 	return wCtx
 }
@@ -90,7 +91,7 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 			ClientID:         "321",
 			Date:             someDate,
 			Event:            eventType,
-			License:          654,
+			License:          lid,
 			LCOrganizationID: lcoid,
 			Payload: map[string]interface{}{
 				"paymentID": paymentID,
@@ -141,7 +142,7 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 			ClientID:         "321",
 			Date:             someDate,
 			Event:            eventType,
-			License:          654,
+			License:          lid,
 			LCOrganizationID: lcoid,
 			Payload: map[string]interface{}{
 				"paymentID": paymentID,
@@ -184,7 +185,7 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 			ClientID:         "321",
 			Date:             someDate,
 			Event:            eventType,
-			License:          654,
+			License:          lid,
 			LCOrganizationID: lcoid,
 			Payload: map[string]interface{}{
 				"paymentID": paymentID,
@@ -239,7 +240,7 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 			ClientID:         "321",
 			Date:             someDate,
 			Event:            eventType,
-			License:          654,
+			License:          lid,
 			LCOrganizationID: lcoid,
 			Payload: map[string]interface{}{
 				"paymentID": paymentID,
@@ -280,7 +281,7 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 			ClientID:         "321",
 			Date:             someDate,
 			Event:            eventType,
-			License:          654,
+			License:          lid,
 			LCOrganizationID: lcoid,
 			Payload: map[string]interface{}{
 				"paymentID": paymentID,
@@ -320,7 +321,7 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 			ClientID:         "321",
 			Date:             someDate,
 			Event:            eventType,
-			License:          654,
+			License:          lid,
 			LCOrganizationID: lcoid,
 			Payload: map[string]interface{}{
 				"paymentID": paymentID,
@@ -363,7 +364,7 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 			ClientID:         "321",
 			Date:             someDate,
 			Event:            eventType,
-			License:          654,
+			License:          lid,
 			LCOrganizationID: lcoid,
 			Payload: map[string]interface{}{
 				"paymentID": paymentID,
@@ -382,6 +383,7 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 		wCtx := context.WithValue(context.Background(), BillingSubscriptionPlanNameCtxKey{}, "")
 		wCtx = context.WithValue(wCtx, BillingEventIDCtxKey{}, xid)
 		wCtx = context.WithValue(wCtx, BillingOrganizationIDCtxKey{}, lcoid)
+		wCtx = context.WithValue(wCtx, BillingLicenseIDCtxKey{}, lid)
 
 		bm.On("SyncRecurrentCharge", wCtx, lcoid, paymentID).Return(nil).Once()
 		em.On("ToEvent", wCtx, lcoid, events.EventActionDPSWebhookPayment, events.EventTypeInfo, req).Return(levent).Once()
@@ -410,7 +412,7 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 			ClientID:         "321",
 			Date:             someDate,
 			Event:            eventType,
-			License:          654,
+			License:          lid,
 			LCOrganizationID: lcoid,
 			Payload: map[string]interface{}{
 				"paymentID": paymentID,
@@ -454,7 +456,7 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 			ClientID:         "321",
 			Date:             someDate,
 			Event:            eventType,
-			License:          654,
+			License:          lid,
 			LCOrganizationID: lcoid,
 			Payload: map[string]interface{}{
 				"paymentID": paymentID,
@@ -494,7 +496,7 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 			ClientID:         "321",
 			Date:             someDate,
 			Event:            eventType,
-			License:          654,
+			License:          lid,
 			LCOrganizationID: lcoid,
 			Payload: map[string]interface{}{
 				"paymentID": paymentID,
