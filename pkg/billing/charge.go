@@ -29,6 +29,7 @@ type Subscription struct {
 	PlanName         string
 	CreatedAt        time.Time
 	DeletedAt        *time.Time
+	NextChargeAt     *time.Time
 }
 
 type Plan struct {
