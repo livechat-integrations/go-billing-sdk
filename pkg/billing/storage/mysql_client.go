@@ -219,12 +219,23 @@ func ToBillingSubscription(r *SQLSubscription) *billing.Subscription {
 		canceledAt = r.DeletedAt
 	}
 
+	var nextChargeAt *time.Time
+	var payloadMap map[string]any
+	if err := json.Unmarshal([]byte(r.Payload), &payloadMap); err == nil {
+		if val, ok := payloadMap["next_charge_at"].(string); ok && val != "" {
+			if parsed, err := time.Parse(time.RFC3339, val); err == nil {
+				nextChargeAt = &parsed
+			}
+		}
+	}
+
 	subscription := &billing.Subscription{
 		ID:               r.ID,
 		LCOrganizationID: r.LcOrganizationID,
 		PlanName:         r.PlanName,
 		CreatedAt:        r.CreatedAt,
 		DeletedAt:        canceledAt,
+		NextChargeAt:     nextChargeAt,
 	}
 
 	if len(r.ChargeID) < 1 {
