@@ -11,6 +11,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/livechat-integrations/go-billing-sdk/internal/livechat"
 	"github.com/livechat-integrations/go-billing-sdk/pkg/billing"
 )
 
@@ -189,6 +190,82 @@ func TestNewSQLClient_CreateCharge(t *testing.T) {
 			Payload:          charge.Payload,
 			LCOrganizationID: charge.LCOrganizationID,
 		})
+		assert.ErrorIs(t, err, assert.AnError)
+
+		assertExpectations(t)
+	})
+}
+
+func TestNewSQLClient_UpdateChargePayload(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
+		bch := livechat.BaseCharge{
+			ID: "id1",
+		}
+
+		jsonPayload, _ := json.Marshal(bch)
+		charge := billing.Charge{
+			ID:      "id1",
+			Payload: jsonPayload,
+		}
+
+		res := lcMySQL.Meta{
+			LastIntertID: 1,
+			RowsAffected: 1,
+			QueryTime:    1,
+		}
+		rawPayload, _ := json.Marshal(charge.Payload)
+
+		ctx := context.Background()
+		dm.On("Exec", ctx, "UPDATE charges SET payload = ? WHERE id = ? AND deleted_at IS NULL", []interface{}{rawPayload, charge.ID}).Return(&res, nil).Once()
+
+		err := mysqlClient.UpdateChargePayload(context.Background(), charge.ID, bch)
+		assert.NoError(t, err)
+
+		assertExpectations(t)
+	})
+	t.Run("0 rows", func(t *testing.T) {
+		bch := livechat.BaseCharge{
+			ID: "id1",
+		}
+
+		jsonPayload, _ := json.Marshal(bch)
+		charge := billing.Charge{
+			ID:      "id1",
+			Payload: jsonPayload,
+		}
+
+		res := lcMySQL.Meta{
+			LastIntertID: 0,
+			RowsAffected: 0,
+			QueryTime:    1,
+		}
+		rawPayload, _ := json.Marshal(charge.Payload)
+
+		ctx := context.Background()
+		dm.On("Exec", ctx, "UPDATE charges SET payload = ? WHERE id = ? AND deleted_at IS NULL", []interface{}{rawPayload, charge.ID}).Return(&res, nil).Once()
+
+		err := mysqlClient.UpdateChargePayload(context.Background(), charge.ID, bch)
+		assert.NoError(t, err)
+
+		assertExpectations(t)
+	})
+	t.Run("0 rows", func(t *testing.T) {
+		bch := livechat.BaseCharge{
+			ID: "id1",
+		}
+
+		jsonPayload, _ := json.Marshal(bch)
+		charge := billing.Charge{
+			ID:      "id1",
+			Payload: jsonPayload,
+		}
+
+		rawPayload, _ := json.Marshal(charge.Payload)
+
+		ctx := context.Background()
+		dm.On("Exec", ctx, "UPDATE charges SET payload = ? WHERE id = ? AND deleted_at IS NULL", []interface{}{rawPayload, charge.ID}).Return(nil, assert.AnError).Once()
+
+		err := mysqlClient.UpdateChargePayload(context.Background(), charge.ID, bch)
 		assert.ErrorIs(t, err, assert.AnError)
 
 		assertExpectations(t)

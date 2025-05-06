@@ -109,12 +109,9 @@ func (sql *SQLClient) UpdateChargePayload(ctx context.Context, id string, payloa
 		return err
 	}
 
-	res, err := sql.sqlClient.Exec(ctx, "UPDATE charges SET payload = ? WHERE id = ? AND deleted_at IS NULL", rawPayload, id)
+	_, err = sql.sqlClient.Exec(ctx, "UPDATE charges SET payload = ? WHERE id = ? AND deleted_at IS NULL", rawPayload, id)
 	if err != nil {
 		return fmt.Errorf("couldn't update charge: %w", err)
-	}
-	if res.RowsAffected == 0 {
-		return billing.ErrChargeNotFound
 	}
 
 	return nil
