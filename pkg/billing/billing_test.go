@@ -449,7 +449,7 @@ func TestService_CreateSubscription(t *testing.T) {
 		assertExpectations(t)
 	})
 
-	t.Run("error subscription already exists", func(t *testing.T) {
+	t.Run("success subscription already exists", func(t *testing.T) {
 		charge := Charge{
 			ID: "id",
 		}
@@ -469,15 +469,18 @@ func TestService_CreateSubscription(t *testing.T) {
 			Action:           events.EventActionCreateSubscription,
 			Payload:          sc,
 		}
+
+		afterPayload := map[string]interface{}{"planName": "super", "chargeID": "id", "result": "subscription already exists"}
+		asc, _ := json.Marshal(afterPayload)
+		afterEvent := levent
+		afterEvent.Payload = asc
+
 		em.On("ToEvent", context.Background(), lcoid, events.EventActionCreateSubscription, events.EventTypeInfo, payload).Return(levent).Once()
-		em.On("ToError", context.Background(), events.ToErrorParams{
-			Event: levent,
-			Err:   fmt.Errorf("subscription already exists"),
-		}).Return(assert.AnError).Once()
+		em.On("CreateEvent", context.Background(), afterEvent).Return(nil).Once()
 
 		err := s.CreateSubscription(context.Background(), lcoid, "id", "super")
 
-		assert.ErrorIs(t, err, assert.AnError)
+		assert.Nil(t, err)
 
 		assertExpectations(t)
 	})

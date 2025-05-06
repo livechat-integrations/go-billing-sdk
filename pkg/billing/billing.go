@@ -187,11 +187,9 @@ func (s *Service) CreateSubscription(ctx context.Context, lcOrganizationID strin
 
 	for _, sub := range dbSubscriptions {
 		if sub.Charge.ID == chargeID {
-			event.Type = events.EventTypeError
-			return s.eventService.ToError(ctx, events.ToErrorParams{
-				Event: event,
-				Err:   fmt.Errorf("subscription already exists"),
-			})
+			event.SetPayload(map[string]interface{}{"planName": planName, "chargeID": chargeID, "result": "subscription already exists"})
+			_ = s.eventService.CreateEvent(ctx, event)
+			return nil
 		}
 	}
 
