@@ -382,7 +382,9 @@ func (s *Service) SyncTopUp(ctx context.Context, topUp TopUp) (*TopUp, error) {
 		switch baseCharge.Status {
 		case "success":
 			topUp.Status = TopUpStatusSuccess
-		case "processed", "accepted":
+		case "accepted":
+			topUp.Status = TopUpStatusAccepted
+		case "processed":
 			topUp.Status = TopUpStatusProcessing
 		case "failed":
 			topUp.Status = TopUpStatusFailed
@@ -414,8 +416,10 @@ func (s *Service) SyncTopUp(ctx context.Context, topUp TopUp) (*TopUp, error) {
 		switch baseCharge.Status {
 		case "active":
 			topUp.Status = TopUpStatusActive
-		case "accepted":
+		case "processed":
 			topUp.Status = TopUpStatusProcessing
+		case "accepted":
+			topUp.Status = TopUpStatusAccepted
 		case "cancelled":
 			topUp.Status = TopUpStatusCancelled
 		case "declined":
@@ -520,18 +524,32 @@ func (s *Service) syncOrCancelDirectTopUpRequests(ctx context.Context, topUps []
 		if err != nil {
 			return err
 		}
-		if tu.Status == TopUpStatusSuccess || tu.Status == TopUpStatusCancelled || tu.Status == TopUpStatusFailed || tu.Status == TopUpStatusDeclined {
-			continue
-		}
-		monthAgo := time.Now().AddDate(0, -1, 0)
-		if tu.Type == TopUpTypeDirect && monthAgo.After(tu.CreatedAt) {
-			err = s.ForceCancelTopUp(organizationCtx, *tu)
+
+		switch tu.Status {
+		case TopUpStatusSuccess,
+			TopUpStatusCancelled,
+			TopUpStatusFailed,
+			TopUpStatusDeclined:
+			// do nothing
+
+		case TopUpStatusAccepted:
+			_, err = s.billingAPI.ActivateDirectCharge(organizationCtx, tu.ID)
 			if err != nil {
 				return err
 			}
+			if err = s.eventService.CreateEvent(organizationCtx, s.eventService.ToEvent(organizationCtx, topUp.LCOrganizationID, events.EventActionActivateCharge, events.EventTypeInfo, tu)); err != nil {
+				return err
+			}
+		default:
+			monthAgo := time.Now().AddDate(0, -1, 0)
+			if tu.Type == TopUpTypeDirect && monthAgo.After(tu.CreatedAt) {
+				err = s.ForceCancelTopUp(organizationCtx, *tu)
+				if err != nil {
+					return err
+				}
+			}
 		}
 	}
-
 	return nil
 }
 
@@ -543,15 +561,30 @@ func (s *Service) syncOrCancelRecurrentTopUpRequests(ctx context.Context, topUps
 		if err != nil {
 			return err
 		}
-		if tu.Status == TopUpStatusActive || tu.Status == TopUpStatusCancelled || tu.Status == TopUpStatusFailed || tu.Status == TopUpStatusFrozen || tu.Status == TopUpStatusDeclined {
-			continue
-		}
 
-		monthAgo := time.Now().AddDate(0, -1, 0)
-		if tu.Type == TopUpTypeRecurrent && tu.CurrentToppedUpAt != nil && monthAgo.After(*tu.CurrentToppedUpAt) {
-			err = s.ForceCancelTopUp(organizationCtx, *tu)
+		switch tu.Status {
+		case TopUpStatusActive,
+			TopUpStatusCancelled,
+			TopUpStatusFailed,
+			TopUpStatusFrozen,
+			TopUpStatusDeclined:
+			// do nothing
+
+		case TopUpStatusAccepted:
+			_, err = s.billingAPI.ActivateRecurrentCharge(organizationCtx, tu.ID)
 			if err != nil {
 				return err
+			}
+			if err = s.eventService.CreateEvent(organizationCtx, s.eventService.ToEvent(organizationCtx, topUp.LCOrganizationID, events.EventActionActivateCharge, events.EventTypeInfo, tu)); err != nil {
+				return err
+			}
+		default:
+			monthAgo := time.Now().AddDate(0, -1, 0)
+			if tu.Type == TopUpTypeRecurrent && tu.CurrentToppedUpAt != nil && monthAgo.After(*tu.CurrentToppedUpAt) {
+				err = s.ForceCancelTopUp(organizationCtx, *tu)
+				if err != nil {
+					return err
+				}
 			}
 		}
 	}

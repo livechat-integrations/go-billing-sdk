@@ -122,6 +122,14 @@ func (m *apiMock) CreateRecurrentCharge(ctx context.Context, params livechat.Cre
 	return args.Get(0).(*livechat.RecurrentCharge), args.Error(1)
 }
 
+func (m *apiMock) ActivateRecurrentCharge(ctx context.Context, id string) (*livechat.RecurrentChargeV3, error) {
+	panic("implement me")
+}
+
+func (m *apiMock) ActivateDirectCharge(ctx context.Context, id string) (*livechat.DirectCharge, error) {
+	panic("implement me")
+}
+
 type storageMock struct {
 	mock.Mock
 }

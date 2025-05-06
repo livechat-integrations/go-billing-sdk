@@ -91,6 +91,8 @@ type ApiInterface interface {
 	GetRecurrentCharge(ctx context.Context, id string) (*RecurrentCharge, error)
 	GetRecurrentChargeV3(ctx context.Context, id string) (*RecurrentChargeV3, error)
 	CancelRecurrentChargeV3(ctx context.Context, id string) (*RecurrentChargeV3, error)
+	ActivateRecurrentCharge(ctx context.Context, id string) (*RecurrentChargeV3, error)
+	ActivateDirectCharge(ctx context.Context, id string) (*DirectCharge, error)
 }
 
 type httpCaller interface {
@@ -245,6 +247,22 @@ func (a *Api) CancelRecurrentChargeV3(ctx context.Context, id string) (*Recurren
 	}
 
 	return asRecurrentChargeV3(resp)
+}
+
+func (a *Api) ActivateRecurrentCharge(ctx context.Context, id string) (*RecurrentChargeV3, error) {
+	resp, err := a.call(ctx, "PUT", fmt.Sprintf("/v3/recurrent_charge/livechat/%s/activate", id), nil)
+	if err != nil {
+		return nil, err
+	}
+	return asRecurrentChargeV3(resp)
+}
+
+func (a *Api) ActivateDirectCharge(ctx context.Context, id string) (*DirectCharge, error) {
+	resp, err := a.call(ctx, "PUT", fmt.Sprintf("/v3/direct_charge/livechat/%s/activate", id), nil)
+	if err != nil {
+		return nil, err
+	}
+	return asDirectCharge(resp)
 }
 
 func asDirectCharge(body []byte) (*DirectCharge, error) {

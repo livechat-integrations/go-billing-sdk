@@ -24,6 +24,7 @@ const (
 	TopUpStatusDeclined   TopUpStatus = "declined"
 	TopUpStatusFrozen     TopUpStatus = "frozen"
 	TopUpStatusPastDue    TopUpStatus = "past_due"
+	TopUpStatusAccepted   TopUpStatus = "accepted"
 )
 
 type TopUp struct {

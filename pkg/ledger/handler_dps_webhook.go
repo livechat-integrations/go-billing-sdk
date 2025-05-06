@@ -41,6 +41,7 @@ func NewHandler(eventService events.EventService, ledger LedgerInterface, idProv
 func (h *Handler) HandleDPSWebhook(ctx context.Context, req DPSWebhookRequest) error {
 	ctx = context.WithValue(ctx, LedgerEventIDCtxKey{}, h.idProvider.GenerateId())
 	ctx = context.WithValue(ctx, LedgerOrganizationIDCtxKey{}, req.LCOrganizationID)
+
 	switch req.Event {
 	case "application_uninstalled":
 		event := h.eventService.ToEvent(ctx, req.LCOrganizationID, events.EventActionDPSWebhookApplicationUninstalled, events.EventTypeInfo, req)
@@ -72,7 +73,7 @@ func (h *Handler) HandleDPSWebhook(ctx context.Context, req DPSWebhookRequest) e
 				Err:   fmt.Errorf("payment id field not found in payload"),
 			})
 		}
-		dbTopUp, err := h.ledger.GetTopUpByIDAndOrganizationID(ctx, req.LCOrganizationID, paymentID)
+		topUp, err := h.ledger.GetTopUpByIDAndOrganizationID(ctx, req.LCOrganizationID, paymentID)
 		if err != nil {
 			event.Type = events.EventTypeError
 			return h.eventService.ToError(ctx, events.ToErrorParams{
@@ -80,56 +81,50 @@ func (h *Handler) HandleDPSWebhook(ctx context.Context, req DPSWebhookRequest) e
 				Err:   err,
 			})
 		}
-		if dbTopUp == nil {
+		if topUp == nil {
 			event.Error = "top up not found"
 			_ = h.eventService.CreateEvent(ctx, event)
 			return nil
 		}
-		topUp, err := h.ledger.SyncTopUp(ctx, *dbTopUp)
-		if err != nil {
-			if req.Event == "payment_cancelled" {
-				if tps, err := h.ledger.GetTopUps(ctx, req.LCOrganizationID); err == nil {
-					for _, t := range tps {
-						if paymentID != t.ID {
-							continue
-						}
-						if err := h.ledger.ForceCancelTopUp(ctx, t); err != nil {
-							event.Type = events.EventTypeError
-							return h.eventService.ToError(ctx, events.ToErrorParams{
-								Event: event,
-								Err:   fmt.Errorf("force cancell top up: %w", err),
-							})
-						}
-					}
-				} else {
-					event.Type = events.EventTypeError
-					return h.eventService.ToError(ctx, events.ToErrorParams{
-						Event: event,
-						Err:   fmt.Errorf("getting top up: %w", err),
-					})
-				}
 
-			}
+		if topUp, err = h.syncTopUp(ctx, req.LCOrganizationID, paymentID, req.Event, *topUp); err != nil {
 			event.Type = events.EventTypeError
 			return h.eventService.ToError(ctx, events.ToErrorParams{
 				Event: event,
-				Err:   fmt.Errorf("syncing top up: %w", err),
+				Err:   err,
 			})
 		}
 
 		if req.Event == "payment_collected" {
-			_, err2 := h.ledger.TopUp(ctx, *topUp)
-			if err2 != nil {
-				event.Type = events.EventTypeError
-				return h.eventService.ToError(ctx, events.ToErrorParams{
-					Event: event,
-					Err:   fmt.Errorf("top up: %w", err2),
-				})
+			_, err := h.ledger.TopUp(ctx, *topUp)
+			if err != nil {
+				return fmt.Errorf("top up: %w", err)
 			}
 		}
-
 		_ = h.eventService.CreateEvent(ctx, event)
 	}
 
 	return nil
+}
+
+func (h *Handler) syncTopUp(ctx context.Context, organizationID, paymentID, dpsEvent string, dbTopUp TopUp) (*TopUp, error) {
+	topUp, err := h.ledger.SyncTopUp(ctx, dbTopUp)
+	if err != nil {
+		if dpsEvent == "payment_cancelled" {
+			tps, err := h.ledger.GetTopUps(ctx, organizationID)
+			if err != nil {
+				return nil, fmt.Errorf("getting top ups: %w", err)
+			}
+
+			for _, t := range tps {
+				if paymentID == t.ID {
+					if err := h.ledger.ForceCancelTopUp(ctx, t); err != nil {
+						return nil, fmt.Errorf("force cancel top up: %w", err)
+					}
+				}
+			}
+		}
+		return nil, fmt.Errorf("syncing top up: %w", err)
+	}
+	return topUp, nil
 }
