@@ -63,8 +63,8 @@ func TestAPI_CreateRecurrentChargeV3(t *testing.T) {
 			Body:       io.NopCloser(strings.NewReader(`{"id":"1","price":2000}`)),
 		}, nil).Once()
 
-		charge, err := a.CreateRecurrentChargeV3(context.Background(), CreateRecurrentChargeV3Params{
-			Price: float32(20.000),
+		charge, err := a.CreateRecurrentCharge(context.Background(), CreateRecurrentChargeParams{
+			Price: 20.000,
 		})
 		assert.NoError(t, err)
 		assert.Equal(t, "1", charge.ID)
@@ -76,7 +76,7 @@ func TestAPI_CreateRecurrentChargeV3(t *testing.T) {
 			Body:       io.NopCloser(strings.NewReader(``)),
 		}, nil).Once()
 
-		charge, err := a.CreateRecurrentChargeV3(context.Background(), CreateRecurrentChargeV3Params{})
+		charge, err := a.CreateRecurrentCharge(context.Background(), CreateRecurrentChargeParams{})
 		assert.Error(t, err)
 		assert.Nil(t, charge)
 	})
@@ -90,7 +90,7 @@ func TestAPI_CreateDirectCharge(t *testing.T) {
 		}, nil).Once()
 
 		charge, err := a.CreateDirectCharge(context.Background(), CreateDirectChargeParams{
-			Price: float32(20.000),
+			Price: 20.000,
 		})
 		assert.NoError(t, err)
 		assert.Equal(t, "1", charge.ID)
