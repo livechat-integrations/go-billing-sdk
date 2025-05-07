@@ -891,7 +891,7 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 		lm.On("ForceCancelTopUp", ledgerCtx, top1).Return(assert.AnError).Once()
 		em.On("ToError", ledgerCtx, events.ToErrorParams{
 			Event: levent,
-			Err:   fmt.Errorf("force cancell top up: %w", assert.AnError),
+			Err:   fmt.Errorf("force cancel top up: %w", assert.AnError),
 		}).Return(assert.AnError).Once()
 
 		err := h.HandleDPSWebhook(context.Background(), req)
@@ -945,7 +945,7 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 		lm.On("GetTopUps", ledgerCtx, lcoid).Return(nil, assert.AnError).Once()
 		em.On("ToError", ledgerCtx, events.ToErrorParams{
 			Event: levent,
-			Err:   fmt.Errorf("getting top up: %w", assert.AnError),
+			Err:   fmt.Errorf("getting top ups: %w", assert.AnError),
 		}).Return(assert.AnError).Once()
 
 		err := h.HandleDPSWebhook(context.Background(), req)

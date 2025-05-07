@@ -80,28 +80,12 @@ type apiMock struct {
 }
 
 func (m *apiMock) GetDirectCharge(ctx context.Context, id string) (*livechat.DirectCharge, error) {
-	//TODO implement me
-	panic("implement me")
-}
+	args := m.Called(ctx, id)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
 
-func (m *apiMock) GetRecurrentChargeV3(ctx context.Context, id string) (*livechat.RecurrentChargeV3, error) {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (m *apiMock) CreateDirectCharge(ctx context.Context, params livechat.CreateDirectChargeParams) (*livechat.DirectCharge, error) {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (m *apiMock) CreateRecurrentChargeV3(ctx context.Context, params livechat.CreateRecurrentChargeV3Params) (*livechat.RecurrentChargeV3, error) {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (m *apiMock) CancelRecurrentChargeV3(ctx context.Context, id string) (*livechat.RecurrentChargeV3, error) {
-	//TODO implement me
-	panic("implement me")
+	return args.Get(0).(*livechat.DirectCharge), args.Error(1)
 }
 
 func (m *apiMock) GetRecurrentCharge(ctx context.Context, id string) (*livechat.RecurrentCharge, error) {
@@ -113,6 +97,11 @@ func (m *apiMock) GetRecurrentCharge(ctx context.Context, id string) (*livechat.
 	return args.Get(0).(*livechat.RecurrentCharge), args.Error(1)
 }
 
+func (m *apiMock) CreateDirectCharge(ctx context.Context, params livechat.CreateDirectChargeParams) (*livechat.DirectCharge, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
 func (m *apiMock) CreateRecurrentCharge(ctx context.Context, params livechat.CreateRecurrentChargeParams) (*livechat.RecurrentCharge, error) {
 	args := m.Called(ctx, params)
 	if args.Get(0) == nil {
@@ -120,6 +109,37 @@ func (m *apiMock) CreateRecurrentCharge(ctx context.Context, params livechat.Cre
 	}
 
 	return args.Get(0).(*livechat.RecurrentCharge), args.Error(1)
+}
+
+func (m *apiMock) CancelRecurrentCharge(ctx context.Context, id string) (*livechat.RecurrentCharge, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (m *apiMock) GetRecurrentChargeV3(ctx context.Context, id string) (*livechat.RecurrentCharge, error) {
+	args := m.Called(ctx, id)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+
+	return args.Get(0).(*livechat.RecurrentCharge), args.Error(1)
+}
+
+func (m *apiMock) CreateRecurrentChargeV3(ctx context.Context, params livechat.CreateRecurrentChargeParams) (*livechat.RecurrentCharge, error) {
+	args := m.Called(ctx, params)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+
+	return args.Get(0).(*livechat.RecurrentCharge), args.Error(1)
+}
+
+func (m *apiMock) ActivateRecurrentCharge(ctx context.Context, id string) (*livechat.RecurrentCharge, error) {
+	panic("implement me")
+}
+
+func (m *apiMock) ActivateDirectCharge(ctx context.Context, id string) (*livechat.DirectCharge, error) {
+	panic("implement me")
 }
 
 type storageMock struct {

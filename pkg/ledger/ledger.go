@@ -117,7 +117,7 @@ func (s *Service) TopUp(ctx context.Context, topUp TopUp) (string, error) {
 	}
 
 	if dbTopUp.Type == TopUpTypeRecurrent {
-		var charge livechat.RecurrentChargeV3
+		var charge livechat.RecurrentCharge
 		err = json.Unmarshal(dbTopUp.LCCharge, &charge)
 		if err != nil {
 			event.Type = events.EventTypeError
@@ -235,7 +235,7 @@ func (s *Service) CreateTopUpRequest(ctx context.Context, params CreateTopUpRequ
 		ID:               *cr.ChargeID,
 		LCOrganizationID: params.OrganizationID,
 		Status:           TopUpStatusPending,
-		Amount:           params.Amount,
+		Amount:           float32(params.Amount),
 		Type:             params.Type,
 		ConfirmationUrl:  *cr.ConfirmationUrl,
 		LCCharge:         *cr.RawCharge,
@@ -292,7 +292,7 @@ func (s *Service) CancelTopUpRequest(ctx context.Context, organizationID string,
 		return ErrTopUpNotFound
 	}
 
-	_, err = s.billingAPI.CancelRecurrentChargeV3(ctx, ID)
+	_, err = s.billingAPI.CancelRecurrentCharge(ctx, ID)
 	if err != nil {
 		event.Type = events.EventTypeError
 		return s.eventService.ToError(ctx, events.ToErrorParams{
@@ -357,7 +357,7 @@ func (s *Service) GetTopUpByIDAndOrganizationID(ctx context.Context, organizatio
 
 func (s *Service) SyncTopUp(ctx context.Context, topUp TopUp) (*TopUp, error) {
 	event := s.eventService.ToEvent(ctx, topUp.LCOrganizationID, events.EventActionSyncTopUp, events.EventTypeInfo, topUp)
-	var baseCharge livechat.BaseChargeV3
+	var baseCharge livechat.BaseCharge
 	var fullCharge any
 
 	switch topUp.Type {
@@ -378,11 +378,13 @@ func (s *Service) SyncTopUp(ctx context.Context, topUp TopUp) (*TopUp, error) {
 			})
 		}
 		fullCharge = c
-		baseCharge = c.BaseChargeV3
+		baseCharge = c.BaseCharge
 		switch baseCharge.Status {
 		case "success":
 			topUp.Status = TopUpStatusSuccess
-		case "processed", "accepted":
+		case "accepted":
+			topUp.Status = TopUpStatusAccepted
+		case "processed":
 			topUp.Status = TopUpStatusProcessing
 		case "failed":
 			topUp.Status = TopUpStatusFailed
@@ -394,7 +396,7 @@ func (s *Service) SyncTopUp(ctx context.Context, topUp TopUp) (*TopUp, error) {
 			topUp.Status = TopUpStatusFrozen
 		}
 	case TopUpTypeRecurrent:
-		c, err := s.billingAPI.GetRecurrentChargeV3(ctx, topUp.ID)
+		c, err := s.billingAPI.GetRecurrentCharge(ctx, topUp.ID)
 		if err != nil {
 			event.Type = events.EventTypeError
 			return nil, s.eventService.ToError(ctx, events.ToErrorParams{
@@ -410,12 +412,14 @@ func (s *Service) SyncTopUp(ctx context.Context, topUp TopUp) (*TopUp, error) {
 			})
 		}
 		fullCharge = c
-		baseCharge = c.BaseChargeV3
+		baseCharge = c.BaseCharge
 		switch baseCharge.Status {
 		case "active":
 			topUp.Status = TopUpStatusActive
-		case "accepted":
+		case "processed":
 			topUp.Status = TopUpStatusProcessing
+		case "accepted":
+			topUp.Status = TopUpStatusAccepted
 		case "cancelled":
 			topUp.Status = TopUpStatusCancelled
 		case "declined":
@@ -445,7 +449,7 @@ func (s *Service) SyncTopUp(ctx context.Context, topUp TopUp) (*TopUp, error) {
 	}
 	topUp.LCCharge = p
 	if baseCharge.Price > 0 {
-		topUp.Amount = baseCharge.Price / 100
+		topUp.Amount = float32(baseCharge.Price) / 100
 	}
 	topUp.ConfirmationUrl = baseCharge.ConfirmationURL
 
@@ -520,18 +524,32 @@ func (s *Service) syncOrCancelDirectTopUpRequests(ctx context.Context, topUps []
 		if err != nil {
 			return err
 		}
-		if tu.Status == TopUpStatusSuccess || tu.Status == TopUpStatusCancelled || tu.Status == TopUpStatusFailed || tu.Status == TopUpStatusDeclined {
-			continue
-		}
-		monthAgo := time.Now().AddDate(0, -1, 0)
-		if tu.Type == TopUpTypeDirect && monthAgo.After(tu.CreatedAt) {
-			err = s.ForceCancelTopUp(organizationCtx, *tu)
+
+		switch tu.Status {
+		case TopUpStatusSuccess,
+			TopUpStatusCancelled,
+			TopUpStatusFailed,
+			TopUpStatusDeclined:
+			// do nothing
+
+		case TopUpStatusAccepted:
+			_, err = s.billingAPI.ActivateDirectCharge(organizationCtx, tu.ID)
 			if err != nil {
 				return err
 			}
+			if err = s.eventService.CreateEvent(organizationCtx, s.eventService.ToEvent(organizationCtx, topUp.LCOrganizationID, events.EventActionActivateCharge, events.EventTypeInfo, tu)); err != nil {
+				return err
+			}
+		default:
+			monthAgo := time.Now().AddDate(0, -1, 0)
+			if tu.Type == TopUpTypeDirect && monthAgo.After(tu.CreatedAt) {
+				err = s.ForceCancelTopUp(organizationCtx, *tu)
+				if err != nil {
+					return err
+				}
+			}
 		}
 	}
-
 	return nil
 }
 
@@ -543,15 +561,30 @@ func (s *Service) syncOrCancelRecurrentTopUpRequests(ctx context.Context, topUps
 		if err != nil {
 			return err
 		}
-		if tu.Status == TopUpStatusActive || tu.Status == TopUpStatusCancelled || tu.Status == TopUpStatusFailed || tu.Status == TopUpStatusFrozen || tu.Status == TopUpStatusDeclined {
-			continue
-		}
 
-		monthAgo := time.Now().AddDate(0, -1, 0)
-		if tu.Type == TopUpTypeRecurrent && tu.CurrentToppedUpAt != nil && monthAgo.After(*tu.CurrentToppedUpAt) {
-			err = s.ForceCancelTopUp(organizationCtx, *tu)
+		switch tu.Status {
+		case TopUpStatusActive,
+			TopUpStatusCancelled,
+			TopUpStatusFailed,
+			TopUpStatusDeclined:
+			// do nothing
+
+		case TopUpStatusAccepted,
+			TopUpStatusFrozen:
+			_, err = s.billingAPI.ActivateRecurrentCharge(organizationCtx, tu.ID)
 			if err != nil {
 				return err
+			}
+			if err = s.eventService.CreateEvent(organizationCtx, s.eventService.ToEvent(organizationCtx, topUp.LCOrganizationID, events.EventActionActivateCharge, events.EventTypeInfo, tu)); err != nil {
+				return err
+			}
+		default:
+			monthAgo := time.Now().AddDate(0, -1, 0)
+			if tu.Type == TopUpTypeRecurrent && tu.CurrentToppedUpAt != nil && monthAgo.After(*tu.CurrentToppedUpAt) {
+				err = s.ForceCancelTopUp(organizationCtx, *tu)
+				if err != nil {
+					return err
+				}
 			}
 		}
 	}
@@ -596,7 +629,7 @@ func (s *Service) createBillingCharge(ctx context.Context, params createBillingC
 		lcCharge, err := s.billingAPI.CreateDirectCharge(ctx, livechat.CreateDirectChargeParams{
 			Name:      params.Name,
 			ReturnURL: returnUrl,
-			Price:     params.Amount * 100,
+			Price:     int(params.Amount * 100),
 			Test:      isTest,
 		})
 
@@ -619,17 +652,17 @@ func (s *Service) createBillingCharge(ctx context.Context, params createBillingC
 			return nil, fmt.Errorf("failed to create recurrent charge V3 via lc: charge config months is nil")
 		}
 		// multiply price by 100 because LC is using integer (1 = 1 cent)
-		recurrentChargeParams := livechat.CreateRecurrentChargeV3Params{
+		recurrentChargeParams := livechat.CreateRecurrentChargeParams{
 			Name:      params.Name,
 			ReturnURL: returnUrl,
-			Price:     params.Amount * 100,
+			Price:     int(params.Amount * 100),
 			Test:      isTest,
 			Months:    *params.Config.Months,
 		}
 		if params.Config.TrialDays != nil {
 			recurrentChargeParams.TrialDays = *params.Config.TrialDays
 		}
-		lcCharge, err := s.billingAPI.CreateRecurrentChargeV3(ctx, recurrentChargeParams)
+		lcCharge, err := s.billingAPI.CreateRecurrentCharge(ctx, recurrentChargeParams)
 
 		if err != nil {
 			return nil, fmt.Errorf("failed to create recurrent charge V3 via lc: %w", err)
