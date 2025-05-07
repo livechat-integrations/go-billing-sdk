@@ -420,6 +420,7 @@ func TestService_CreateSubscription(t *testing.T) {
 			ID: "id",
 		}
 		sm.On("GetCharge", ctx, "id").Return(&charge, nil).Once()
+		sm.On("GetSubscriptionsByOrganizationID", ctx, lcoid).Return([]Subscription{}, nil).Once()
 		sm.On("CreateSubscription", ctx, mock.Anything).Run(func(args mock.Arguments) {
 			argsSub := args.Get(1).(Subscription)
 			assert.NotNil(t, argsSub)
@@ -448,7 +449,44 @@ func TestService_CreateSubscription(t *testing.T) {
 		assertExpectations(t)
 	})
 
+	t.Run("success subscription already exists", func(t *testing.T) {
+		charge := Charge{
+			ID: "id",
+		}
+		sub := Subscription{
+			ID:               "sub1",
+			Charge:           &charge,
+			LCOrganizationID: lcoid,
+			PlanName:         "super",
+		}
+		sm.On("GetSubscriptionsByOrganizationID", ctx, lcoid).Return([]Subscription{sub}, nil).Once()
+		payload := map[string]interface{}{"planName": "super", "chargeID": "id"}
+		sc, _ := json.Marshal(payload)
+		levent := events.Event{
+			ID:               xid,
+			LCOrganizationID: lcoid,
+			Type:             events.EventTypeError,
+			Action:           events.EventActionCreateSubscription,
+			Payload:          sc,
+		}
+
+		afterPayload := map[string]interface{}{"planName": "super", "chargeID": "id", "result": "subscription already exists"}
+		asc, _ := json.Marshal(afterPayload)
+		afterEvent := levent
+		afterEvent.Payload = asc
+
+		em.On("ToEvent", context.Background(), lcoid, events.EventActionCreateSubscription, events.EventTypeInfo, payload).Return(levent).Once()
+		em.On("CreateEvent", context.Background(), afterEvent).Return(nil).Once()
+
+		err := s.CreateSubscription(context.Background(), lcoid, "id", "super")
+
+		assert.Nil(t, err)
+
+		assertExpectations(t)
+	})
+
 	t.Run("error plan not found", func(t *testing.T) {
+		sm.On("GetSubscriptionsByOrganizationID", ctx, lcoid).Return([]Subscription{}, nil).Once()
 		payload := map[string]interface{}{"planName": "notFound", "chargeID": "xyz"}
 		sc, _ := json.Marshal(payload)
 		levent := events.Event{
@@ -472,6 +510,7 @@ func TestService_CreateSubscription(t *testing.T) {
 	})
 
 	t.Run("error getting charge", func(t *testing.T) {
+		sm.On("GetSubscriptionsByOrganizationID", ctx, lcoid).Return([]Subscription{}, nil).Once()
 		sm.On("GetCharge", ctx, "id").Return(nil, assert.AnError).Once()
 		payload := map[string]interface{}{"planName": "super", "chargeID": "id"}
 		sc, _ := json.Marshal(payload)
@@ -496,6 +535,7 @@ func TestService_CreateSubscription(t *testing.T) {
 	})
 
 	t.Run("error charge is nil", func(t *testing.T) {
+		sm.On("GetSubscriptionsByOrganizationID", ctx, lcoid).Return([]Subscription{}, nil).Once()
 		sm.On("GetCharge", ctx, "id").Return(nil, nil).Once()
 		payload := map[string]interface{}{"planName": "super", "chargeID": "id"}
 		sc, _ := json.Marshal(payload)
@@ -520,6 +560,7 @@ func TestService_CreateSubscription(t *testing.T) {
 	})
 
 	t.Run("error creating subscription", func(t *testing.T) {
+		sm.On("GetSubscriptionsByOrganizationID", ctx, lcoid).Return([]Subscription{}, nil).Once()
 		sm.On("GetCharge", ctx, "id").Return(&Charge{
 			ID: "id",
 		}, nil).Once()
@@ -546,7 +587,6 @@ func TestService_CreateSubscription(t *testing.T) {
 
 		assertExpectations(t)
 	})
-
 }
 
 func TestService_GetCharge(t *testing.T) {

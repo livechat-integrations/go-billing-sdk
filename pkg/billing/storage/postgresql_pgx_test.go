@@ -224,6 +224,17 @@ func TestPostgresqlSQLC_UpdateChargePayload(t *testing.T) {
 		assert.NoError(t, dbMock.ExpectationsWereMet())
 	})
 
+	t.Run("0 rows", func(t *testing.T) {
+		emptyRawPayload, _ := json.Marshal(livechat.BaseCharge{})
+		dbMock.ExpectExec("UPDATE charges SET payload").
+			WithArgs("1", emptyRawPayload).
+			WillReturnResult(pgxmock.NewResult("UPDATE", 0)).Times(1)
+
+		err := s.UpdateChargePayload(context.Background(), "1", livechat.BaseCharge{})
+		assert.NoError(t, err)
+		assert.NoError(t, dbMock.ExpectationsWereMet())
+	})
+
 	t.Run("error", func(t *testing.T) {
 		emptyRawPayload, _ := json.Marshal(livechat.BaseCharge{})
 		dbMock.ExpectExec("UPDATE charges SET payload").

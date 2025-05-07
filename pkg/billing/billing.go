@@ -175,6 +175,24 @@ func (s *Service) GetActiveSubscriptionsByOrganizationID(ctx context.Context, lc
 
 func (s *Service) CreateSubscription(ctx context.Context, lcOrganizationID string, chargeID string, planName string) error {
 	event := s.eventService.ToEvent(ctx, lcOrganizationID, events.EventActionCreateSubscription, events.EventTypeInfo, map[string]interface{}{"planName": planName, "chargeID": chargeID})
+
+	dbSubscriptions, err := s.storage.GetSubscriptionsByOrganizationID(ctx, lcOrganizationID)
+	if err != nil {
+		event.Type = events.EventTypeError
+		return s.eventService.ToError(ctx, events.ToErrorParams{
+			Event: event,
+			Err:   fmt.Errorf("failed to get subscriptions by organization id: %w", err),
+		})
+	}
+
+	for _, sub := range dbSubscriptions {
+		if sub.Charge.ID == chargeID {
+			event.SetPayload(map[string]interface{}{"planName": planName, "chargeID": chargeID, "result": "subscription already exists"})
+			_ = s.eventService.CreateEvent(ctx, event)
+			return nil
+		}
+	}
+
 	plan := s.plans.GetPlan(planName)
 	if plan == nil {
 		event.Type = events.EventTypeError
