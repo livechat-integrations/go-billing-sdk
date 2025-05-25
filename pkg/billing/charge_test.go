@@ -3,6 +3,7 @@ package billing
 import (
 	"github.com/stretchr/testify/assert"
 	"testing"
+	"time"
 )
 
 func TestPlans_GetPlan(t *testing.T) {
@@ -35,16 +36,7 @@ func TestSubscription_IsActive(t *testing.T) {
 	t.Run("charge is active", func(t *testing.T) {
 		subscription := Subscription{
 			Charge: &Charge{
-				Payload: []byte(`{"status": "active"}`),
-			},
-		}
-		assert.True(t, subscription.IsActive())
-	})
-
-	t.Run("charge is success", func(t *testing.T) {
-		subscription := Subscription{
-			Charge: &Charge{
-				Payload: []byte(`{"status": "success"}`),
+				Payload: []byte(`{"status": "active", "next_charge_at": "` + time.Now().AddDate(0, 0, 1).Format(time.RFC3339) + `"}`),
 			},
 		}
 		assert.True(t, subscription.IsActive())
@@ -57,6 +49,36 @@ func TestSubscription_IsActive(t *testing.T) {
 				Payload:    []byte(`{"status": "canceled"}`),
 			},
 		}
+		assert.False(t, subscription.IsActive())
+	})
+
+	t.Run("charge is past_due, but in the retention period", func(t *testing.T) {
+		subscription := Subscription{
+			Charge: &Charge{
+				Payload: []byte(`{"status": "past_due", "next_charge_at": "` + time.Now().AddDate(0, 0, -1).Format(time.RFC3339) + `"}`),
+			},
+		}
+
+		assert.True(t, subscription.IsActive())
+	})
+
+	t.Run("charge is past_due, after retention period", func(t *testing.T) {
+		subscription := Subscription{
+			Charge: &Charge{
+				Payload: []byte(`{"status": "past_due", "next_charge_at": "` + time.Now().AddDate(0, 0, -5).Format(time.RFC3339) + `"}`),
+			},
+		}
+
+		assert.False(t, subscription.IsActive())
+	})
+
+	t.Run("charge is active, next_charge_at null", func(t *testing.T) {
+		subscription := Subscription{
+			Charge: &Charge{
+				Payload: []byte(`{"status": "active", "next_charge_at": null}`),
+			},
+		}
+
 		assert.False(t, subscription.IsActive())
 	})
 }

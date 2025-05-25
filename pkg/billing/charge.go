@@ -11,6 +11,8 @@ type ChargeType string
 
 const (
 	ChargeTypeRecurring ChargeType = "recurring"
+
+	RetentionPeriod = 4 * 24 * time.Hour
 )
 
 // Charge is a representation of a charge
@@ -29,7 +31,6 @@ type Subscription struct {
 	PlanName         string
 	CreatedAt        time.Time
 	DeletedAt        *time.Time
-	NextChargeAt     *time.Time
 }
 
 type Plan struct {
@@ -53,7 +54,17 @@ func (c Subscription) IsActive() bool {
 		return true
 	}
 
-	var p livechat.BaseCharge
+	var p livechat.RecurrentCharge
 	_ = json.Unmarshal(c.Charge.Payload, &p)
-	return c.Charge.CanceledAt == nil && (p.Status == "active" || p.Status == "success")
+	if p.NextChargeAt == nil {
+		return false
+	}
+
+	return c.Charge.CanceledAt == nil &&
+		p.NextChargeAt.Add(RetentionPeriod).After(time.Now()) &&
+		(p.Status == "active" || p.Status == "past_due")
+}
+
+func GetSyncValidStatuses() []string {
+	return []string{"active", "pending", "accepted"}
 }

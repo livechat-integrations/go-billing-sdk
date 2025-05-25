@@ -24,6 +24,7 @@ type BillingInterface interface {
 	CreateSubscription(ctx context.Context, lcOrganizationID string, chargeID string, planName string) error
 	GetChargesByOrganizationID(ctx context.Context, lcOrganizationID string) ([]Charge, error)
 	GetActiveSubscriptionsByOrganizationID(ctx context.Context, lcOrganizationID string) ([]Subscription, error)
+	SyncCharges(ctx context.Context) error
 }
 
 type Service struct {
@@ -164,7 +165,7 @@ func (s *Service) GetActiveSubscriptionsByOrganizationID(ctx context.Context, lc
 		return nil, fmt.Errorf("failed to get subscriptions by organization id: %w", err)
 	}
 
-	res := []Subscription{}
+	var res []Subscription
 	for _, sub := range subs {
 		if sub.IsActive() {
 			res = append(res, sub)
@@ -268,4 +269,49 @@ func (s *Service) GetChargesByOrganizationID(ctx context.Context, lcOrganization
 	}
 
 	return rows, nil
+}
+
+func (s *Service) SyncCharges(ctx context.Context) error {
+	charges, err := s.storage.GetChargesByStatuses(ctx, GetSyncValidStatuses())
+	if err != nil {
+		return fmt.Errorf("failed to get charges by statuses: %w", err)
+	}
+
+	for _, charge := range charges {
+		event := s.eventService.ToEvent(ctx, charge.LCOrganizationID, events.EventActionSyncRecurrentCharge, events.EventTypeInfo, map[string]interface{}{"id": charge.ID})
+		lcCharge, err := s.billingAPI.GetRecurrentCharge(ctx, charge.ID)
+		if err != nil {
+			event.Type = events.EventTypeError
+			return s.eventService.ToError(ctx, events.ToErrorParams{
+				Event: event,
+				Err:   fmt.Errorf("failed to get recurrent charge: %w", err),
+			})
+		}
+
+		switch lcCharge.Status {
+		case livechat.ChargeStatusAccepted,
+			livechat.ChargeStatusFrozen:
+			lcCharge, err = s.billingAPI.ActivateRecurrentCharge(ctx, charge.ID)
+			if err != nil {
+				event.Type = events.EventTypeError
+				return s.eventService.ToError(ctx, events.ToErrorParams{
+					Event: event,
+					Err:   fmt.Errorf("failed to activate charge: %w", err),
+				})
+			}
+		}
+
+		if err = s.storage.UpdateChargePayload(ctx, charge.ID, lcCharge.BaseCharge); err != nil {
+			event.Type = events.EventTypeError
+			return s.eventService.ToError(ctx, events.ToErrorParams{
+				Event: event,
+				Err:   fmt.Errorf("failed to update charge payload: %w", err),
+			})
+		}
+
+		event.SetPayload(lcCharge)
+		_ = s.eventService.CreateEvent(ctx, event)
+	}
+
+	return nil
 }

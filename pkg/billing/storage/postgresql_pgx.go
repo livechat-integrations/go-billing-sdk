@@ -162,3 +162,17 @@ func (r *PostgresqlPGX) CreateEvent(ctx context.Context, e events.Event) error {
 	}
 	return nil
 }
+
+func (r *PostgresqlPGX) GetChargesByStatuses(ctx context.Context, statuses []string) ([]billing.Charge, error) {
+	rows, err := r.queries.GetChargesByStatuses(ctx, statuses)
+	if err != nil {
+		return nil, err
+	}
+
+	var charges []billing.Charge
+	for _, row := range rows {
+		charges = append(charges, *row.ToBillingCharge())
+	}
+
+	return charges, nil
+}

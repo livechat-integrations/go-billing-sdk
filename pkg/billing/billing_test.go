@@ -3,8 +3,10 @@ package billing
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -206,6 +208,20 @@ func (m *storageMock) GetSubscriptionsByOrganizationID(ctx context.Context, lcID
 	}
 
 	return args.Get(0).([]Subscription), args.Error(1)
+}
+
+func (m *storageMock) UpdateSubscriptionNextChargeAt(ctx context.Context, id string, nextChargeAt time.Time) error {
+	args := m.Called(ctx, id, nextChargeAt)
+	return args.Error(0)
+}
+
+func (m *storageMock) GetChargesByStatuses(ctx context.Context, statuses []string) ([]Charge, error) {
+	args := m.Called(ctx, statuses)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+
+	return args.Get(0).([]Charge), args.Error(1)
 }
 
 func TestNewService(t *testing.T) {
@@ -688,11 +704,13 @@ func TestService_GetActiveSubscriptionsByOrganizationID(t *testing.T) {
 		assertExpectations(t)
 	})
 	t.Run("success when LC charge is active", func(t *testing.T) {
+		tNextDay := time.Now().AddDate(0, 0, 1)
 		baseCharge := livechat.RecurrentCharge{
 			BaseCharge: livechat.BaseCharge{
 				ID:     "id",
 				Status: "active",
 			},
+			NextChargeAt: &tNextDay,
 		}
 		payload, _ := json.Marshal(baseCharge)
 		rsubs := []Subscription{{
@@ -910,6 +928,75 @@ func TestService_SyncRecurrentCharge(t *testing.T) {
 		err := s.SyncRecurrentCharge(context.Background(), lcoid, "id")
 
 		assert.ErrorIs(t, err, assert.AnError)
+
+		assertExpectations(t)
+	})
+}
+
+func TestService_SyncCharges(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
+		sm.On("GetChargesByStatuses", ctx, GetSyncValidStatuses()).Return([]Charge{
+			{
+				ID:               "some-id",
+				LCOrganizationID: lcoid,
+			},
+		}, nil).Once()
+		em.On("ToEvent", ctx, lcoid, events.EventActionSyncRecurrentCharge, events.EventTypeInfo, map[string]interface{}{"id": "some-id"}).Return(events.Event{}).Once()
+		am.On("GetRecurrentCharge", ctx, "some-id").Return(&livechat.RecurrentCharge{
+			BaseCharge: livechat.BaseCharge{},
+		}, nil).Once()
+
+		sm.On("UpdateChargePayload", ctx, "some-id", mock.Anything).Return(nil).Once()
+		em.On("CreateEvent", ctx, mock.Anything).Return(nil).Once()
+
+		err := s.SyncCharges(ctx)
+		assert.NoError(t, err)
+
+		assertExpectations(t)
+	})
+
+	t.Run("error getting charges", func(t *testing.T) {
+		sm.On("GetChargesByStatuses", ctx, GetSyncValidStatuses()).Return(nil, errors.New("woopsie")).Once()
+
+		err := s.SyncCharges(ctx)
+		assert.ErrorContains(t, err, "failed to get charges by statuses")
+
+		assertExpectations(t)
+	})
+
+	t.Run("error getting recurrent charge", func(t *testing.T) {
+		sm.On("GetChargesByStatuses", ctx, GetSyncValidStatuses()).Return([]Charge{
+			{
+				ID:               "some-id",
+				LCOrganizationID: lcoid,
+			},
+		}, nil).Once()
+		em.On("ToEvent", ctx, lcoid, events.EventActionSyncRecurrentCharge, events.EventTypeInfo, map[string]interface{}{"id": "some-id"}).Return(events.Event{}).Once()
+		am.On("GetRecurrentCharge", ctx, "some-id").Return(nil, errors.New("whoopsie")).Once()
+		em.On("ToError", ctx, mock.Anything).Return(errors.New("failed to get recurrent charge: whoopsie")).Once()
+		err := s.SyncCharges(ctx)
+		assert.ErrorContains(t, err, "failed to get recurrent charge")
+
+		assertExpectations(t)
+	})
+
+	t.Run("error updating payload", func(t *testing.T) {
+		sm.On("GetChargesByStatuses", ctx, GetSyncValidStatuses()).Return([]Charge{
+			{
+				ID:               "some-id",
+				LCOrganizationID: lcoid,
+			},
+		}, nil).Once()
+		em.On("ToEvent", ctx, lcoid, events.EventActionSyncRecurrentCharge, events.EventTypeInfo, map[string]interface{}{"id": "some-id"}).Return(events.Event{}).Once()
+		am.On("GetRecurrentCharge", ctx, "some-id").Return(&livechat.RecurrentCharge{
+			BaseCharge: livechat.BaseCharge{},
+		}, nil).Once()
+
+		sm.On("UpdateChargePayload", ctx, "some-id", mock.Anything).Return(errors.New("whoopsie")).Once()
+		em.On("ToError", ctx, mock.Anything).Return(errors.New("failed to update charge payload: whoopsie")).Once()
+
+		err := s.SyncCharges(ctx)
+		assert.ErrorContains(t, err, "failed to update charge payload")
 
 		assertExpectations(t)
 	})

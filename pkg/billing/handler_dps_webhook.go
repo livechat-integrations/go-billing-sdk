@@ -69,7 +69,7 @@ func (h *Handler) HandleDPSWebhook(ctx context.Context, req DPSWebhookRequest) e
 			}
 		}
 		_ = h.eventService.CreateEvent(ctx, event)
-	case "payment_collected", "payment_activated":
+	case "payment_activated":
 		event := h.eventService.ToEvent(ctx, req.LCOrganizationID, events.EventActionDPSWebhookPayment, events.EventTypeInfo, req)
 		if err := h.billing.SyncRecurrentCharge(ctx, req.LCOrganizationID, chargeID); err != nil {
 			event.Type = events.EventTypeError
@@ -93,6 +93,16 @@ func (h *Handler) HandleDPSWebhook(ctx context.Context, req DPSWebhookRequest) e
 			return h.eventService.ToError(ctx, events.ToErrorParams{
 				Event: event,
 				Err:   fmt.Errorf("create subscription: %w", err),
+			})
+		}
+		_ = h.eventService.CreateEvent(ctx, event)
+	case "payment_collected":
+		event := h.eventService.ToEvent(ctx, req.LCOrganizationID, events.EventActionDPSWebhookPayment, events.EventTypeInfo, req)
+		if err := h.billing.SyncRecurrentCharge(ctx, req.LCOrganizationID, chargeID); err != nil {
+			event.Type = events.EventTypeError
+			return h.eventService.ToError(ctx, events.ToErrorParams{
+				Event: event,
+				Err:   fmt.Errorf("sync recurrent charge: %w", err),
 			})
 		}
 		_ = h.eventService.CreateEvent(ctx, event)

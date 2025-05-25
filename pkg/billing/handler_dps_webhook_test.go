@@ -37,6 +37,11 @@ type billingMock struct {
 	mock.Mock
 }
 
+func (b *billingMock) SyncCharges(ctx context.Context) error {
+	args := b.Called(ctx)
+	return args.Error(0)
+}
+
 func (b *billingMock) DeleteSubscriptionWithCharge(ctx context.Context, lcOrganizationID string, chargeID string) error {
 	args := b.Called(ctx, lcOrganizationID, chargeID)
 	return args.Error(0)
@@ -298,7 +303,6 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 		}
 
 		bm.On("SyncRecurrentCharge", billingCtx, lcoid, paymentID).Return(nil).Once()
-		bm.On("CreateSubscription", billingCtx, lcoid, paymentID, planName).Return(nil).Once()
 		em.On("ToEvent", billingCtx, lcoid, events.EventActionDPSWebhookPayment, events.EventTypeInfo, req).Return(levent).Once()
 		em.On("CreateEvent", billingCtx, levent).Return(nil).Once()
 		lctx := context.WithValue(context.Background(), BillingSubscriptionPlanNameCtxKey{}, planName)
@@ -351,8 +355,8 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 		assertExpectations(t)
 	})
 
-	t.Run("payment_collected no plan error", func(t *testing.T) {
-		eventType := "payment_collected"
+	t.Run("payment_activated no plan error", func(t *testing.T) {
+		eventType := "payment_activated"
 		someDate, _ := time.Parse(time.DateTime, "2025-03-14 12:31:56")
 		paymentID := "x1c2v3"
 		userID := "s98f"
@@ -392,50 +396,6 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 			Err:   fmt.Errorf("no plan name found in context"),
 		}).Return(assert.AnError).Once()
 		lctx := context.WithValue(context.Background(), BillingSubscriptionPlanNameCtxKey{}, "")
-		err := h.HandleDPSWebhook(lctx, req)
-
-		assert.ErrorIs(t, err, assert.AnError)
-
-		assertExpectations(t)
-	})
-
-	t.Run("payment_collected create subscription error", func(t *testing.T) {
-		eventType := "payment_collected"
-		someDate, _ := time.Parse(time.DateTime, "2025-03-14 12:31:56")
-		paymentID := "x1c2v3"
-		userID := "s98f"
-		xm.On("GenerateId").Return(xid, nil)
-
-		req := DPSWebhookRequest{
-			ApplicationID:    "123",
-			ApplicationName:  "ttt",
-			ClientID:         "321",
-			Date:             someDate,
-			Event:            eventType,
-			License:          lid,
-			LCOrganizationID: lcoid,
-			Payload: map[string]interface{}{
-				"paymentID": paymentID,
-			},
-			UserID: userID,
-		}
-		sc, _ := json.Marshal(req)
-		levent := events.Event{
-			ID:               xid,
-			LCOrganizationID: lcoid,
-			Type:             events.EventTypeError,
-			Action:           events.EventActionDPSWebhookApplicationUninstalled,
-			Payload:          sc,
-		}
-
-		bm.On("SyncRecurrentCharge", billingCtx, lcoid, paymentID).Return(nil).Once()
-		bm.On("CreateSubscription", billingCtx, lcoid, paymentID, planName).Return(assert.AnError).Once()
-		em.On("ToEvent", billingCtx, lcoid, events.EventActionDPSWebhookPayment, events.EventTypeInfo, req).Return(levent).Once()
-		em.On("ToError", billingCtx, events.ToErrorParams{
-			Event: levent,
-			Err:   fmt.Errorf("create subscription: %w", assert.AnError),
-		}).Return(assert.AnError).Once()
-		lctx := context.WithValue(context.Background(), BillingSubscriptionPlanNameCtxKey{}, planName)
 		err := h.HandleDPSWebhook(lctx, req)
 
 		assert.ErrorIs(t, err, assert.AnError)
