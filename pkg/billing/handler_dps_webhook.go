@@ -47,9 +47,11 @@ func (h *Handler) HandleDPSWebhook(ctx context.Context, req DPSWebhookRequest) e
 		return nil
 	}
 
+	event := h.eventService.ToEvent(ctx, req.LCOrganizationID, events.EventActionUnknown, events.EventTypeInfo, req)
+
 	switch req.Event {
 	case "application_uninstalled":
-		event := h.eventService.ToEvent(ctx, req.LCOrganizationID, events.EventActionDPSWebhookApplicationUninstalled, events.EventTypeInfo, req)
+		event.Action = events.EventActionDPSWebhookApplicationUninstalled
 		charges, err := h.billing.GetChargesByOrganizationID(ctx, req.LCOrganizationID)
 		if err != nil {
 			event.Type = events.EventTypeError
@@ -68,15 +70,28 @@ func (h *Handler) HandleDPSWebhook(ctx context.Context, req DPSWebhookRequest) e
 				})
 			}
 		}
-		_ = h.eventService.CreateEvent(ctx, event)
-	case "payment_activated":
-		event := h.eventService.ToEvent(ctx, req.LCOrganizationID, events.EventActionDPSWebhookPayment, events.EventTypeInfo, req)
+	case "payment_cancelled":
+		event.Action = events.EventActionDPSWebhookPayment
+		if err := h.billing.DeleteSubscriptionWithCharge(ctx, req.LCOrganizationID, chargeID); err != nil {
+			event.Type = events.EventTypeError
+			return h.eventService.ToError(ctx, events.ToErrorParams{
+				Event: event,
+				Err:   fmt.Errorf("delete subscription with charge: %w", err),
+			})
+		}
+	case "payment_activated", "payment_collected":
+		event.Action = events.EventActionDPSWebhookPayment
+
 		if err := h.billing.SyncRecurrentCharge(ctx, req.LCOrganizationID, chargeID); err != nil {
 			event.Type = events.EventTypeError
 			return h.eventService.ToError(ctx, events.ToErrorParams{
 				Event: event,
 				Err:   fmt.Errorf("sync recurrent charge: %w", err),
 			})
+		}
+
+		if req.Event != "payment_activated" {
+			break
 		}
 
 		planName, ok := ctx.Value(BillingSubscriptionPlanNameCtxKey{}).(string)
@@ -95,29 +110,9 @@ func (h *Handler) HandleDPSWebhook(ctx context.Context, req DPSWebhookRequest) e
 				Err:   fmt.Errorf("create subscription: %w", err),
 			})
 		}
-		_ = h.eventService.CreateEvent(ctx, event)
-	case "payment_collected":
-		event := h.eventService.ToEvent(ctx, req.LCOrganizationID, events.EventActionDPSWebhookPayment, events.EventTypeInfo, req)
-		if err := h.billing.SyncRecurrentCharge(ctx, req.LCOrganizationID, chargeID); err != nil {
-			event.Type = events.EventTypeError
-			return h.eventService.ToError(ctx, events.ToErrorParams{
-				Event: event,
-				Err:   fmt.Errorf("sync recurrent charge: %w", err),
-			})
-		}
-		_ = h.eventService.CreateEvent(ctx, event)
-	case "payment_cancelled":
-		event := h.eventService.ToEvent(ctx, req.LCOrganizationID, events.EventActionDPSWebhookPayment, events.EventTypeInfo, req)
-
-		if err := h.billing.DeleteSubscriptionWithCharge(ctx, req.LCOrganizationID, chargeID); err != nil {
-			event.Type = events.EventTypeError
-			return h.eventService.ToError(ctx, events.ToErrorParams{
-				Event: event,
-				Err:   fmt.Errorf("delete subscription with charge: %w", err),
-			})
-		}
-		_ = h.eventService.CreateEvent(ctx, event)
 	}
+
+	_ = h.eventService.CreateEvent(ctx, event)
 
 	return nil
 }

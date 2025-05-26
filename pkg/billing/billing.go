@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/livechat-integrations/go-billing-sdk/common"
 	"github.com/livechat-integrations/go-billing-sdk/internal/livechat"
@@ -278,6 +279,20 @@ func (s *Service) SyncCharges(ctx context.Context) error {
 	}
 
 	for _, charge := range charges {
+		var recCharge livechat.RecurrentCharge
+		_ = json.Unmarshal(charge.Payload, &recCharge)
+		if recCharge.Status == livechat.ChargeStatusActive && recCharge.NextChargeAt.Before(time.Now()) {
+			continue
+		}
+
+		if recCharge.Status == livechat.ChargeStatusPending && recCharge.CreatedAt.AddDate(0, 1, 0).Before(time.Now()) {
+			if err = s.cancelChange(ctx, charge); err != nil {
+				return err
+			}
+
+			continue
+		}
+
 		event := s.eventService.ToEvent(ctx, charge.LCOrganizationID, events.EventActionSyncRecurrentCharge, events.EventTypeInfo, map[string]interface{}{"id": charge.ID})
 		lcCharge, err := s.billingAPI.GetRecurrentCharge(ctx, charge.ID)
 		if err != nil {
@@ -313,5 +328,28 @@ func (s *Service) SyncCharges(ctx context.Context) error {
 		_ = s.eventService.CreateEvent(ctx, event)
 	}
 
+	return nil
+}
+
+func (s *Service) cancelChange(ctx context.Context, charge Charge) error {
+	event := s.eventService.ToEvent(ctx, charge.LCOrganizationID, events.EventActionForceCancelCharge, events.EventTypeInfo, map[string]interface{}{"id": charge.ID})
+	cancelledCharge, err := s.billingAPI.CancelRecurrentCharge(ctx, charge.ID)
+	if err != nil {
+		event.Type = events.EventTypeError
+		return s.eventService.ToError(ctx, events.ToErrorParams{
+			Event: event,
+			Err:   fmt.Errorf("failed to cancel charge: %w", err),
+		})
+	}
+
+	if err = s.storage.UpdateChargePayload(ctx, charge.ID, cancelledCharge.BaseCharge); err != nil {
+		event.Type = events.EventTypeError
+		return s.eventService.ToError(ctx, events.ToErrorParams{
+			Event: event,
+			Err:   fmt.Errorf("failed to cancel charge: %w", err),
+		})
+	}
+
+	_ = s.eventService.CreateEvent(ctx, event)
 	return nil
 }

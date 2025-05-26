@@ -125,7 +125,7 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 		bm.On("GetChargesByOrganizationID", billingCtx, lcoid).Return([]Charge{ch1, ch2}, nil).Once()
 		bm.On("DeleteSubscriptionWithCharge", billingCtx, lcoid, ch1.ID).Return(nil).Once()
 		bm.On("DeleteSubscriptionWithCharge", billingCtx, lcoid, ch2.ID).Return(nil).Once()
-		em.On("ToEvent", billingCtx, lcoid, events.EventActionDPSWebhookApplicationUninstalled, events.EventTypeInfo, req).Return(levent).Once()
+		em.On("ToEvent", billingCtx, lcoid, events.EventActionUnknown, events.EventTypeInfo, req).Return(levent).Once()
 		em.On("CreateEvent", billingCtx, levent).Return(nil).Once()
 		lctx := context.WithValue(context.Background(), BillingSubscriptionPlanNameCtxKey{}, planName)
 		err := h.HandleDPSWebhook(lctx, req)
@@ -165,7 +165,7 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 		}
 
 		bm.On("GetChargesByOrganizationID", billingCtx, lcoid).Return(nil, assert.AnError).Once()
-		em.On("ToEvent", billingCtx, lcoid, events.EventActionDPSWebhookApplicationUninstalled, events.EventTypeInfo, req).Return(levent).Once()
+		em.On("ToEvent", billingCtx, lcoid, events.EventActionUnknown, events.EventTypeInfo, req).Return(levent).Once()
 		em.On("ToError", billingCtx, events.ToErrorParams{
 			Event: levent,
 			Err:   assert.AnError,
@@ -219,7 +219,7 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 		bm.On("GetChargesByOrganizationID", billingCtx, lcoid).Return([]Charge{ch1, ch2}, nil).Once()
 		bm.On("DeleteSubscriptionWithCharge", billingCtx, lcoid, ch1.ID).Return(nil).Once()
 		bm.On("DeleteSubscriptionWithCharge", billingCtx, lcoid, ch2.ID).Return(assert.AnError).Once()
-		em.On("ToEvent", billingCtx, lcoid, events.EventActionDPSWebhookApplicationUninstalled, events.EventTypeInfo, req).Return(levent).Once()
+		em.On("ToEvent", billingCtx, lcoid, events.EventActionUnknown, events.EventTypeInfo, req).Return(levent).Once()
 		em.On("ToError", billingCtx, events.ToErrorParams{
 			Event: levent,
 			Err:   fmt.Errorf("delete subscription with charge: %w", assert.AnError),
@@ -257,13 +257,13 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 			ID:               xid,
 			LCOrganizationID: lcoid,
 			Type:             events.EventTypeInfo,
-			Action:           events.EventActionDPSWebhookApplicationUninstalled,
+			Action:           events.EventActionDPSWebhookPayment,
 			Payload:          sc,
 		}
 
 		bm.On("SyncRecurrentCharge", billingCtx, lcoid, paymentID).Return(nil).Once()
 		bm.On("CreateSubscription", billingCtx, lcoid, paymentID, planName).Return(nil).Once()
-		em.On("ToEvent", billingCtx, lcoid, events.EventActionDPSWebhookPayment, events.EventTypeInfo, req).Return(levent).Once()
+		em.On("ToEvent", billingCtx, lcoid, events.EventActionUnknown, events.EventTypeInfo, req).Return(levent).Once()
 		em.On("CreateEvent", billingCtx, levent).Return(nil).Once()
 		lctx := context.WithValue(context.Background(), BillingSubscriptionPlanNameCtxKey{}, planName)
 		err := h.HandleDPSWebhook(lctx, req)
@@ -298,12 +298,12 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 			ID:               xid,
 			LCOrganizationID: lcoid,
 			Type:             events.EventTypeInfo,
-			Action:           events.EventActionDPSWebhookApplicationUninstalled,
+			Action:           events.EventActionDPSWebhookPayment,
 			Payload:          sc,
 		}
 
 		bm.On("SyncRecurrentCharge", billingCtx, lcoid, paymentID).Return(nil).Once()
-		em.On("ToEvent", billingCtx, lcoid, events.EventActionDPSWebhookPayment, events.EventTypeInfo, req).Return(levent).Once()
+		em.On("ToEvent", billingCtx, lcoid, events.EventActionUnknown, events.EventTypeInfo, req).Return(levent).Once()
 		em.On("CreateEvent", billingCtx, levent).Return(nil).Once()
 		lctx := context.WithValue(context.Background(), BillingSubscriptionPlanNameCtxKey{}, planName)
 		err := h.HandleDPSWebhook(lctx, req)
@@ -337,12 +337,12 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 			ID:               xid,
 			LCOrganizationID: lcoid,
 			Type:             events.EventTypeError,
-			Action:           events.EventActionDPSWebhookApplicationUninstalled,
+			Action:           events.EventActionDPSWebhookPayment,
 			Payload:          sc,
 		}
 
 		bm.On("SyncRecurrentCharge", billingCtx, lcoid, paymentID).Return(assert.AnError).Once()
-		em.On("ToEvent", billingCtx, lcoid, events.EventActionDPSWebhookPayment, events.EventTypeInfo, req).Return(levent).Once()
+		em.On("ToEvent", billingCtx, lcoid, events.EventActionUnknown, events.EventTypeInfo, req).Return(levent).Once()
 		em.On("ToError", billingCtx, events.ToErrorParams{
 			Event: levent,
 			Err:   fmt.Errorf("sync recurrent charge: %w", assert.AnError),
@@ -380,7 +380,7 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 			ID:               xid,
 			LCOrganizationID: lcoid,
 			Type:             events.EventTypeError,
-			Action:           events.EventActionDPSWebhookApplicationUninstalled,
+			Action:           events.EventActionDPSWebhookPayment,
 			Payload:          sc,
 		}
 
@@ -390,7 +390,7 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 		wCtx = context.WithValue(wCtx, BillingLicenseIDCtxKey{}, lid)
 
 		bm.On("SyncRecurrentCharge", wCtx, lcoid, paymentID).Return(nil).Once()
-		em.On("ToEvent", wCtx, lcoid, events.EventActionDPSWebhookPayment, events.EventTypeInfo, req).Return(levent).Once()
+		em.On("ToEvent", wCtx, lcoid, events.EventActionUnknown, events.EventTypeInfo, req).Return(levent).Once()
 		em.On("ToError", wCtx, events.ToErrorParams{
 			Event: levent,
 			Err:   fmt.Errorf("no plan name found in context"),
@@ -433,7 +433,7 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 		}
 
 		bm.On("DeleteSubscriptionWithCharge", billingCtx, lcoid, paymentID).Return(nil).Once()
-		em.On("ToEvent", billingCtx, lcoid, events.EventActionDPSWebhookPayment, events.EventTypeInfo, req).Return(levent).Once()
+		em.On("ToEvent", billingCtx, lcoid, events.EventActionUnknown, events.EventTypeInfo, req).Return(levent).Once()
 		em.On("CreateEvent", billingCtx, levent).Return(nil).Once()
 		lctx := context.WithValue(context.Background(), BillingSubscriptionPlanNameCtxKey{}, planName)
 		err := h.HandleDPSWebhook(lctx, req)
@@ -473,7 +473,7 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 		}
 
 		bm.On("DeleteSubscriptionWithCharge", billingCtx, lcoid, paymentID).Return(assert.AnError).Once()
-		em.On("ToEvent", billingCtx, lcoid, events.EventActionDPSWebhookPayment, events.EventTypeInfo, req).Return(levent).Once()
+		em.On("ToEvent", billingCtx, lcoid, events.EventActionUnknown, events.EventTypeInfo, req).Return(levent).Once()
 		em.On("ToError", billingCtx, events.ToErrorParams{
 			Event: levent,
 			Err:   fmt.Errorf("delete subscription with charge: %w", assert.AnError),
