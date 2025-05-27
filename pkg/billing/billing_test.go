@@ -100,8 +100,12 @@ func (m *apiMock) GetRecurrentCharge(ctx context.Context, id string) (*livechat.
 }
 
 func (m *apiMock) CreateDirectCharge(ctx context.Context, params livechat.CreateDirectChargeParams) (*livechat.DirectCharge, error) {
-	//TODO implement me
-	panic("implement me")
+	args := m.Called(ctx, params)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+
+	return args.Get(0).(*livechat.DirectCharge), args.Error(1)
 }
 
 func (m *apiMock) CreateRecurrentCharge(ctx context.Context, params livechat.CreateRecurrentChargeParams) (*livechat.RecurrentCharge, error) {
@@ -114,8 +118,12 @@ func (m *apiMock) CreateRecurrentCharge(ctx context.Context, params livechat.Cre
 }
 
 func (m *apiMock) CancelRecurrentCharge(ctx context.Context, id string) (*livechat.RecurrentCharge, error) {
-	//TODO implement me
-	panic("implement me")
+	args := m.Called(ctx, id)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+
+	return args.Get(0).(*livechat.RecurrentCharge), args.Error(1)
 }
 
 func (m *apiMock) GetRecurrentChargeV3(ctx context.Context, id string) (*livechat.RecurrentCharge, error) {
@@ -137,11 +145,21 @@ func (m *apiMock) CreateRecurrentChargeV3(ctx context.Context, params livechat.C
 }
 
 func (m *apiMock) ActivateRecurrentCharge(ctx context.Context, id string) (*livechat.RecurrentCharge, error) {
-	panic("implement me")
+	args := m.Called(ctx, id)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+
+	return args.Get(0).(*livechat.RecurrentCharge), args.Error(1)
 }
 
 func (m *apiMock) ActivateDirectCharge(ctx context.Context, id string) (*livechat.DirectCharge, error) {
-	panic("implement me")
+	args := m.Called(ctx, id)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+
+	return args.Get(0).(*livechat.DirectCharge), args.Error(1)
 }
 
 type storageMock struct {
@@ -149,23 +167,27 @@ type storageMock struct {
 }
 
 func (m *storageMock) CreateEvent(ctx context.Context, event events.Event) error {
-	//TODO implement me
-	panic("implement me")
+	args := m.Called(ctx, event)
+	return args.Error(0)
 }
 
 func (m *storageMock) GetChargesByOrganizationID(ctx context.Context, lcID string) ([]Charge, error) {
-	//TODO implement me
-	panic("implement me")
+	args := m.Called(ctx, lcID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+
+	return args.Get(0).([]Charge), args.Error(1)
 }
 
 func (m *storageMock) DeleteCharge(ctx context.Context, id string) error {
-	//TODO implement me
-	panic("implement me")
+	args := m.Called(ctx, id)
+	return args.Error(0)
 }
 
 func (m *storageMock) DeleteSubscriptionByChargeID(ctx context.Context, LCOrganizationID string, id string) error {
-	//TODO implement me
-	panic("implement me")
+	args := m.Called(ctx, LCOrganizationID, id)
+	return args.Error(0)
 }
 
 func (m *storageMock) CreateCharge(ctx context.Context, c Charge) error {
@@ -182,7 +204,7 @@ func (m *storageMock) GetCharge(ctx context.Context, id string) (*Charge, error)
 	return args.Get(0).(*Charge), args.Error(1)
 }
 
-func (m *storageMock) UpdateChargePayload(ctx context.Context, id string, payload livechat.BaseCharge) error {
+func (m *storageMock) UpdateChargePayload(ctx context.Context, id string, payload json.RawMessage) error {
 	args := m.Called(ctx, id, payload)
 	return args.Error(0)
 }
@@ -796,10 +818,12 @@ func TestService_SyncRecurrentCharge(t *testing.T) {
 		}
 		am.On("GetRecurrentCharge", ctx, "id").Return(&charge, nil).Once()
 		sm.On("UpdateChargePayload", ctx, "id", mock.Anything).Run(func(args mock.Arguments) {
-			payload := args.Get(2).(livechat.BaseCharge)
+			payload := args.Get(2).(json.RawMessage)
+			var p livechat.BaseCharge
+			_ = json.Unmarshal(payload, &p)
 			assert.NotNil(t, payload)
-			assert.Equal(t, "name", payload.Name)
-			assert.Equal(t, 10, payload.Price)
+			assert.Equal(t, "name", p.Name)
+			assert.Equal(t, 10, p.Price)
 		}).Return(nil).Once()
 		payload := map[string]interface{}{"id": "id"}
 		sc, _ := json.Marshal(charge)

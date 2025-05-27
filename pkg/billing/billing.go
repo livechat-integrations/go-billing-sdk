@@ -132,7 +132,8 @@ func (s *Service) SyncRecurrentCharge(ctx context.Context, lcOrganizationID stri
 		})
 	}
 
-	if err = s.storage.UpdateChargePayload(ctx, id, lcCharge.BaseCharge); err != nil {
+	rawCharge, _ := json.Marshal(lcCharge)
+	if err = s.storage.UpdateChargePayload(ctx, id, rawCharge); err != nil {
 		event.Type = events.EventTypeError
 		return s.eventService.ToError(ctx, events.ToErrorParams{
 			Event: event,
@@ -272,6 +273,20 @@ func (s *Service) GetChargesByOrganizationID(ctx context.Context, lcOrganization
 	return rows, nil
 }
 
+func (s *Service) CancelRecurrentCharge(ctx context.Context, chargeID string) error {
+	recCharge, err := s.billingAPI.CancelRecurrentCharge(ctx, chargeID)
+	if err != nil {
+		return fmt.Errorf("failed to cancel recurrent charge: %w", err)
+	}
+
+	rawCharge, _ := json.Marshal(recCharge)
+	if err = s.storage.UpdateChargePayload(ctx, chargeID, rawCharge); err != nil {
+		return fmt.Errorf("failed to update charge payload: %w", err)
+	}
+
+	return nil
+}
+
 func (s *Service) SyncCharges(ctx context.Context) error {
 	charges, err := s.storage.GetChargesByStatuses(ctx, GetSyncValidStatuses())
 	if err != nil {
@@ -316,7 +331,8 @@ func (s *Service) SyncCharges(ctx context.Context) error {
 			}
 		}
 
-		if err = s.storage.UpdateChargePayload(ctx, charge.ID, lcCharge.BaseCharge); err != nil {
+		rawCharge, _ := json.Marshal(recCharge)
+		if err = s.storage.UpdateChargePayload(ctx, charge.ID, rawCharge); err != nil {
 			event.Type = events.EventTypeError
 			return s.eventService.ToError(ctx, events.ToErrorParams{
 				Event: event,
@@ -342,7 +358,8 @@ func (s *Service) cancelChange(ctx context.Context, charge Charge) error {
 		})
 	}
 
-	if err = s.storage.UpdateChargePayload(ctx, charge.ID, cancelledCharge.BaseCharge); err != nil {
+	rawCharge, _ := json.Marshal(cancelledCharge)
+	if err = s.storage.UpdateChargePayload(ctx, charge.ID, rawCharge); err != nil {
 		event.Type = events.EventTypeError
 		return s.eventService.ToError(ctx, events.ToErrorParams{
 			Event: event,

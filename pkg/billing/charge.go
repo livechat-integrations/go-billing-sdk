@@ -21,6 +21,7 @@ type Charge struct {
 	LCOrganizationID string
 	Type             ChargeType
 	Payload          json.RawMessage
+	NextChargeAt     *time.Time
 	CreatedAt        time.Time
 	CanceledAt       *time.Time
 }
@@ -29,6 +30,7 @@ type Subscription struct {
 	Charge           *Charge
 	LCOrganizationID string
 	PlanName         string
+	DunningEndDate   *time.Time
 	CreatedAt        time.Time
 	DeletedAt        *time.Time
 }

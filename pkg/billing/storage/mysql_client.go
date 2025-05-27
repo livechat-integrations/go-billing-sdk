@@ -12,7 +12,6 @@ import (
 	lcMySQL "github.com/livechat/go-mysql"
 	"github.com/rcrowley/go-metrics"
 
-	"github.com/livechat-integrations/go-billing-sdk/internal/livechat"
 	"github.com/livechat-integrations/go-billing-sdk/pkg/billing"
 	"github.com/livechat-integrations/go-billing-sdk/pkg/events"
 )
@@ -104,13 +103,8 @@ func (sql *SQLClient) GetCharge(ctx context.Context, id string) (*billing.Charge
 	return ToBillingCharge(charges[0]), nil
 }
 
-func (sql *SQLClient) UpdateChargePayload(ctx context.Context, id string, payload livechat.BaseCharge) error {
-	rawPayload, err := json.Marshal(payload)
-	if err != nil {
-		return err
-	}
-
-	_, err = sql.sqlClient.Exec(ctx, "UPDATE charges SET payload = ? WHERE id = ? AND deleted_at IS NULL", rawPayload, id)
+func (sql *SQLClient) UpdateChargePayload(ctx context.Context, id string, payload json.RawMessage) error {
+	_, err := sql.sqlClient.Exec(ctx, "UPDATE charges SET payload = ? WHERE id = ? AND deleted_at IS NULL", []uint8(payload), id)
 	if err != nil {
 		return fmt.Errorf("couldn't update charge: %w", err)
 	}

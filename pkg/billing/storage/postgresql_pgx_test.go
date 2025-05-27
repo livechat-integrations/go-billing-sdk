@@ -219,7 +219,7 @@ func TestPostgresqlSQLC_UpdateChargePayload(t *testing.T) {
 			WithArgs("1", emptyRawPayload).
 			WillReturnResult(pgxmock.NewResult("UPDATE", 1)).Times(1)
 
-		err := s.UpdateChargePayload(context.Background(), "1", livechat.BaseCharge{})
+		err := s.UpdateChargePayload(context.Background(), "1", emptyRawPayload)
 		assert.NoError(t, err)
 		assert.NoError(t, dbMock.ExpectationsWereMet())
 	})
@@ -230,7 +230,7 @@ func TestPostgresqlSQLC_UpdateChargePayload(t *testing.T) {
 			WithArgs("1", emptyRawPayload).
 			WillReturnResult(pgxmock.NewResult("UPDATE", 0)).Times(1)
 
-		err := s.UpdateChargePayload(context.Background(), "1", livechat.BaseCharge{})
+		err := s.UpdateChargePayload(context.Background(), "1", emptyRawPayload)
 		assert.NoError(t, err)
 		assert.NoError(t, dbMock.ExpectationsWereMet())
 	})
@@ -241,7 +241,7 @@ func TestPostgresqlSQLC_UpdateChargePayload(t *testing.T) {
 			WithArgs("1", emptyRawPayload).Times(1).
 			WillReturnError(assert.AnError)
 
-		err := s.UpdateChargePayload(context.Background(), "1", livechat.BaseCharge{})
+		err := s.UpdateChargePayload(context.Background(), "1", emptyRawPayload)
 		assert.Error(t, err)
 		assert.NoError(t, dbMock.ExpectationsWereMet())
 	})
