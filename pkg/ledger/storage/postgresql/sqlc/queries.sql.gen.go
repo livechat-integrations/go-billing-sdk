@@ -101,6 +101,32 @@ func (q *Queries) GetDirectTopUpsWithoutOperations(ctx context.Context) ([]Ledge
 	return items, nil
 }
 
+const getLedgerOperation = `-- name: GetLedgerOperation :one
+SELECT id, amount, lc_organization_id, payload, created_at
+FROM ledger_ledger
+WHERE lc_organization_id = $1
+AND id = $2
+ORDER BY created_at DESC
+`
+
+type GetLedgerOperationParams struct {
+	LcOrganizationID string
+	ID               string
+}
+
+func (q *Queries) GetLedgerOperation(ctx context.Context, arg GetLedgerOperationParams) (LedgerLedger, error) {
+	row := q.db.QueryRow(ctx, getLedgerOperation, arg.LcOrganizationID, arg.ID)
+	var i LedgerLedger
+	err := row.Scan(
+		&i.ID,
+		&i.Amount,
+		&i.LcOrganizationID,
+		&i.Payload,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getLedgerOperationsByOrganizationID = `-- name: GetLedgerOperationsByOrganizationID :many
 SELECT id, amount, lc_organization_id, payload, created_at
 FROM ledger_ledger

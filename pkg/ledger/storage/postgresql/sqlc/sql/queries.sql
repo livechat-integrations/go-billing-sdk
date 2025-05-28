@@ -45,6 +45,14 @@ WHERE lc_organization_id = $1
 ORDER BY created_at DESC
 ;
 
+-- name: GetLedgerOperation :one
+SELECT *
+FROM ledger_ledger
+WHERE lc_organization_id = $1
+AND id = $2
+ORDER BY created_at DESC
+;
+
 -- name: GetDirectTopUpsWithoutOperations :many
 SELECT tups.*
 FROM ledger_top_ups tups

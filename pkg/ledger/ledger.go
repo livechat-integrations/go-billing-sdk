@@ -26,6 +26,7 @@ type LedgerInterface interface {
 	GetTopUpByIDAndOrganizationID(ctx context.Context, organizationID string, ID string) (*TopUp, error)
 	SyncTopUp(ctx context.Context, topUp TopUp) (*TopUp, error)
 	SyncOrCancelTopUpRequests(ctx context.Context) error
+	AddFunds(ctx context.Context, Amount float32, OrganizationID, Namespace string) error
 }
 
 var (
@@ -271,6 +272,43 @@ func (s *Service) GetBalance(ctx context.Context, organizationID string) (float3
 
 func (s *Service) GetTopUps(ctx context.Context, organizationID string) ([]TopUp, error) {
 	return s.storage.GetTopUpsByOrganizationID(ctx, organizationID)
+}
+
+func (s *Service) AddFunds(ctx context.Context, Amount float32, OrganizationID, Namespace string) error {
+	event := s.eventService.ToEvent(ctx, OrganizationID, events.EventActionAddFunds, events.EventTypeInfo, map[string]interface{}{"amount": Amount, "namespace": Namespace})
+	key := fmt.Sprintf("add-funds-%s-%s", Namespace, OrganizationID)
+	operation, err := s.storage.GetLedgerOperation(ctx, GetLedgerOperationParams{
+		ID:             key,
+		OrganizationID: OrganizationID,
+	})
+	if err != nil {
+		event.Type = events.EventTypeError
+		return s.eventService.ToError(ctx, events.ToErrorParams{
+			Event: event,
+			Err:   fmt.Errorf("failed get ledger operation from database: %w", err),
+		})
+	}
+	if operation != nil {
+		event.SetPayload(map[string]interface{}{"id": key, "amount": Amount, "namespace": Namespace, "result": "already exists"})
+		_ = s.eventService.CreateEvent(ctx, event)
+		return nil
+	}
+	operation = &Operation{
+		ID:               key,
+		LCOrganizationID: OrganizationID,
+		Amount:           Amount,
+	}
+	_, err = s.createOperation(ctx, *operation)
+	if err != nil {
+		event.Type = events.EventTypeError
+		return s.eventService.ToError(ctx, events.ToErrorParams{
+			Event: event,
+			Err:   err,
+		})
+	}
+	_ = s.eventService.CreateEvent(ctx, event)
+
+	return nil
 }
 
 func (s *Service) CancelTopUpRequest(ctx context.Context, organizationID string, ID string) error {
