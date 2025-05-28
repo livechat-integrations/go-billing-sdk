@@ -150,6 +150,14 @@ type storageMock struct {
 	mock.Mock
 }
 
+func (m *storageMock) GetLedgerOperation(ctx context.Context, params GetLedgerOperationParams) (*Operation, error) {
+	args := m.Called(ctx, params)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*Operation), args.Error(1)
+}
+
 func (m *storageMock) GetDirectTopUpsWithoutOperations(ctx context.Context) ([]TopUp, error) {
 	args := m.Called(ctx)
 	return args.Get(0).([]TopUp), args.Error(1)
@@ -1161,6 +1169,165 @@ func TestService_CreateTopUpRequest(t *testing.T) {
 		tu, err := s.CreateTopUpRequest(context.Background(), params)
 
 		assert.Nil(t, tu)
+		assert.ErrorIs(t, err, assert.AnError)
+
+		assertExpectations(t)
+	})
+}
+
+func TestService_AddFunds(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
+		amount := float32(5.23)
+		lcoid := "lcOrganizationID"
+		namespace := "namespace"
+		key := fmt.Sprintf("add-funds-%s-%s", namespace, lcoid)
+		sm.On("GetLedgerOperation", ctx, GetLedgerOperationParams{
+			ID:             key,
+			OrganizationID: lcoid,
+		}).Return(nil, nil).Once()
+		operation := Operation{
+			ID:               key,
+			LCOrganizationID: lcoid,
+			Amount:           amount,
+		}
+		sm.On("CreateLedgerOperation", ctx, operation).Return(nil).Once()
+		sc, _ := json.Marshal(operation)
+		p := map[string]interface{}{"amount": amount, "namespace": namespace}
+		jp, _ := json.Marshal(p)
+		event := events.Event{
+			ID:               xid,
+			LCOrganizationID: lcoid,
+			Type:             events.EventTypeInfo,
+			Action:           events.EventActionAddFunds,
+			Payload:          jp,
+		}
+		levent := events.Event{
+			ID:               xid,
+			LCOrganizationID: lcoid,
+			Type:             events.EventTypeInfo,
+			Action:           events.EventActionCreateOperation,
+			Payload:          sc,
+		}
+		em.On("CreateEvent", context.Background(), levent).Return(nil).Once()
+		em.On("ToEvent", context.Background(), lcoid, events.EventActionCreateOperation, events.EventTypeInfo, operation).Return(levent).Once()
+		em.On("CreateEvent", context.Background(), event).Return(nil).Once()
+		em.On("ToEvent", context.Background(), lcoid, events.EventActionAddFunds, events.EventTypeInfo, p).Return(event).Once()
+
+		err := s.AddFunds(ctx, amount, lcoid, namespace)
+
+		assert.Nil(t, err)
+
+		assertExpectations(t)
+	})
+	t.Run("existing operation", func(t *testing.T) {
+		amount := float32(5.23)
+		lcoid := "lcOrganizationID"
+		namespace := "namespace"
+		key := fmt.Sprintf("add-funds-%s-%s", namespace, lcoid)
+		operation := Operation{
+			ID:               key,
+			LCOrganizationID: lcoid,
+			Amount:           amount,
+		}
+		sm.On("GetLedgerOperation", ctx, GetLedgerOperationParams{
+			ID:             key,
+			OrganizationID: lcoid,
+		}).Return(&operation, nil).Once()
+		p := map[string]interface{}{"amount": amount, "namespace": namespace}
+		jp, _ := json.Marshal(map[string]interface{}{"id": key, "amount": amount, "namespace": namespace, "result": "already exists"})
+		event := events.Event{
+			ID:               xid,
+			LCOrganizationID: lcoid,
+			Type:             events.EventTypeInfo,
+			Action:           events.EventActionAddFunds,
+			Payload:          jp,
+		}
+
+		em.On("CreateEvent", context.Background(), event).Return(nil).Once()
+		em.On("ToEvent", context.Background(), lcoid, events.EventActionAddFunds, events.EventTypeInfo, p).Return(event).Once()
+
+		err := s.AddFunds(ctx, amount, lcoid, namespace)
+
+		assert.Nil(t, err)
+
+		assertExpectations(t)
+	})
+	t.Run("get operation error", func(t *testing.T) {
+		amount := float32(5.23)
+		lcoid := "lcOrganizationID"
+		namespace := "namespace"
+		key := fmt.Sprintf("add-funds-%s-%s", namespace, lcoid)
+		sm.On("GetLedgerOperation", ctx, GetLedgerOperationParams{
+			ID:             key,
+			OrganizationID: lcoid,
+		}).Return(nil, assert.AnError).Once()
+		p := map[string]interface{}{"amount": amount, "namespace": namespace}
+		jp, _ := json.Marshal(map[string]interface{}{"amount": amount, "namespace": namespace})
+		event := events.Event{
+			ID:               xid,
+			LCOrganizationID: lcoid,
+			Type:             events.EventTypeError,
+			Action:           events.EventActionAddFunds,
+			Payload:          jp,
+		}
+
+		em.On("ToError", ctx, events.ToErrorParams{
+			Event: event,
+			Err:   fmt.Errorf("failed get ledger operation from database: %w", assert.AnError),
+		}).Return(assert.AnError).Once()
+		em.On("ToEvent", ctx, lcoid, events.EventActionAddFunds, events.EventTypeInfo, p).Return(event).Once()
+
+		err := s.AddFunds(ctx, amount, lcoid, namespace)
+
+		assert.ErrorIs(t, err, assert.AnError)
+
+		assertExpectations(t)
+	})
+	t.Run("store operation error", func(t *testing.T) {
+		amount := float32(5.23)
+		lcoid := "lcOrganizationID"
+		namespace := "namespace"
+		key := fmt.Sprintf("add-funds-%s-%s", namespace, lcoid)
+		sm.On("GetLedgerOperation", ctx, GetLedgerOperationParams{
+			ID:             key,
+			OrganizationID: lcoid,
+		}).Return(nil, nil).Once()
+		operation := Operation{
+			ID:               key,
+			LCOrganizationID: lcoid,
+			Amount:           amount,
+		}
+		sm.On("CreateLedgerOperation", ctx, operation).Return(assert.AnError).Once()
+		sc, _ := json.Marshal(operation)
+		p := map[string]interface{}{"amount": amount, "namespace": namespace}
+		jp, _ := json.Marshal(p)
+		event := events.Event{
+			ID:               xid,
+			LCOrganizationID: lcoid,
+			Type:             events.EventTypeError,
+			Action:           events.EventActionAddFunds,
+			Payload:          jp,
+		}
+		levent := events.Event{
+			ID:               xid,
+			LCOrganizationID: lcoid,
+			Type:             events.EventTypeError,
+			Action:           events.EventActionCreateOperation,
+			Payload:          sc,
+		}
+		em.On("ToError", ctx, events.ToErrorParams{
+			Event: levent,
+			Err:   fmt.Errorf("failed to create ledger operation in database: %w", assert.AnError),
+		}).Return(assert.AnError).Once()
+		em.On("ToEvent", context.Background(), lcoid, events.EventActionCreateOperation, events.EventTypeInfo, operation).Return(levent).Once()
+		em.On("ToError", ctx, events.ToErrorParams{
+			Event: event,
+			Err:   assert.AnError,
+		}).Return(assert.AnError).Once()
+		em.On("ToEvent", context.Background(), lcoid, events.EventActionAddFunds, events.EventTypeInfo, p).Return(event).Once()
+
+		err := s.AddFunds(ctx, amount, lcoid, namespace)
+
 		assert.ErrorIs(t, err, assert.AnError)
 
 		assertExpectations(t)
