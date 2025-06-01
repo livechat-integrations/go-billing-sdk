@@ -274,13 +274,10 @@ func (s *Service) GetChargesByOrganizationID(ctx context.Context, lcOrganization
 }
 
 func (s *Service) CancelRecurrentCharge(ctx context.Context, chargeID string) error {
-	recCharge, err := s.billingAPI.CancelRecurrentCharge(ctx, chargeID)
-	if err != nil {
-		return fmt.Errorf("failed to cancel recurrent charge: %w", err)
-	}
+	recCharge, _ := s.billingAPI.CancelRecurrentCharge(ctx, chargeID)
 
 	rawCharge, _ := json.Marshal(recCharge)
-	if err = s.storage.UpdateChargePayload(ctx, chargeID, rawCharge); err != nil {
+	if err := s.storage.UpdateChargePayload(ctx, chargeID, rawCharge); err != nil {
 		return fmt.Errorf("failed to update charge payload: %w", err)
 	}
 
@@ -296,11 +293,11 @@ func (s *Service) SyncCharges(ctx context.Context) error {
 	for _, charge := range charges {
 		var recCharge livechat.RecurrentCharge
 		_ = json.Unmarshal(charge.Payload, &recCharge)
-		if recCharge.Status == livechat.ChargeStatusActive && recCharge.NextChargeAt.Before(time.Now()) {
+		if recCharge.Status == livechat.RecurrentChargeStatusActive && recCharge.NextChargeAt.Before(time.Now()) {
 			continue
 		}
 
-		if recCharge.Status == livechat.ChargeStatusPending && recCharge.CreatedAt.AddDate(0, 1, 0).Before(time.Now()) {
+		if recCharge.Status == livechat.RecurrentChargeStatusPending && recCharge.CreatedAt.AddDate(0, 1, 0).Before(time.Now()) {
 			if err = s.cancelChange(ctx, charge); err != nil {
 				return err
 			}
@@ -319,8 +316,8 @@ func (s *Service) SyncCharges(ctx context.Context) error {
 		}
 
 		switch lcCharge.Status {
-		case livechat.ChargeStatusAccepted,
-			livechat.ChargeStatusFrozen:
+		case livechat.RecurrentChargeStatusAccepted,
+			livechat.RecurrentChargeStatusFrozen:
 			lcCharge, err = s.billingAPI.ActivateRecurrentCharge(ctx, charge.ID)
 			if err != nil {
 				event.Type = events.EventTypeError

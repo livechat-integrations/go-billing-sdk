@@ -15,16 +15,19 @@ import (
 const BillingAPIBaseURL = "https://billing.livechatinc.com"
 
 const (
-	ChargeStatusPending    ChargeStatus = "pending"
-	ChargeStatusSuccess    ChargeStatus = "success"
-	ChargeStatusActive     ChargeStatus = "active"
-	ChargeStatusProcessing ChargeStatus = "processing"
-	ChargeStatusCancelled  ChargeStatus = "cancelled"
-	ChargeStatusFailed     ChargeStatus = "failed"
-	ChargeStatusDeclined   ChargeStatus = "declined"
-	ChargeStatusFrozen     ChargeStatus = "frozen"
-	ChargeStatusPastDue    ChargeStatus = "past_due"
-	ChargeStatusAccepted   ChargeStatus = "accepted"
+	RecurrentChargeStatusPending   ChargeStatus = "pending"
+	RecurrentChargeStatusAccepted  ChargeStatus = "accepted"
+	RecurrentChargeStatusActive    ChargeStatus = "active"
+	RecurrentChargeStatusCancelled ChargeStatus = "cancelled"
+	RecurrentChargeStatusFrozen    ChargeStatus = "frozen"
+	RecurrentChargeStatusPastDue   ChargeStatus = "past_due"
+
+	DirectChargeStatusPending    ChargeStatus = "pending"
+	DirectChargeStatusAccepted   ChargeStatus = "accepted"
+	DirectChargeStatusDeclined   ChargeStatus = "declined"
+	DirectChargeStatusProcessing ChargeStatus = "processed"
+	DirectChargeStatusFailed     ChargeStatus = "failed"
+	DirectChargeStatusSuccess    ChargeStatus = "success"
 )
 
 type ChargeStatus string

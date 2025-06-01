@@ -61,7 +61,7 @@ func (r *GetSubscriptionsByOrganizationIDRow) ToBillingSubscription() *billing.S
 		CanceledAt:       chargeDeletedAt,
 	}
 
-	if p.Status == livechat.ChargeStatusPastDue {
+	if p.Status == livechat.RecurrentChargeStatusPastDue {
 		var dunningEndDate time.Time
 		if p.NextChargeAt == nil {
 			dunningEndDate = p.CreatedAt.AddDate(0, 0, 16)
