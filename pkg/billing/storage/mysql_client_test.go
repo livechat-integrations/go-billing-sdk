@@ -11,8 +11,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/livechat-integrations/go-billing-sdk/internal/livechat"
-	"github.com/livechat-integrations/go-billing-sdk/pkg/billing"
+	"github.com/livechat-integrations/go-billing-sdk/v2/internal/livechat"
+	"github.com/livechat-integrations/go-billing-sdk/v2/pkg/billing"
 )
 
 var now, _ = time.Parse("2006-01-02 15:04:05", "2025-04-02 15:04:05")

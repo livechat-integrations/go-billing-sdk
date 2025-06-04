@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
-	"github.com/livechat-integrations/go-billing-sdk/pkg/events"
+	"github.com/livechat-integrations/go-billing-sdk/v2/pkg/events"
 )
 
 var lm = new(ledgerMock)

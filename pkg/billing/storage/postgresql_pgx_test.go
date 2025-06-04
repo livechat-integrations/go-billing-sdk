@@ -11,8 +11,8 @@ import (
 	"github.com/pashagolub/pgxmock/v4"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/livechat-integrations/go-billing-sdk/internal/livechat"
-	"github.com/livechat-integrations/go-billing-sdk/pkg/billing"
+	"github.com/livechat-integrations/go-billing-sdk/v2/internal/livechat"
+	"github.com/livechat-integrations/go-billing-sdk/v2/pkg/billing"
 )
 
 var dbMock, _ = pgxmock.NewConn()

@@ -3,7 +3,7 @@
 package sqlc
 
 import (
-	"github.com/livechat-integrations/go-billing-sdk/pkg/ledger"
+	"github.com/livechat-integrations/go-billing-sdk/v2/pkg/ledger"
 )
 
 func (o *LedgerLedger) ToLedgerOperation() (*ledger.Operation, error) {

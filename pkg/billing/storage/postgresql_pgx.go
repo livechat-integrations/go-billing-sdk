@@ -9,9 +9,9 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/livechat-integrations/go-billing-sdk/pkg/billing"
-	"github.com/livechat-integrations/go-billing-sdk/pkg/billing/storage/postgresql/sqlc"
-	"github.com/livechat-integrations/go-billing-sdk/pkg/events"
+	"github.com/livechat-integrations/go-billing-sdk/v2/pkg/billing"
+	"github.com/livechat-integrations/go-billing-sdk/v2/pkg/billing/storage/postgresql/sqlc"
+	"github.com/livechat-integrations/go-billing-sdk/v2/pkg/events"
 )
 
 type PGXConn interface {

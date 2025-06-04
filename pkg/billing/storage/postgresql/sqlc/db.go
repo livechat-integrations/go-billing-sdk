@@ -4,8 +4,8 @@ package sqlc
 
 import (
 	"encoding/json"
-	"github.com/livechat-integrations/go-billing-sdk/internal/livechat"
-	"github.com/livechat-integrations/go-billing-sdk/pkg/billing"
+	"github.com/livechat-integrations/go-billing-sdk/v2/internal/livechat"
+	"github.com/livechat-integrations/go-billing-sdk/v2/pkg/billing"
 	"time"
 )
 

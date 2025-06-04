@@ -1,4 +1,4 @@
-module github.com/livechat-integrations/go-billing-sdk
+module github.com/livechat-integrations/go-billing-sdk/v2
 
 go 1.22.0
 

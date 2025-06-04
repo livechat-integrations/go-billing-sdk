@@ -8,9 +8,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/livechat-integrations/go-billing-sdk/common"
-	"github.com/livechat-integrations/go-billing-sdk/internal/livechat"
-	"github.com/livechat-integrations/go-billing-sdk/pkg/events"
+	"github.com/livechat-integrations/go-billing-sdk/v2/common"
+	"github.com/livechat-integrations/go-billing-sdk/v2/internal/livechat"
+	"github.com/livechat-integrations/go-billing-sdk/v2/pkg/events"
 )
 
 type LedgerInterface interface {

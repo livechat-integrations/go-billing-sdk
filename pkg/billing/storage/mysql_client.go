@@ -12,8 +12,8 @@ import (
 	lcMySQL "github.com/livechat/go-mysql"
 	"github.com/rcrowley/go-metrics"
 
-	"github.com/livechat-integrations/go-billing-sdk/pkg/billing"
-	"github.com/livechat-integrations/go-billing-sdk/pkg/events"
+	"github.com/livechat-integrations/go-billing-sdk/v2/pkg/billing"
+	"github.com/livechat-integrations/go-billing-sdk/v2/pkg/events"
 )
 
 type Clock interface {

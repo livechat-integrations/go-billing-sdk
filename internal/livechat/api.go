@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/livechat-integrations/go-billing-sdk/common"
+	"github.com/livechat-integrations/go-billing-sdk/v2/common"
 )
 
 const BillingAPIBaseURL = "https://billing.livechatinc.com"

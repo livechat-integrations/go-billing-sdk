@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 
-	"github.com/livechat-integrations/go-billing-sdk/pkg/events"
+	"github.com/livechat-integrations/go-billing-sdk/v2/pkg/events"
 )
 
 var (
