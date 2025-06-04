@@ -1,8 +1,10 @@
-//go:generate go run -mod=readonly github.com/sqlc-dev/sqlc/cmd/sqlc@v1.25.0 -x -f ./sqlc.yaml generate
+//go:generate go run -mod=readonly github.com/sqlc-dev/sqlc/cmd/sqlc@v1.29.0 generate
 
 package sqlc
 
 import (
+	"encoding/json"
+	"github.com/livechat-integrations/go-billing-sdk/internal/livechat"
 	"github.com/livechat-integrations/go-billing-sdk/pkg/billing"
 	"time"
 )
@@ -46,13 +48,31 @@ func (r *GetSubscriptionsByOrganizationIDRow) ToBillingSubscription() *billing.S
 		chargeDeletedAt = &r.DeletedAt_2.Time
 	}
 
+	var p livechat.RecurrentCharge
+	_ = json.Unmarshal(r.Payload, &p)
+
 	subscription.Charge = &billing.Charge{
 		ID:               r.ChargeID.String,
 		LCOrganizationID: r.LcOrganizationID_2.String,
 		Type:             billing.ChargeType(r.Type.String),
 		Payload:          r.Payload,
+		NextChargeAt:     p.NextChargeAt,
 		CreatedAt:        r.CreatedAt_2.Time,
 		CanceledAt:       chargeDeletedAt,
+	}
+
+	if p.Status == livechat.RecurrentChargeStatusPastDue {
+		var dunningEndDate time.Time
+		if p.NextChargeAt == nil {
+			dunningEndDate = p.CreatedAt.AddDate(0, 0, 16)
+		} else {
+			dunningEndDate = p.NextChargeAt.AddDate(0, 0, 16)
+			for dunningEndDate.After(time.Now()) {
+				dunningEndDate = dunningEndDate.AddDate(0, 0, 16)
+			}
+		}
+
+		subscription.DunningEndDate = &dunningEndDate
 	}
 
 	return subscription

@@ -30,6 +30,7 @@ const (
 	EventActionDPSWebhookPayment                EventAction = "dps_webhook_event_payment"
 	EventActionSyncTopUp                        EventAction = "sync_top_up_event"
 	EventActionActivateCharge                   EventAction = "activate_charge"
+	EventActionUnknown                          EventAction = "unknown"
 )
 
 type Event struct {

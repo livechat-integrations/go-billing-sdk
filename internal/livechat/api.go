@@ -14,27 +14,44 @@ import (
 
 const BillingAPIBaseURL = "https://billing.livechatinc.com"
 
+const (
+	RecurrentChargeStatusPending   ChargeStatus = "pending"
+	RecurrentChargeStatusAccepted  ChargeStatus = "accepted"
+	RecurrentChargeStatusActive    ChargeStatus = "active"
+	RecurrentChargeStatusCancelled ChargeStatus = "cancelled"
+	RecurrentChargeStatusFrozen    ChargeStatus = "frozen"
+	RecurrentChargeStatusPastDue   ChargeStatus = "past_due"
+
+	DirectChargeStatusPending    ChargeStatus = "pending"
+	DirectChargeStatusAccepted   ChargeStatus = "accepted"
+	DirectChargeStatusDeclined   ChargeStatus = "declined"
+	DirectChargeStatusProcessing ChargeStatus = "processed"
+	DirectChargeStatusFailed     ChargeStatus = "failed"
+	DirectChargeStatusSuccess    ChargeStatus = "success"
+)
+
+type ChargeStatus string
 type BaseCharge struct {
-	ID                  string     `json:"id"`
-	BuyerLicenseID      int        `json:"buyer_license_id"`
-	BuyerEntityID       string     `json:"buyer_entity_id"`
-	BuyerOrganizationID string     `json:"buyer_organization_id"`
-	BuyerAccountID      string     `json:"buyer_account_id"`
-	SellerClientID      string     `json:"seller_client_id"`
-	OrderClientID       string     `json:"order_client_id"`
-	OrderLicenseID      string     `json:"order_license_id"`
-	OrderEntityID       string     `json:"order_entity_id"`
-	OrderOrganizationID string     `json:"order_organization_id"`
-	Name                string     `json:"name"`
-	Price               int        `json:"price"`
-	ReturnURL           string     `json:"return_url"`
-	Test                bool       `json:"test"`
-	PerAccount          bool       `json:"per_account"`
-	Status              string     `json:"status"`
-	ConfirmationURL     string     `json:"confirmation_url"`
-	CommissionPercent   int        `json:"commission_percent"`
-	UpdatedAt           *time.Time `json:"updated_at"`
-	CreatedAt           *time.Time `json:"created_at"`
+	ID                  string       `json:"id"`
+	BuyerLicenseID      int          `json:"buyer_license_id"`
+	BuyerEntityID       string       `json:"buyer_entity_id"`
+	BuyerOrganizationID string       `json:"buyer_organization_id"`
+	BuyerAccountID      string       `json:"buyer_account_id"`
+	SellerClientID      string       `json:"seller_client_id"`
+	OrderClientID       string       `json:"order_client_id"`
+	OrderLicenseID      string       `json:"order_license_id"`
+	OrderEntityID       string       `json:"order_entity_id"`
+	OrderOrganizationID string       `json:"order_organization_id"`
+	Name                string       `json:"name"`
+	Price               int          `json:"price"`
+	ReturnURL           string       `json:"return_url"`
+	Test                bool         `json:"test"`
+	PerAccount          bool         `json:"per_account"`
+	Status              ChargeStatus `json:"status"`
+	ConfirmationURL     string       `json:"confirmation_url"`
+	CommissionPercent   int          `json:"commission_percent"`
+	UpdatedAt           *time.Time   `json:"updated_at"`
+	CreatedAt           *time.Time   `json:"created_at"`
 }
 
 type DirectCharge struct {

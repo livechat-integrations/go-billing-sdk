@@ -42,8 +42,9 @@ func (c *clockMock) Now() time.Time {
 }
 
 func (c *clockMock) After(d time.Duration) <-chan time.Time {
-	//TODO implement me
-	panic("implement me")
+	args := c.Called(d)
+
+	return args.Get(0).(<-chan time.Time)
 }
 
 type mysqlMock struct {
@@ -213,12 +214,12 @@ func TestNewSQLClient_UpdateChargePayload(t *testing.T) {
 			RowsAffected: 1,
 			QueryTime:    1,
 		}
-		rawPayload, _ := json.Marshal(charge.Payload)
+		//rawPayload, _ := json.Marshal(charge.Payload)
 
 		ctx := context.Background()
-		dm.On("Exec", ctx, "UPDATE charges SET payload = ? WHERE id = ? AND deleted_at IS NULL", []interface{}{rawPayload, charge.ID}).Return(&res, nil).Once()
+		dm.On("Exec", ctx, "UPDATE charges SET payload = ? WHERE id = ? AND deleted_at IS NULL", []interface{}{jsonPayload, charge.ID}).Return(&res, nil).Once()
 
-		err := mysqlClient.UpdateChargePayload(context.Background(), charge.ID, bch)
+		err := mysqlClient.UpdateChargePayload(context.Background(), charge.ID, jsonPayload)
 		assert.NoError(t, err)
 
 		assertExpectations(t)
@@ -244,7 +245,7 @@ func TestNewSQLClient_UpdateChargePayload(t *testing.T) {
 		ctx := context.Background()
 		dm.On("Exec", ctx, "UPDATE charges SET payload = ? WHERE id = ? AND deleted_at IS NULL", []interface{}{rawPayload, charge.ID}).Return(&res, nil).Once()
 
-		err := mysqlClient.UpdateChargePayload(context.Background(), charge.ID, bch)
+		err := mysqlClient.UpdateChargePayload(context.Background(), charge.ID, jsonPayload)
 		assert.NoError(t, err)
 
 		assertExpectations(t)
@@ -265,7 +266,7 @@ func TestNewSQLClient_UpdateChargePayload(t *testing.T) {
 		ctx := context.Background()
 		dm.On("Exec", ctx, "UPDATE charges SET payload = ? WHERE id = ? AND deleted_at IS NULL", []interface{}{rawPayload, charge.ID}).Return(nil, assert.AnError).Once()
 
-		err := mysqlClient.UpdateChargePayload(context.Background(), charge.ID, bch)
+		err := mysqlClient.UpdateChargePayload(context.Background(), charge.ID, jsonPayload)
 		assert.ErrorIs(t, err, assert.AnError)
 
 		assertExpectations(t)

@@ -3,8 +3,10 @@ package billing
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -98,8 +100,12 @@ func (m *apiMock) GetRecurrentCharge(ctx context.Context, id string) (*livechat.
 }
 
 func (m *apiMock) CreateDirectCharge(ctx context.Context, params livechat.CreateDirectChargeParams) (*livechat.DirectCharge, error) {
-	//TODO implement me
-	panic("implement me")
+	args := m.Called(ctx, params)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+
+	return args.Get(0).(*livechat.DirectCharge), args.Error(1)
 }
 
 func (m *apiMock) CreateRecurrentCharge(ctx context.Context, params livechat.CreateRecurrentChargeParams) (*livechat.RecurrentCharge, error) {
@@ -112,8 +118,12 @@ func (m *apiMock) CreateRecurrentCharge(ctx context.Context, params livechat.Cre
 }
 
 func (m *apiMock) CancelRecurrentCharge(ctx context.Context, id string) (*livechat.RecurrentCharge, error) {
-	//TODO implement me
-	panic("implement me")
+	args := m.Called(ctx, id)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+
+	return args.Get(0).(*livechat.RecurrentCharge), args.Error(1)
 }
 
 func (m *apiMock) GetRecurrentChargeV3(ctx context.Context, id string) (*livechat.RecurrentCharge, error) {
@@ -135,11 +145,21 @@ func (m *apiMock) CreateRecurrentChargeV3(ctx context.Context, params livechat.C
 }
 
 func (m *apiMock) ActivateRecurrentCharge(ctx context.Context, id string) (*livechat.RecurrentCharge, error) {
-	panic("implement me")
+	args := m.Called(ctx, id)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+
+	return args.Get(0).(*livechat.RecurrentCharge), args.Error(1)
 }
 
 func (m *apiMock) ActivateDirectCharge(ctx context.Context, id string) (*livechat.DirectCharge, error) {
-	panic("implement me")
+	args := m.Called(ctx, id)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+
+	return args.Get(0).(*livechat.DirectCharge), args.Error(1)
 }
 
 type storageMock struct {
@@ -147,23 +167,27 @@ type storageMock struct {
 }
 
 func (m *storageMock) CreateEvent(ctx context.Context, event events.Event) error {
-	//TODO implement me
-	panic("implement me")
+	args := m.Called(ctx, event)
+	return args.Error(0)
 }
 
 func (m *storageMock) GetChargesByOrganizationID(ctx context.Context, lcID string) ([]Charge, error) {
-	//TODO implement me
-	panic("implement me")
+	args := m.Called(ctx, lcID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+
+	return args.Get(0).([]Charge), args.Error(1)
 }
 
 func (m *storageMock) DeleteCharge(ctx context.Context, id string) error {
-	//TODO implement me
-	panic("implement me")
+	args := m.Called(ctx, id)
+	return args.Error(0)
 }
 
 func (m *storageMock) DeleteSubscriptionByChargeID(ctx context.Context, LCOrganizationID string, id string) error {
-	//TODO implement me
-	panic("implement me")
+	args := m.Called(ctx, LCOrganizationID, id)
+	return args.Error(0)
 }
 
 func (m *storageMock) CreateCharge(ctx context.Context, c Charge) error {
@@ -180,7 +204,7 @@ func (m *storageMock) GetCharge(ctx context.Context, id string) (*Charge, error)
 	return args.Get(0).(*Charge), args.Error(1)
 }
 
-func (m *storageMock) UpdateChargePayload(ctx context.Context, id string, payload livechat.BaseCharge) error {
+func (m *storageMock) UpdateChargePayload(ctx context.Context, id string, payload json.RawMessage) error {
 	args := m.Called(ctx, id, payload)
 	return args.Error(0)
 }
@@ -206,6 +230,20 @@ func (m *storageMock) GetSubscriptionsByOrganizationID(ctx context.Context, lcID
 	}
 
 	return args.Get(0).([]Subscription), args.Error(1)
+}
+
+func (m *storageMock) UpdateSubscriptionNextChargeAt(ctx context.Context, id string, nextChargeAt time.Time) error {
+	args := m.Called(ctx, id, nextChargeAt)
+	return args.Error(0)
+}
+
+func (m *storageMock) GetChargesByStatuses(ctx context.Context, statuses []string) ([]Charge, error) {
+	args := m.Called(ctx, statuses)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+
+	return args.Get(0).([]Charge), args.Error(1)
 }
 
 func TestNewService(t *testing.T) {
@@ -688,11 +726,13 @@ func TestService_GetActiveSubscriptionsByOrganizationID(t *testing.T) {
 		assertExpectations(t)
 	})
 	t.Run("success when LC charge is active", func(t *testing.T) {
+		tNextDay := time.Now().AddDate(0, 0, 1)
 		baseCharge := livechat.RecurrentCharge{
 			BaseCharge: livechat.BaseCharge{
 				ID:     "id",
 				Status: "active",
 			},
+			NextChargeAt: &tNextDay,
 		}
 		payload, _ := json.Marshal(baseCharge)
 		rsubs := []Subscription{{
@@ -778,10 +818,12 @@ func TestService_SyncRecurrentCharge(t *testing.T) {
 		}
 		am.On("GetRecurrentCharge", ctx, "id").Return(&charge, nil).Once()
 		sm.On("UpdateChargePayload", ctx, "id", mock.Anything).Run(func(args mock.Arguments) {
-			payload := args.Get(2).(livechat.BaseCharge)
+			payload := args.Get(2).(json.RawMessage)
+			var p livechat.BaseCharge
+			_ = json.Unmarshal(payload, &p)
 			assert.NotNil(t, payload)
-			assert.Equal(t, "name", payload.Name)
-			assert.Equal(t, 10, payload.Price)
+			assert.Equal(t, "name", p.Name)
+			assert.Equal(t, 10, p.Price)
 		}).Return(nil).Once()
 		payload := map[string]interface{}{"id": "id"}
 		sc, _ := json.Marshal(charge)
@@ -910,6 +952,75 @@ func TestService_SyncRecurrentCharge(t *testing.T) {
 		err := s.SyncRecurrentCharge(context.Background(), lcoid, "id")
 
 		assert.ErrorIs(t, err, assert.AnError)
+
+		assertExpectations(t)
+	})
+}
+
+func TestService_SyncCharges(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
+		sm.On("GetChargesByStatuses", ctx, GetSyncValidStatuses()).Return([]Charge{
+			{
+				ID:               "some-id",
+				LCOrganizationID: lcoid,
+			},
+		}, nil).Once()
+		em.On("ToEvent", ctx, lcoid, events.EventActionSyncRecurrentCharge, events.EventTypeInfo, map[string]interface{}{"id": "some-id"}).Return(events.Event{}).Once()
+		am.On("GetRecurrentCharge", ctx, "some-id").Return(&livechat.RecurrentCharge{
+			BaseCharge: livechat.BaseCharge{},
+		}, nil).Once()
+
+		sm.On("UpdateChargePayload", ctx, "some-id", mock.Anything).Return(nil).Once()
+		em.On("CreateEvent", ctx, mock.Anything).Return(nil).Once()
+
+		err := s.SyncCharges(ctx)
+		assert.NoError(t, err)
+
+		assertExpectations(t)
+	})
+
+	t.Run("error getting charges", func(t *testing.T) {
+		sm.On("GetChargesByStatuses", ctx, GetSyncValidStatuses()).Return(nil, errors.New("woopsie")).Once()
+
+		err := s.SyncCharges(ctx)
+		assert.ErrorContains(t, err, "failed to get charges by statuses")
+
+		assertExpectations(t)
+	})
+
+	t.Run("error getting recurrent charge", func(t *testing.T) {
+		sm.On("GetChargesByStatuses", ctx, GetSyncValidStatuses()).Return([]Charge{
+			{
+				ID:               "some-id",
+				LCOrganizationID: lcoid,
+			},
+		}, nil).Once()
+		em.On("ToEvent", ctx, lcoid, events.EventActionSyncRecurrentCharge, events.EventTypeInfo, map[string]interface{}{"id": "some-id"}).Return(events.Event{}).Once()
+		am.On("GetRecurrentCharge", ctx, "some-id").Return(nil, errors.New("whoopsie")).Once()
+		em.On("ToError", ctx, mock.Anything).Return(errors.New("failed to get recurrent charge: whoopsie")).Once()
+		err := s.SyncCharges(ctx)
+		assert.ErrorContains(t, err, "failed to get recurrent charge")
+
+		assertExpectations(t)
+	})
+
+	t.Run("error updating payload", func(t *testing.T) {
+		sm.On("GetChargesByStatuses", ctx, GetSyncValidStatuses()).Return([]Charge{
+			{
+				ID:               "some-id",
+				LCOrganizationID: lcoid,
+			},
+		}, nil).Once()
+		em.On("ToEvent", ctx, lcoid, events.EventActionSyncRecurrentCharge, events.EventTypeInfo, map[string]interface{}{"id": "some-id"}).Return(events.Event{}).Once()
+		am.On("GetRecurrentCharge", ctx, "some-id").Return(&livechat.RecurrentCharge{
+			BaseCharge: livechat.BaseCharge{},
+		}, nil).Once()
+
+		sm.On("UpdateChargePayload", ctx, "some-id", mock.Anything).Return(errors.New("whoopsie")).Once()
+		em.On("ToError", ctx, mock.Anything).Return(errors.New("failed to update charge payload: whoopsie")).Once()
+
+		err := s.SyncCharges(ctx)
+		assert.ErrorContains(t, err, "failed to update charge payload")
 
 		assertExpectations(t)
 	})

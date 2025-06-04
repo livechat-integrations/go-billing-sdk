@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/livechat-integrations/go-billing-sdk/common"
 	"github.com/livechat-integrations/go-billing-sdk/internal/livechat"
@@ -24,6 +25,7 @@ type BillingInterface interface {
 	CreateSubscription(ctx context.Context, lcOrganizationID string, chargeID string, planName string) error
 	GetChargesByOrganizationID(ctx context.Context, lcOrganizationID string) ([]Charge, error)
 	GetActiveSubscriptionsByOrganizationID(ctx context.Context, lcOrganizationID string) ([]Subscription, error)
+	SyncCharges(ctx context.Context) error
 }
 
 type Service struct {
@@ -130,7 +132,8 @@ func (s *Service) SyncRecurrentCharge(ctx context.Context, lcOrganizationID stri
 		})
 	}
 
-	if err = s.storage.UpdateChargePayload(ctx, id, lcCharge.BaseCharge); err != nil {
+	rawCharge, _ := json.Marshal(lcCharge)
+	if err = s.storage.UpdateChargePayload(ctx, id, rawCharge); err != nil {
 		event.Type = events.EventTypeError
 		return s.eventService.ToError(ctx, events.ToErrorParams{
 			Event: event,
@@ -164,7 +167,7 @@ func (s *Service) GetActiveSubscriptionsByOrganizationID(ctx context.Context, lc
 		return nil, fmt.Errorf("failed to get subscriptions by organization id: %w", err)
 	}
 
-	res := []Subscription{}
+	var res []Subscription
 	for _, sub := range subs {
 		if sub.IsActive() {
 			res = append(res, sub)
@@ -268,4 +271,99 @@ func (s *Service) GetChargesByOrganizationID(ctx context.Context, lcOrganization
 	}
 
 	return rows, nil
+}
+
+func (s *Service) CancelRecurrentCharge(ctx context.Context, chargeID string) error {
+	recCharge, _ := s.billingAPI.CancelRecurrentCharge(ctx, chargeID)
+
+	rawCharge, _ := json.Marshal(recCharge)
+	if err := s.storage.UpdateChargePayload(ctx, chargeID, rawCharge); err != nil {
+		return fmt.Errorf("failed to update charge payload: %w", err)
+	}
+
+	return nil
+}
+
+func (s *Service) SyncCharges(ctx context.Context) error {
+	charges, err := s.storage.GetChargesByStatuses(ctx, GetSyncValidStatuses())
+	if err != nil {
+		return fmt.Errorf("failed to get charges by statuses: %w", err)
+	}
+
+	for _, charge := range charges {
+		var recCharge livechat.RecurrentCharge
+		_ = json.Unmarshal(charge.Payload, &recCharge)
+		if recCharge.Status == livechat.RecurrentChargeStatusActive && recCharge.NextChargeAt.Before(time.Now()) {
+			continue
+		}
+
+		if recCharge.Status == livechat.RecurrentChargeStatusPending && recCharge.CreatedAt.AddDate(0, 1, 0).Before(time.Now()) {
+			if err = s.cancelChange(ctx, charge); err != nil {
+				return err
+			}
+
+			continue
+		}
+
+		event := s.eventService.ToEvent(ctx, charge.LCOrganizationID, events.EventActionSyncRecurrentCharge, events.EventTypeInfo, map[string]interface{}{"id": charge.ID})
+		lcCharge, err := s.billingAPI.GetRecurrentCharge(ctx, charge.ID)
+		if err != nil {
+			event.Type = events.EventTypeError
+			return s.eventService.ToError(ctx, events.ToErrorParams{
+				Event: event,
+				Err:   fmt.Errorf("failed to get recurrent charge: %w", err),
+			})
+		}
+
+		switch lcCharge.Status {
+		case livechat.RecurrentChargeStatusAccepted,
+			livechat.RecurrentChargeStatusFrozen:
+			lcCharge, err = s.billingAPI.ActivateRecurrentCharge(ctx, charge.ID)
+			if err != nil {
+				event.Type = events.EventTypeError
+				return s.eventService.ToError(ctx, events.ToErrorParams{
+					Event: event,
+					Err:   fmt.Errorf("failed to activate charge: %w", err),
+				})
+			}
+		}
+
+		rawCharge, _ := json.Marshal(recCharge)
+		if err = s.storage.UpdateChargePayload(ctx, charge.ID, rawCharge); err != nil {
+			event.Type = events.EventTypeError
+			return s.eventService.ToError(ctx, events.ToErrorParams{
+				Event: event,
+				Err:   fmt.Errorf("failed to update charge payload: %w", err),
+			})
+		}
+
+		event.SetPayload(lcCharge)
+		_ = s.eventService.CreateEvent(ctx, event)
+	}
+
+	return nil
+}
+
+func (s *Service) cancelChange(ctx context.Context, charge Charge) error {
+	event := s.eventService.ToEvent(ctx, charge.LCOrganizationID, events.EventActionForceCancelCharge, events.EventTypeInfo, map[string]interface{}{"id": charge.ID})
+	cancelledCharge, err := s.billingAPI.CancelRecurrentCharge(ctx, charge.ID)
+	if err != nil {
+		event.Type = events.EventTypeError
+		return s.eventService.ToError(ctx, events.ToErrorParams{
+			Event: event,
+			Err:   fmt.Errorf("failed to cancel charge: %w", err),
+		})
+	}
+
+	rawCharge, _ := json.Marshal(cancelledCharge)
+	if err = s.storage.UpdateChargePayload(ctx, charge.ID, rawCharge); err != nil {
+		event.Type = events.EventTypeError
+		return s.eventService.ToError(ctx, events.ToErrorParams{
+			Event: event,
+			Err:   fmt.Errorf("failed to cancel charge: %w", err),
+		})
+	}
+
+	_ = s.eventService.CreateEvent(ctx, event)
+	return nil
 }

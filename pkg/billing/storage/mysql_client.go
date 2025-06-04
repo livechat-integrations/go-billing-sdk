@@ -6,12 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	lcMySQL "github.com/livechat/go-mysql"
 	"github.com/rcrowley/go-metrics"
 
-	"github.com/livechat-integrations/go-billing-sdk/internal/livechat"
 	"github.com/livechat-integrations/go-billing-sdk/pkg/billing"
 	"github.com/livechat-integrations/go-billing-sdk/pkg/events"
 )
@@ -103,13 +103,8 @@ func (sql *SQLClient) GetCharge(ctx context.Context, id string) (*billing.Charge
 	return ToBillingCharge(charges[0]), nil
 }
 
-func (sql *SQLClient) UpdateChargePayload(ctx context.Context, id string, payload livechat.BaseCharge) error {
-	rawPayload, err := json.Marshal(payload)
-	if err != nil {
-		return err
-	}
-
-	_, err = sql.sqlClient.Exec(ctx, "UPDATE charges SET payload = ? WHERE id = ? AND deleted_at IS NULL", rawPayload, id)
+func (sql *SQLClient) UpdateChargePayload(ctx context.Context, id string, payload json.RawMessage) error {
+	_, err := sql.sqlClient.Exec(ctx, "UPDATE charges SET payload = ? WHERE id = ? AND deleted_at IS NULL", []uint8(payload), id)
 	if err != nil {
 		return fmt.Errorf("couldn't update charge: %w", err)
 	}
@@ -210,20 +205,31 @@ func (sql *SQLClient) CreateEvent(ctx context.Context, e events.Event) error {
 	return nil
 }
 
+func (sql *SQLClient) GetChargesByStatuses(ctx context.Context, statuses []string) ([]billing.Charge, error) {
+	statusList := strings.Join(statuses, ",")
+	res, err := sql.sqlClient.Query(ctx, "SELECT id, lc_organization_id, type, payload, created_at, deleted_at FROM charges WHERE FIND_IN_SET(JSON_UNQUOTE(payload->'$.status'), ?)", statusList)
+	if err != nil {
+		return nil, fmt.Errorf("couldn't select charges from DB: %w", err)
+	}
+	if res.Count() < 1 {
+		return []billing.Charge{}, nil
+	}
+	var chs []*SQLCharge
+	if err := res.CastTo(&chs); err != nil {
+		return nil, fmt.Errorf("couldn't cast result to sql charges: %w", err)
+	}
+
+	var charges []billing.Charge
+	for _, ch := range chs {
+		charges = append(charges, *ToBillingCharge(ch))
+	}
+	return charges, nil
+}
+
 func ToBillingSubscription(r *SQLSubscription) *billing.Subscription {
 	var canceledAt *time.Time
 	if r.DeletedAt != nil {
 		canceledAt = r.DeletedAt
-	}
-
-	var nextChargeAt *time.Time
-	var payloadMap map[string]any
-	if err := json.Unmarshal([]byte(r.Payload), &payloadMap); err == nil {
-		if val, ok := payloadMap["next_charge_at"].(string); ok && val != "" {
-			if parsed, err := time.Parse(time.RFC3339, val); err == nil {
-				nextChargeAt = &parsed
-			}
-		}
 	}
 
 	subscription := &billing.Subscription{
@@ -232,7 +238,6 @@ func ToBillingSubscription(r *SQLSubscription) *billing.Subscription {
 		PlanName:         r.PlanName,
 		CreatedAt:        r.CreatedAt,
 		DeletedAt:        canceledAt,
-		NextChargeAt:     nextChargeAt,
 	}
 
 	if len(r.ChargeID) < 1 {

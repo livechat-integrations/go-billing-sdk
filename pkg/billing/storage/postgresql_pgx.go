@@ -9,7 +9,6 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/livechat-integrations/go-billing-sdk/internal/livechat"
 	"github.com/livechat-integrations/go-billing-sdk/pkg/billing"
 	"github.com/livechat-integrations/go-billing-sdk/pkg/billing/storage/postgresql/sqlc"
 	"github.com/livechat-integrations/go-billing-sdk/pkg/events"
@@ -72,15 +71,10 @@ func (r *PostgresqlPGX) GetChargeByOrganizationID(ctx context.Context, lcID stri
 	return row.ToBillingCharge(), nil
 }
 
-func (r *PostgresqlPGX) UpdateChargePayload(ctx context.Context, id string, payload livechat.BaseCharge) error {
-	rawPayload, err := json.Marshal(payload)
-	if err != nil {
-		return err
-	}
-
+func (r *PostgresqlPGX) UpdateChargePayload(ctx context.Context, id string, payload json.RawMessage) error {
 	return r.queries.UpdateCharge(ctx, sqlc.UpdateChargeParams{
 		ID:      id,
-		Payload: rawPayload,
+		Payload: payload,
 	})
 }
 
@@ -161,4 +155,18 @@ func (r *PostgresqlPGX) CreateEvent(ctx context.Context, e events.Event) error {
 		return err
 	}
 	return nil
+}
+
+func (r *PostgresqlPGX) GetChargesByStatuses(ctx context.Context, statuses []string) ([]billing.Charge, error) {
+	rows, err := r.queries.GetChargesByStatuses(ctx, statuses)
+	if err != nil {
+		return nil, err
+	}
+
+	var charges []billing.Charge
+	for _, row := range rows {
+		charges = append(charges, *row.ToBillingCharge())
+	}
+
+	return charges, nil
 }
