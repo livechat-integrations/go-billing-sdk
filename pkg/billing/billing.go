@@ -252,6 +252,14 @@ func (s *Service) DeleteSubscriptionWithCharge(ctx context.Context, lcOrganizati
 		})
 	}
 
+	if err := s.storage.UpdateChargeStatus(ctx, chargeID, livechat.RecurrentChargeStatusCancelled); err != nil {
+		event.Type = events.EventTypeError
+		return s.eventService.ToError(ctx, events.ToErrorParams{
+			Event: event,
+			Err:   fmt.Errorf("failed to delete subscription: %w", err),
+		})
+	}
+
 	if err := s.storage.DeleteCharge(ctx, chargeID); err != nil {
 		event.Type = events.EventTypeError
 		return s.eventService.ToError(ctx, events.ToErrorParams{
