@@ -346,6 +346,14 @@ func (s *Service) SyncCharges(ctx context.Context) error {
 			})
 		}
 
+		if err = s.storage.UpdateChargeStatus(ctx, charge.ID, charge.Status); err != nil {
+			event.Type = events.EventTypeError
+			return s.eventService.ToError(ctx, events.ToErrorParams{
+				Event: event,
+				Err:   fmt.Errorf("failed to update charge: %w", err),
+			})
+		}
+
 		event.SetPayload(lcCharge)
 		_ = s.eventService.CreateEvent(ctx, event)
 	}
@@ -370,6 +378,14 @@ func (s *Service) cancelChange(ctx context.Context, charge Charge) error {
 		return s.eventService.ToError(ctx, events.ToErrorParams{
 			Event: event,
 			Err:   fmt.Errorf("failed to cancel charge: %w", err),
+		})
+	}
+
+	if err = s.storage.UpdateChargeStatus(ctx, charge.ID, livechat.RecurrentChargeStatusCancelled); err != nil {
+		event.Type = events.EventTypeError
+		return s.eventService.ToError(ctx, events.ToErrorParams{
+			Event: event,
+			Err:   fmt.Errorf("failed to update charge: %w", err),
 		})
 	}
 
