@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/livechat-integrations/go-billing-sdk/v2/internal/livechat"
 	"log/slog"
 	"strings"
 	"time"
@@ -224,6 +225,15 @@ func (sql *SQLClient) GetChargesByStatuses(ctx context.Context, statuses []strin
 		charges = append(charges, *ToBillingCharge(ch))
 	}
 	return charges, nil
+}
+
+func (sql *SQLClient) UpdateChargeStatus(ctx context.Context, id string, status livechat.ChargeStatus) error {
+	_, err := sql.sqlClient.Exec(ctx, "UPDATE charges SET status = ? WHERE id = ? AND deleted_at IS NULL", string(status), id)
+	if err != nil {
+		return fmt.Errorf("couldn't update charge: %w", err)
+	}
+
+	return nil
 }
 
 func ToBillingSubscription(r *SQLSubscription) *billing.Subscription {

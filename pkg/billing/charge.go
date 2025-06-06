@@ -20,6 +20,7 @@ type Charge struct {
 	ID               string
 	LCOrganizationID string
 	Type             ChargeType
+	Status           livechat.ChargeStatus
 	Payload          json.RawMessage
 	NextChargeAt     *time.Time
 	CreatedAt        time.Time

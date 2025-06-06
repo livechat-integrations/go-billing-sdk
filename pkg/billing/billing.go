@@ -88,6 +88,7 @@ func (s *Service) CreateRecurrentCharge(ctx context.Context, name string, price 
 		LCOrganizationID: lcOrganizationID,
 		ID:               lcCharge.ID,
 		Type:             ChargeTypeRecurring,
+		Status:           livechat.RecurrentChargeStatusPending,
 		Payload:          rawCharge,
 	}
 	if err = s.storage.CreateCharge(ctx, charge); err != nil {

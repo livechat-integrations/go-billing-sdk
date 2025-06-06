@@ -246,6 +246,11 @@ func (m *storageMock) GetChargesByStatuses(ctx context.Context, statuses []strin
 	return args.Get(0).([]Charge), args.Error(1)
 }
 
+func (m *storageMock) UpdateChargeStatus(ctx context.Context, id string, status livechat.ChargeStatus) error {
+	args := m.Called(ctx, id, status)
+	return args.Error(0)
+}
+
 func TestNewService(t *testing.T) {
 	t.Run("NewService", func(t *testing.T) {
 		newService := NewService(nil, nil, nil, "labs", func(ctx context.Context) (string, error) { return "", nil }, &storageMock{}, nil, "returnURL", "masterOrgID")
@@ -273,6 +278,7 @@ func TestService_CreateRecurrentCharge(t *testing.T) {
 			Type:             ChargeTypeRecurring,
 			Payload:          rawRC,
 			LCOrganizationID: lcoid,
+			Status:           livechat.RecurrentChargeStatusPending,
 		}
 		am.On("CreateRecurrentCharge", ctx, livechat.CreateRecurrentChargeParams{
 			Name:      "name",
@@ -320,6 +326,7 @@ func TestService_CreateRecurrentCharge(t *testing.T) {
 			ID:               "id",
 			Type:             ChargeTypeRecurring,
 			Payload:          rawRC,
+			Status:           livechat.RecurrentChargeStatusPending,
 			LCOrganizationID: "masterOrgID",
 		}
 		am.On("CreateRecurrentCharge", ctx, livechat.CreateRecurrentChargeParams{
@@ -434,6 +441,7 @@ func TestService_CreateRecurrentCharge(t *testing.T) {
 			ID:               "id",
 			Type:             ChargeTypeRecurring,
 			Payload:          rawRC,
+			Status:           livechat.RecurrentChargeStatusPending,
 			LCOrganizationID: lcoid,
 		}
 

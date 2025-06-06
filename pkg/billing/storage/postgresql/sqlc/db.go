@@ -15,11 +15,21 @@ func (c *Charge) ToBillingCharge() *billing.Charge {
 		canceledAt = &c.DeletedAt.Time
 	}
 
+	var nextChargeAt *time.Time
+	if c.Type == string(billing.ChargeTypeRecurring) {
+		var p livechat.RecurrentCharge
+		_ = json.Unmarshal(c.Payload, &p)
+
+		nextChargeAt = p.NextChargeAt
+	}
+
 	return &billing.Charge{
 		ID:               c.ID,
 		LCOrganizationID: c.LcOrganizationID,
 		Type:             billing.ChargeType(c.Type),
+		Status:           livechat.ChargeStatus(c.Status),
 		Payload:          c.Payload,
+		NextChargeAt:     nextChargeAt,
 		CreatedAt:        c.CreatedAt.Time,
 		CanceledAt:       canceledAt,
 	}
@@ -59,6 +69,7 @@ func (r *GetSubscriptionsByOrganizationIDRow) ToBillingSubscription() *billing.S
 		NextChargeAt:     p.NextChargeAt,
 		CreatedAt:        r.CreatedAt_2.Time,
 		CanceledAt:       chargeDeletedAt,
+		Status:           livechat.ChargeStatus(r.Status.String),
 	}
 
 	if p.Status == livechat.RecurrentChargeStatusPastDue {

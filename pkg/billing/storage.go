@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-
+	"github.com/livechat-integrations/go-billing-sdk/v2/internal/livechat"
 	"github.com/livechat-integrations/go-billing-sdk/v2/pkg/events"
 )
 
@@ -17,6 +17,7 @@ type Storage interface {
 	CreateCharge(ctx context.Context, ic Charge) error
 	GetCharge(ctx context.Context, id string) (*Charge, error)
 	UpdateChargePayload(ctx context.Context, id string, payload json.RawMessage) error
+	UpdateChargeStatus(ctx context.Context, id string, status livechat.ChargeStatus) error
 	DeleteCharge(ctx context.Context, id string) error
 	GetChargesByOrganizationID(ctx context.Context, lcID string) ([]Charge, error)
 	GetChargesByStatuses(ctx context.Context, statuses []string) ([]Charge, error)

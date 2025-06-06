@@ -59,4 +59,9 @@ VALUES ($1, $2, $3, $4, $5, $6, NOW());
 -- name: GetChargesByStatuses :many
 SELECT *
 FROM charges
-WHERE (payload->>'status') = ANY($1::text[]);
+WHERE status = ANY($1::text[]);
+
+-- name: UpdateChargeStatus :exec
+UPDATE charges
+SET status = $2
+WHERE id = $1;
