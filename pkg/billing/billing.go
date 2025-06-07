@@ -25,6 +25,7 @@ type BillingInterface interface {
 	CreateSubscription(ctx context.Context, lcOrganizationID string, chargeID string, planName string) error
 	GetChargesByOrganizationID(ctx context.Context, lcOrganizationID string) ([]Charge, error)
 	GetActiveSubscriptionsByOrganizationID(ctx context.Context, lcOrganizationID string) ([]Subscription, error)
+	GetSubscriptionsByOrganizationID(ctx context.Context, lcOrganizationID string) ([]Subscription, error)
 	SyncCharges(ctx context.Context) error
 }
 
@@ -175,6 +176,15 @@ func (s *Service) GetActiveSubscriptionsByOrganizationID(ctx context.Context, lc
 		}
 	}
 	return res, nil
+}
+
+func (s *Service) GetSubscriptionsByOrganizationID(ctx context.Context, lcOrganizationID string) ([]Subscription, error) {
+	subs, err := s.storage.GetSubscriptionsByOrganizationID(ctx, lcOrganizationID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get subscriptions by organization id: %w", err)
+	}
+
+	return subs, nil
 }
 
 func (s *Service) CreateSubscription(ctx context.Context, lcOrganizationID string, chargeID string, planName string) error {

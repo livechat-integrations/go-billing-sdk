@@ -73,6 +73,15 @@ func (b *billingMock) GetActiveSubscriptionsByOrganizationID(ctx context.Context
 	return args.Get(0).([]Subscription), nil
 }
 
+func (b *billingMock) GetSubscriptionsByOrganizationID(ctx context.Context, lcOrganizationID string) ([]Subscription, error) {
+	args := b.Called(ctx, lcOrganizationID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+
+	return args.Get(0).([]Subscription), nil
+}
+
 func TestNewHandler(t *testing.T) {
 	t.Run("NewHandler", func(t *testing.T) {
 		newService := NewHandler(&eventMock{}, &billingMock{}, &xIdMock{})

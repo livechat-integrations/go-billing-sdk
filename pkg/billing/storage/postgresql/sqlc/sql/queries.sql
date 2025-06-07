@@ -27,9 +27,10 @@ VALUES ($1, $2, $3, $4, NOW());
 
 -- name: GetSubscriptionsByOrganizationID :many
 SELECT *
-FROM active_subscriptions s
+FROM subscriptions s
 LEFT JOIN charges c on s.charge_id = c.id
-WHERE s.lc_organization_id = $1;
+WHERE s.lc_organization_id = $1
+ORDER BY s.created_at DESC;
 
 -- name: GetSubscriptionByChargeID :one
 SELECT *
