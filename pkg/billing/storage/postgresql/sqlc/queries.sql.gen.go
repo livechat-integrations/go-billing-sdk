@@ -92,6 +92,22 @@ func (q *Queries) DeleteCharge(ctx context.Context, id string) error {
 	return err
 }
 
+const deleteSubscription = `-- name: DeleteSubscription :exec
+UPDATE subscriptions
+SET deleted_at = NOW()
+WHERE id = $1 and lc_organization_id = $2
+`
+
+type DeleteSubscriptionParams struct {
+	ID               string
+	LcOrganizationID string
+}
+
+func (q *Queries) DeleteSubscription(ctx context.Context, arg DeleteSubscriptionParams) error {
+	_, err := q.db.Exec(ctx, deleteSubscription, arg.ID, arg.LcOrganizationID)
+	return err
+}
+
 const deleteSubscriptionByChargeID = `-- name: DeleteSubscriptionByChargeID :exec
 UPDATE subscriptions
 SET deleted_at = now()

@@ -178,3 +178,10 @@ func (r *PostgresqlPGX) UpdateChargeStatus(ctx context.Context, id string, statu
 		Status: string(status),
 	})
 }
+
+func (r *PostgresqlPGX) DeleteSubscription(ctx context.Context, lcID, subID string) error {
+	return r.queries.DeleteSubscription(ctx, sqlc.DeleteSubscriptionParams{
+		ID:               subID,
+		LcOrganizationID: lcID,
+	})
+}

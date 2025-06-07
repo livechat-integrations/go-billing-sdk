@@ -236,6 +236,15 @@ func (sql *SQLClient) UpdateChargeStatus(ctx context.Context, id string, status 
 	return nil
 }
 
+func (sql *SQLClient) DeleteSubscription(ctx context.Context, lcID, id string) error {
+	_, err := sql.sqlClient.Exec(ctx, "UPDATE subscriptions SET deleted_at = NOW() WHERE id = ? and lc_organization_id = ?", id, lcID)
+	if err != nil {
+		return fmt.Errorf("couldn't delete subscription: %w", err)
+	}
+
+	return nil
+}
+
 func ToBillingSubscription(r *SQLSubscription) *billing.Subscription {
 	var canceledAt *time.Time
 	if r.DeletedAt != nil {

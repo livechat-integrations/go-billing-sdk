@@ -21,6 +21,7 @@ type (
 
 type BillingInterface interface {
 	DeleteSubscriptionWithCharge(ctx context.Context, lcOrganizationID string, chargeID string) error
+	DeleteSubscription(ctx context.Context, lcOrganizationID string, subscriptionID string) error
 	SyncRecurrentCharge(ctx context.Context, lcOrganizationID string, id string) error
 	CreateSubscription(ctx context.Context, lcOrganizationID string, chargeID string, planName string) error
 	GetChargesByOrganizationID(ctx context.Context, lcOrganizationID string) ([]Charge, error)
@@ -367,6 +368,61 @@ func (s *Service) SyncCharges(ctx context.Context) error {
 		event.SetPayload(lcCharge)
 		_ = s.eventService.CreateEvent(ctx, event)
 	}
+
+	return nil
+}
+
+func (s *Service) DeleteSubscription(ctx context.Context, lcOrganizationID, subscriptionID string) error {
+	event := s.eventService.ToEvent(ctx, lcOrganizationID, events.EventActionDeleteSubscription, events.EventTypeInfo, map[string]interface{}{"subscriptionID": subscriptionID})
+	subs, err := s.storage.GetSubscriptionsByOrganizationID(ctx, lcOrganizationID)
+	if err != nil {
+		event.Type = events.EventTypeError
+		return s.eventService.ToError(ctx, events.ToErrorParams{
+			Event: event,
+			Err:   fmt.Errorf("failed to get subscriptions: %w", err),
+		})
+	}
+
+	var sub *Subscription
+	for _, subDB := range subs {
+		if subDB.ID == subscriptionID {
+			sub = &subDB
+		}
+	}
+
+	if sub == nil {
+		event.Type = events.EventTypeError
+		return s.eventService.ToError(ctx, events.ToErrorParams{
+			Event: event,
+			Err:   fmt.Errorf("subscription %s not found", subscriptionID),
+		})
+	}
+
+	if err = s.storage.DeleteSubscription(ctx, lcOrganizationID, subscriptionID); err != nil {
+		event.Type = events.EventTypeError
+		return s.eventService.ToError(ctx, events.ToErrorParams{
+			Event: event,
+			Err:   fmt.Errorf("failed to delete subscription: %w", err),
+		})
+	}
+
+	if err = s.storage.UpdateChargeStatus(ctx, sub.Charge.ID, livechat.RecurrentChargeStatusCancelled); err != nil {
+		event.Type = events.EventTypeError
+		return s.eventService.ToError(ctx, events.ToErrorParams{
+			Event: event,
+			Err:   fmt.Errorf("failed to delete subscription: %w", err),
+		})
+	}
+
+	if err = s.storage.DeleteCharge(ctx, sub.Charge.ID); err != nil {
+		event.Type = events.EventTypeError
+		return s.eventService.ToError(ctx, events.ToErrorParams{
+			Event: event,
+			Err:   fmt.Errorf("failed to delete charge: %w", err),
+		})
+	}
+
+	_ = s.eventService.CreateEvent(ctx, event)
 
 	return nil
 }

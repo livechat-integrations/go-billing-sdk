@@ -19,6 +19,7 @@ type EventAction string
 const (
 	EventActionCreateCharge                     EventAction = "create_charge"
 	EventActionDeleteSubscriptionWithCharge     EventAction = "delete_subscription_with_charge"
+	EventActionDeleteSubscription               EventAction = "delete_subscription"
 	EventActionSyncRecurrentCharge              EventAction = "sync_recurrent_charge"
 	EventActionCreateSubscription               EventAction = "create_subscription"
 	EventActionCreateOperation                  EventAction = "create_operation"

@@ -251,6 +251,11 @@ func (m *storageMock) UpdateChargeStatus(ctx context.Context, id string, status 
 	return args.Error(0)
 }
 
+func (m *storageMock) DeleteSubscription(ctx context.Context, lcID, subID string) error {
+	args := m.Called(ctx, lcID, subID)
+	return args.Error(0)
+}
+
 func TestNewService(t *testing.T) {
 	t.Run("NewService", func(t *testing.T) {
 		newService := NewService(nil, nil, nil, "labs", func(ctx context.Context) (string, error) { return "", nil }, &storageMock{}, nil, "returnURL", "masterOrgID")

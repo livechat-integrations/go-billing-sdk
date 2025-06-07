@@ -66,3 +66,8 @@ WHERE status = ANY($1::text[]);
 UPDATE charges
 SET status = $2
 WHERE id = $1;
+
+-- name: DeleteSubscription :exec
+UPDATE subscriptions
+SET deleted_at = NOW()
+WHERE id = $1 and lc_organization_id = $2;
