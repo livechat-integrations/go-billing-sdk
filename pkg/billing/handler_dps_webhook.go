@@ -21,7 +21,7 @@ type DPSWebhookRequest struct {
 }
 
 type Handler struct {
-	billing      BillingInterface
+	billing      ServiceInterface
 	idProvider   events.IdProviderInterface
 	eventService events.EventService
 }
@@ -30,7 +30,7 @@ type HandlerInterface interface {
 	HandleDPSWebhook(ctx context.Context, req DPSWebhookRequest) error
 }
 
-func NewHandler(eventService events.EventService, billing BillingInterface, idProvider events.IdProviderInterface) *Handler {
+func NewHandler(eventService events.EventService, billing ServiceInterface, idProvider events.IdProviderInterface) *Handler {
 	return &Handler{
 		billing:      billing,
 		idProvider:   idProvider,
@@ -39,9 +39,9 @@ func NewHandler(eventService events.EventService, billing BillingInterface, idPr
 }
 
 func (h *Handler) HandleDPSWebhook(ctx context.Context, req DPSWebhookRequest) error {
-	ctx = context.WithValue(ctx, BillingEventIDCtxKey{}, h.idProvider.GenerateId())
-	ctx = context.WithValue(ctx, BillingOrganizationIDCtxKey{}, req.LCOrganizationID)
-	ctx = context.WithValue(ctx, BillingLicenseIDCtxKey{}, req.License)
+	ctx = context.WithValue(ctx, EventIDCtxKey{}, h.idProvider.GenerateId())
+	ctx = context.WithValue(ctx, OrganizationIDCtxKey{}, req.LCOrganizationID)
+	ctx = context.WithValue(ctx, LicenseIDCtxKey{}, req.License)
 	chargeID, exists := req.Payload["paymentID"].(string)
 	if !exists {
 		return nil
@@ -94,7 +94,7 @@ func (h *Handler) HandleDPSWebhook(ctx context.Context, req DPSWebhookRequest) e
 			break
 		}
 
-		planName, ok := ctx.Value(BillingSubscriptionPlanNameCtxKey{}).(string)
+		planName, ok := ctx.Value(SubscriptionPlanNameCtxKey{}).(string)
 		if !ok || planName == "" {
 			event.Type = events.EventTypeError
 			return h.eventService.ToError(ctx, events.ToErrorParams{

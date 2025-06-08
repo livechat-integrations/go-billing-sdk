@@ -13,13 +13,13 @@ import (
 )
 
 type (
-	BillingEventIDCtxKey              struct{}
-	BillingLicenseIDCtxKey            struct{}
-	BillingOrganizationIDCtxKey       struct{}
-	BillingSubscriptionPlanNameCtxKey struct{}
+	EventIDCtxKey              struct{}
+	LicenseIDCtxKey            struct{}
+	OrganizationIDCtxKey       struct{}
+	SubscriptionPlanNameCtxKey struct{}
 )
 
-type BillingInterface interface {
+type ServiceInterface interface {
 	DeleteSubscriptionWithCharge(ctx context.Context, lcOrganizationID string, chargeID string) error
 	DeleteSubscription(ctx context.Context, lcOrganizationID string, subscriptionID string) error
 	SyncRecurrentCharge(ctx context.Context, lcOrganizationID string, id string) error
@@ -311,8 +311,8 @@ func (s *Service) SyncCharges(ctx context.Context) error {
 	}
 
 	for _, charge := range charges {
-		organizationCtx := context.WithValue(ctx, BillingOrganizationIDCtxKey{}, charge.LCOrganizationID)
-		organizationCtx = context.WithValue(organizationCtx, BillingEventIDCtxKey{}, s.idProvider.GenerateId())
+		organizationCtx := context.WithValue(ctx, OrganizationIDCtxKey{}, charge.LCOrganizationID)
+		organizationCtx = context.WithValue(organizationCtx, EventIDCtxKey{}, s.idProvider.GenerateId())
 
 		var recCharge livechat.RecurrentCharge
 		_ = json.Unmarshal(charge.Payload, &recCharge)

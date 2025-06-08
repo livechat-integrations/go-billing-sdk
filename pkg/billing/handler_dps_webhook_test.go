@@ -25,10 +25,10 @@ var planName = "some_plan"
 var billingCtx = initCtx()
 
 func initCtx() context.Context {
-	wCtx := context.WithValue(context.Background(), BillingSubscriptionPlanNameCtxKey{}, planName)
-	wCtx = context.WithValue(wCtx, BillingEventIDCtxKey{}, xid)
-	wCtx = context.WithValue(wCtx, BillingOrganizationIDCtxKey{}, lcoid)
-	wCtx = context.WithValue(wCtx, BillingLicenseIDCtxKey{}, lid)
+	wCtx := context.WithValue(context.Background(), SubscriptionPlanNameCtxKey{}, planName)
+	wCtx = context.WithValue(wCtx, EventIDCtxKey{}, xid)
+	wCtx = context.WithValue(wCtx, OrganizationIDCtxKey{}, lcoid)
+	wCtx = context.WithValue(wCtx, LicenseIDCtxKey{}, lid)
 
 	return wCtx
 }
@@ -141,7 +141,7 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 		bm.On("DeleteSubscriptionWithCharge", billingCtx, lcoid, ch2.ID).Return(nil).Once()
 		em.On("ToEvent", billingCtx, lcoid, events.EventActionUnknown, events.EventTypeInfo, req).Return(levent).Once()
 		em.On("CreateEvent", billingCtx, levent).Return(nil).Once()
-		lctx := context.WithValue(context.Background(), BillingSubscriptionPlanNameCtxKey{}, planName)
+		lctx := context.WithValue(context.Background(), SubscriptionPlanNameCtxKey{}, planName)
 		err := h.HandleDPSWebhook(lctx, req)
 
 		assert.Nil(t, err)
@@ -184,7 +184,7 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 			Event: levent,
 			Err:   assert.AnError,
 		}).Return(assert.AnError).Once()
-		lctx := context.WithValue(context.Background(), BillingSubscriptionPlanNameCtxKey{}, planName)
+		lctx := context.WithValue(context.Background(), SubscriptionPlanNameCtxKey{}, planName)
 		err := h.HandleDPSWebhook(lctx, req)
 
 		assert.ErrorIs(t, err, assert.AnError)
@@ -238,7 +238,7 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 			Event: levent,
 			Err:   fmt.Errorf("delete subscription with charge: %w", assert.AnError),
 		}).Return(assert.AnError).Once()
-		lctx := context.WithValue(context.Background(), BillingSubscriptionPlanNameCtxKey{}, planName)
+		lctx := context.WithValue(context.Background(), SubscriptionPlanNameCtxKey{}, planName)
 		err := h.HandleDPSWebhook(lctx, req)
 
 		assert.ErrorIs(t, err, assert.AnError)
@@ -279,7 +279,7 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 		bm.On("CreateSubscription", billingCtx, lcoid, paymentID, planName).Return(nil).Once()
 		em.On("ToEvent", billingCtx, lcoid, events.EventActionUnknown, events.EventTypeInfo, req).Return(levent).Once()
 		em.On("CreateEvent", billingCtx, levent).Return(nil).Once()
-		lctx := context.WithValue(context.Background(), BillingSubscriptionPlanNameCtxKey{}, planName)
+		lctx := context.WithValue(context.Background(), SubscriptionPlanNameCtxKey{}, planName)
 		err := h.HandleDPSWebhook(lctx, req)
 
 		assert.Nil(t, err)
@@ -319,7 +319,7 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 		bm.On("SyncRecurrentCharge", billingCtx, lcoid, paymentID).Return(nil).Once()
 		em.On("ToEvent", billingCtx, lcoid, events.EventActionUnknown, events.EventTypeInfo, req).Return(levent).Once()
 		em.On("CreateEvent", billingCtx, levent).Return(nil).Once()
-		lctx := context.WithValue(context.Background(), BillingSubscriptionPlanNameCtxKey{}, planName)
+		lctx := context.WithValue(context.Background(), SubscriptionPlanNameCtxKey{}, planName)
 		err := h.HandleDPSWebhook(lctx, req)
 
 		assert.Nil(t, err)
@@ -361,7 +361,7 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 			Event: levent,
 			Err:   fmt.Errorf("sync recurrent charge: %w", assert.AnError),
 		}).Return(assert.AnError).Once()
-		lctx := context.WithValue(context.Background(), BillingSubscriptionPlanNameCtxKey{}, planName)
+		lctx := context.WithValue(context.Background(), SubscriptionPlanNameCtxKey{}, planName)
 		err := h.HandleDPSWebhook(lctx, req)
 
 		assert.ErrorIs(t, err, assert.AnError)
@@ -398,10 +398,10 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 			Payload:          sc,
 		}
 
-		wCtx := context.WithValue(context.Background(), BillingSubscriptionPlanNameCtxKey{}, "")
-		wCtx = context.WithValue(wCtx, BillingEventIDCtxKey{}, xid)
-		wCtx = context.WithValue(wCtx, BillingOrganizationIDCtxKey{}, lcoid)
-		wCtx = context.WithValue(wCtx, BillingLicenseIDCtxKey{}, lid)
+		wCtx := context.WithValue(context.Background(), SubscriptionPlanNameCtxKey{}, "")
+		wCtx = context.WithValue(wCtx, EventIDCtxKey{}, xid)
+		wCtx = context.WithValue(wCtx, OrganizationIDCtxKey{}, lcoid)
+		wCtx = context.WithValue(wCtx, LicenseIDCtxKey{}, lid)
 
 		bm.On("SyncRecurrentCharge", wCtx, lcoid, paymentID).Return(nil).Once()
 		em.On("ToEvent", wCtx, lcoid, events.EventActionUnknown, events.EventTypeInfo, req).Return(levent).Once()
@@ -409,7 +409,7 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 			Event: levent,
 			Err:   fmt.Errorf("no plan name found in context"),
 		}).Return(assert.AnError).Once()
-		lctx := context.WithValue(context.Background(), BillingSubscriptionPlanNameCtxKey{}, "")
+		lctx := context.WithValue(context.Background(), SubscriptionPlanNameCtxKey{}, "")
 		err := h.HandleDPSWebhook(lctx, req)
 
 		assert.ErrorIs(t, err, assert.AnError)
@@ -449,7 +449,7 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 		bm.On("DeleteSubscriptionWithCharge", billingCtx, lcoid, paymentID).Return(nil).Once()
 		em.On("ToEvent", billingCtx, lcoid, events.EventActionUnknown, events.EventTypeInfo, req).Return(levent).Once()
 		em.On("CreateEvent", billingCtx, levent).Return(nil).Once()
-		lctx := context.WithValue(context.Background(), BillingSubscriptionPlanNameCtxKey{}, planName)
+		lctx := context.WithValue(context.Background(), SubscriptionPlanNameCtxKey{}, planName)
 		err := h.HandleDPSWebhook(lctx, req)
 
 		assert.Nil(t, err)
@@ -492,7 +492,7 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 			Event: levent,
 			Err:   fmt.Errorf("delete subscription with charge: %w", assert.AnError),
 		}).Return(assert.AnError).Once()
-		lctx := context.WithValue(context.Background(), BillingSubscriptionPlanNameCtxKey{}, planName)
+		lctx := context.WithValue(context.Background(), SubscriptionPlanNameCtxKey{}, planName)
 		err := h.HandleDPSWebhook(lctx, req)
 
 		assert.ErrorIs(t, err, assert.AnError)
