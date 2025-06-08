@@ -311,6 +311,9 @@ func (s *Service) SyncCharges(ctx context.Context) error {
 	}
 
 	for _, charge := range charges {
+		organizationCtx := context.WithValue(ctx, BillingOrganizationIDCtxKey{}, charge.LCOrganizationID)
+		organizationCtx = context.WithValue(organizationCtx, BillingEventIDCtxKey{}, s.idProvider.GenerateId())
+
 		var recCharge livechat.RecurrentCharge
 		_ = json.Unmarshal(charge.Payload, &recCharge)
 		if recCharge.Status == livechat.RecurrentChargeStatusActive && recCharge.NextChargeAt.Before(time.Now()) {
