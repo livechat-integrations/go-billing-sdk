@@ -328,8 +328,8 @@ func (s *Service) SyncCharges(ctx context.Context) error {
 			continue
 		}
 
-		event := s.eventService.ToEvent(ctx, charge.LCOrganizationID, events.EventActionSyncRecurrentCharge, events.EventTypeInfo, map[string]interface{}{"id": charge.ID})
-		lcCharge, err := s.billingAPI.GetRecurrentCharge(ctx, charge.ID)
+		event := s.eventService.ToEvent(organizationCtx, charge.LCOrganizationID, events.EventActionSyncRecurrentCharge, events.EventTypeInfo, map[string]interface{}{"id": charge.ID})
+		lcCharge, err := s.billingAPI.GetRecurrentCharge(organizationCtx, charge.ID)
 		if err != nil {
 			event.Type = events.EventTypeError
 			return s.eventService.ToError(ctx, events.ToErrorParams{
@@ -341,10 +341,10 @@ func (s *Service) SyncCharges(ctx context.Context) error {
 		switch lcCharge.Status {
 		case livechat.RecurrentChargeStatusAccepted,
 			livechat.RecurrentChargeStatusFrozen:
-			lcCharge, err = s.billingAPI.ActivateRecurrentCharge(ctx, charge.ID)
+			lcCharge, err = s.billingAPI.ActivateRecurrentCharge(organizationCtx, charge.ID)
 			if err != nil {
 				event.Type = events.EventTypeError
-				return s.eventService.ToError(ctx, events.ToErrorParams{
+				return s.eventService.ToError(organizationCtx, events.ToErrorParams{
 					Event: event,
 					Err:   fmt.Errorf("failed to activate charge: %w", err),
 				})
@@ -352,24 +352,24 @@ func (s *Service) SyncCharges(ctx context.Context) error {
 		}
 
 		rawCharge, _ := json.Marshal(recCharge)
-		if err = s.storage.UpdateChargePayload(ctx, charge.ID, rawCharge); err != nil {
+		if err = s.storage.UpdateChargePayload(organizationCtx, charge.ID, rawCharge); err != nil {
 			event.Type = events.EventTypeError
-			return s.eventService.ToError(ctx, events.ToErrorParams{
+			return s.eventService.ToError(organizationCtx, events.ToErrorParams{
 				Event: event,
 				Err:   fmt.Errorf("failed to update charge payload: %w", err),
 			})
 		}
 
-		if err = s.storage.UpdateChargeStatus(ctx, charge.ID, charge.Status); err != nil {
+		if err = s.storage.UpdateChargeStatus(organizationCtx, charge.ID, charge.Status); err != nil {
 			event.Type = events.EventTypeError
-			return s.eventService.ToError(ctx, events.ToErrorParams{
+			return s.eventService.ToError(organizationCtx, events.ToErrorParams{
 				Event: event,
 				Err:   fmt.Errorf("failed to update charge: %w", err),
 			})
 		}
 
 		event.SetPayload(lcCharge)
-		_ = s.eventService.CreateEvent(ctx, event)
+		_ = s.eventService.CreateEvent(organizationCtx, event)
 	}
 
 	return nil
