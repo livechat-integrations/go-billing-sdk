@@ -72,17 +72,20 @@ func (r *GetSubscriptionsByOrganizationIDRow) ToBillingSubscription() *billing.S
 		Status:           livechat.ChargeStatus(r.Status.String),
 	}
 
+	var dunningEndDate time.Time
 	if p.Status == livechat.RecurrentChargeStatusPastDue {
-		var dunningEndDate time.Time
-		if p.NextChargeAt == nil {
-			dunningEndDate = p.CreatedAt.AddDate(0, 0, 16)
-		} else {
+		if p.NextChargeAt != nil {
 			dunningEndDate = p.NextChargeAt.AddDate(0, 0, 16)
 			for dunningEndDate.After(time.Now()) {
 				dunningEndDate = dunningEndDate.AddDate(0, 0, 16)
 			}
 		}
 
+		subscription.DunningEndDate = &dunningEndDate
+	}
+
+	if p.Status == livechat.RecurrentChargeStatusActive && p.NextChargeAt == nil {
+		dunningEndDate = p.CreatedAt.AddDate(0, 0, 16)
 		subscription.DunningEndDate = &dunningEndDate
 	}
 
