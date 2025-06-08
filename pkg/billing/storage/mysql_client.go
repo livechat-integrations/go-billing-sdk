@@ -75,7 +75,7 @@ func (sql *SQLClient) CreateCharge(ctx context.Context, c billing.Charge) error 
 		return err
 	}
 
-	res, err := sql.sqlClient.Exec(ctx, "INSERT INTO charges(id, type, payload, lc_organization_id, created_at) VALUES (?, ?, ?, ?, ?)", c.ID, string(c.Type), rawPayload, c.LCOrganizationID, sql.clock.Now())
+	res, err := sql.sqlClient.Exec(ctx, "INSERT INTO charges(id, type, payload, lc_organization_id, status, created_at) VALUES (?, ?, ?, ?, ?, ?)", c.ID, string(c.Type), rawPayload, c.LCOrganizationID, string(c.Status), sql.clock.Now())
 	if err != nil {
 		return fmt.Errorf("couldn't add new charge: %w", err)
 	}

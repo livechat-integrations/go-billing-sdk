@@ -984,6 +984,7 @@ func TestService_SyncCharges(t *testing.T) {
 		}, nil).Once()
 
 		sm.On("UpdateChargePayload", ctx, "some-id", mock.Anything).Return(nil).Once()
+		sm.On("UpdateChargeStatus", ctx, "some-id", mock.Anything).Return(nil).Once()
 		em.On("CreateEvent", ctx, mock.Anything).Return(nil).Once()
 
 		err := s.SyncCharges(ctx)

@@ -12,8 +12,8 @@ import (
 )
 
 const createCharge = `-- name: CreateCharge :exec
-INSERT INTO charges(id, type, payload, lc_organization_id, created_at)
-VALUES ($1, $2, $3, $4, NOW())
+INSERT INTO charges(id, type, payload, lc_organization_id, status, created_at)
+VALUES ($1, $2, $3, $4, $5, NOW())
 `
 
 type CreateChargeParams struct {
@@ -21,6 +21,7 @@ type CreateChargeParams struct {
 	Type             string
 	Payload          []byte
 	LcOrganizationID string
+	Status           string
 }
 
 func (q *Queries) CreateCharge(ctx context.Context, arg CreateChargeParams) error {
@@ -29,6 +30,7 @@ func (q *Queries) CreateCharge(ctx context.Context, arg CreateChargeParams) erro
 		arg.Type,
 		arg.Payload,
 		arg.LcOrganizationID,
+		arg.Status,
 	)
 	return err
 }

@@ -94,6 +94,7 @@ func TestNewSQLClient_CreateCharge(t *testing.T) {
 			ID:               "id1",
 			LCOrganizationID: "lcOrganizationID",
 			Type:             billing.ChargeTypeRecurring,
+			Status:           livechat.RecurrentChargeStatusPending,
 			Payload:          jsonPayload,
 			CreatedAt:        someDate,
 			CanceledAt:       nil,
@@ -108,13 +109,14 @@ func TestNewSQLClient_CreateCharge(t *testing.T) {
 
 		ctx := context.Background()
 		cm.On("Now").Return(now).Once()
-		dm.On("Exec", ctx, "INSERT INTO charges(id, type, payload, lc_organization_id, created_at) VALUES (?, ?, ?, ?, ?)", []interface{}{charge.ID, string(charge.Type), rawPayload, charge.LCOrganizationID, now}).Return(&res, nil).Once()
+		dm.On("Exec", ctx, "INSERT INTO charges(id, type, payload, lc_organization_id, status, created_at) VALUES (?, ?, ?, ?, ?, ?)", []interface{}{charge.ID, string(charge.Type), rawPayload, charge.LCOrganizationID, string(livechat.RecurrentChargeStatusPending), now}).Return(&res, nil).Once()
 
 		err := mysqlClient.CreateCharge(context.Background(), billing.Charge{
 			ID:               charge.ID,
 			Type:             charge.Type,
 			Payload:          charge.Payload,
 			LCOrganizationID: charge.LCOrganizationID,
+			Status:           charge.Status,
 		})
 		assert.NoError(t, err)
 
@@ -134,6 +136,7 @@ func TestNewSQLClient_CreateCharge(t *testing.T) {
 			ID:               "id1",
 			LCOrganizationID: "lcOrganizationID",
 			Type:             billing.ChargeTypeRecurring,
+			Status:           livechat.RecurrentChargeStatusPending,
 			Payload:          jsonPayload,
 			CreatedAt:        someDate,
 			CanceledAt:       nil,
@@ -148,13 +151,14 @@ func TestNewSQLClient_CreateCharge(t *testing.T) {
 
 		ctx := context.Background()
 		cm.On("Now").Return(now).Once()
-		dm.On("Exec", ctx, "INSERT INTO charges(id, type, payload, lc_organization_id, created_at) VALUES (?, ?, ?, ?, ?)", []interface{}{charge.ID, string(charge.Type), rawPayload, charge.LCOrganizationID, now}).Return(&res, nil).Once()
+		dm.On("Exec", ctx, "INSERT INTO charges(id, type, payload, lc_organization_id, status, created_at) VALUES (?, ?, ?, ?, ?, ?)", []interface{}{charge.ID, string(charge.Type), rawPayload, charge.LCOrganizationID, string(charge.Status), now}).Return(&res, nil).Once()
 
 		err := mysqlClient.CreateCharge(context.Background(), billing.Charge{
 			ID:               charge.ID,
 			Type:             charge.Type,
 			Payload:          charge.Payload,
 			LCOrganizationID: charge.LCOrganizationID,
+			Status:           charge.Status,
 		})
 		assert.Equal(t, "couldn't add new charge", err.Error())
 
@@ -174,6 +178,7 @@ func TestNewSQLClient_CreateCharge(t *testing.T) {
 			ID:               "id1",
 			LCOrganizationID: "lcOrganizationID",
 			Type:             billing.ChargeTypeRecurring,
+			Status:           livechat.RecurrentChargeStatusPending,
 			Payload:          jsonPayload,
 			CreatedAt:        someDate,
 			CanceledAt:       nil,
@@ -183,13 +188,14 @@ func TestNewSQLClient_CreateCharge(t *testing.T) {
 
 		ctx := context.Background()
 		cm.On("Now").Return(now).Once()
-		dm.On("Exec", ctx, "INSERT INTO charges(id, type, payload, lc_organization_id, created_at) VALUES (?, ?, ?, ?, ?)", []interface{}{charge.ID, string(charge.Type), rawPayload, charge.LCOrganizationID, now}).Return(nil, assert.AnError).Once()
+		dm.On("Exec", ctx, "INSERT INTO charges(id, type, payload, lc_organization_id, status, created_at) VALUES (?, ?, ?, ?, ?, ?)", []interface{}{charge.ID, string(charge.Type), rawPayload, charge.LCOrganizationID, string(livechat.RecurrentChargeStatusPending), now}).Return(nil, assert.AnError).Once()
 
 		err := mysqlClient.CreateCharge(context.Background(), billing.Charge{
 			ID:               charge.ID,
 			Type:             charge.Type,
 			Payload:          charge.Payload,
 			LCOrganizationID: charge.LCOrganizationID,
+			Status:           charge.Status,
 		})
 		assert.ErrorIs(t, err, assert.AnError)
 

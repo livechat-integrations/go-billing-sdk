@@ -40,6 +40,7 @@ func (r *PostgresqlPGX) CreateCharge(ctx context.Context, c billing.Charge) erro
 		Type:             string(c.Type),
 		LcOrganizationID: c.LCOrganizationID,
 		Payload:          rawPayload,
+		Status:           string(c.Status),
 	}); err != nil {
 		return err
 	}

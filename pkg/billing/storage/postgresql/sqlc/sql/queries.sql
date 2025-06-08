@@ -1,6 +1,6 @@
 -- name: CreateCharge :exec
-INSERT INTO charges(id, type, payload, lc_organization_id, created_at)
-VALUES ($1, $2, $3, $4, NOW());
+INSERT INTO charges(id, type, payload, lc_organization_id, status, created_at)
+VALUES ($1, $2, $3, $4, $5, NOW());
 
 -- name: GetChargeByID :one
 SELECT *

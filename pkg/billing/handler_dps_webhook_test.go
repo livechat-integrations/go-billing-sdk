@@ -37,6 +37,11 @@ type billingMock struct {
 	mock.Mock
 }
 
+func (b *billingMock) DeleteSubscription(ctx context.Context, lcOrganizationID string, subscriptionID string) error {
+	args := b.Called(ctx, lcOrganizationID, subscriptionID)
+	return args.Error(0)
+}
+
 func (b *billingMock) SyncCharges(ctx context.Context) error {
 	args := b.Called(ctx)
 	return args.Error(0)
