@@ -332,7 +332,7 @@ func (s *Service) SyncCharges(ctx context.Context) error {
 		lcCharge, err := s.billingAPI.GetRecurrentCharge(organizationCtx, charge.ID)
 		if err != nil {
 			event.Type = events.EventTypeError
-			return s.eventService.ToError(ctx, events.ToErrorParams{
+			return s.eventService.ToError(organizationCtx, events.ToErrorParams{
 				Event: event,
 				Err:   fmt.Errorf("failed to get recurrent charge: %w", err),
 			})
