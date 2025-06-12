@@ -260,7 +260,7 @@ func (q *Queries) GetSubscriptionByChargeID(ctx context.Context, chargeID pgtype
 }
 
 const getSubscriptionsByOrganizationID = `-- name: GetSubscriptionsByOrganizationID :many
-SELECT s.id, s.lc_organization_id, plan_name, charge_id, s.created_at, s.deleted_at, c.id, c.lc_organization_id, type, payload, c.created_at, c.deleted_at, status
+SELECT s.id, s.lc_organization_id, s.plan_name, s.charge_id, s.created_at, s.deleted_at, c.id, c.lc_organization_id, c.type, c.payload, c.created_at, c.deleted_at, c.status
 FROM subscriptions s
 LEFT JOIN charges c on s.charge_id = c.id
 WHERE s.lc_organization_id = $1
