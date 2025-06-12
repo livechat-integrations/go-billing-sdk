@@ -27,6 +27,7 @@ type LedgerInterface interface {
 	SyncTopUp(ctx context.Context, topUp TopUp) (*TopUp, error)
 	SyncOrCancelTopUpRequests(ctx context.Context) error
 	AddFunds(ctx context.Context, Amount float32, OrganizationID, Namespace string) error
+	RecentlyAddedFunds(ctx context.Context, OrganizationID, Namespace string) (*Operation, error)
 }
 
 var (
@@ -276,7 +277,7 @@ func (s *Service) GetTopUps(ctx context.Context, organizationID string) ([]TopUp
 
 func (s *Service) AddFunds(ctx context.Context, Amount float32, OrganizationID, Namespace string) error {
 	event := s.eventService.ToEvent(ctx, OrganizationID, events.EventActionAddFunds, events.EventTypeInfo, map[string]interface{}{"amount": Amount, "namespace": Namespace})
-	key := fmt.Sprintf("add-funds-%s-%s", Namespace, OrganizationID)
+	key := getFundsKey(Namespace, OrganizationID)
 	operation, err := s.storage.GetLedgerOperation(ctx, GetLedgerOperationParams{
 		ID:             key,
 		OrganizationID: OrganizationID,
@@ -309,6 +310,21 @@ func (s *Service) AddFunds(ctx context.Context, Amount float32, OrganizationID, 
 	_ = s.eventService.CreateEvent(ctx, event)
 
 	return nil
+}
+
+func (s *Service) RecentlyAddedFunds(ctx context.Context, OrganizationID, Namespace string) (*Operation, error) {
+	key := getFundsKey(Namespace, OrganizationID)
+	operation, err := s.storage.GetLedgerOperation(ctx, GetLedgerOperationParams{
+		ID:             key,
+		OrganizationID: OrganizationID,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if operation != nil {
+		return operation, nil
+	}
+	return nil, nil
 }
 
 func (s *Service) CancelTopUpRequest(ctx context.Context, organizationID string, ID string) error {
@@ -735,4 +751,8 @@ func (s *Service) createOperation(ctx context.Context, operation Operation) (*Op
 	}
 	_ = s.eventService.CreateEvent(ctx, event)
 	return &operation, nil
+}
+
+func getFundsKey(namespace, organizationID string) string {
+	return fmt.Sprintf("add-funds-%s-%s", namespace, organizationID)
 }
