@@ -972,21 +972,23 @@ func TestService_SyncRecurrentCharge(t *testing.T) {
 
 func TestService_SyncCharges(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
+		orgCtx := context.WithValue(ctx, OrganizationIDCtxKey{}, lcoid)
+		orgCtx = context.WithValue(orgCtx, EventIDCtxKey{}, xid)
 		sm.On("GetChargesByStatuses", ctx, GetSyncValidStatuses()).Return([]Charge{
 			{
 				ID:               "some-id",
 				LCOrganizationID: lcoid,
 			},
 		}, nil).Once()
-		em.On("ToEvent", ctx, lcoid, events.EventActionSyncRecurrentCharge, events.EventTypeInfo, map[string]interface{}{"id": "some-id"}).Return(events.Event{}).Once()
-		am.On("GetRecurrentCharge", ctx, "some-id").Return(&livechat.RecurrentCharge{
+		em.On("ToEvent", orgCtx, lcoid, events.EventActionSyncRecurrentCharge, events.EventTypeInfo, map[string]interface{}{"id": "some-id"}).Return(events.Event{}).Once()
+		am.On("GetRecurrentCharge", orgCtx, "some-id").Return(&livechat.RecurrentCharge{
 			BaseCharge: livechat.BaseCharge{},
 		}, nil).Once()
 
-		sm.On("UpdateChargePayload", ctx, "some-id", mock.Anything).Return(nil).Once()
-		sm.On("UpdateChargeStatus", ctx, "some-id", mock.Anything).Return(nil).Once()
-		xm.On("GenerateId").Return("some-id", nil).Once()
-		em.On("CreateEvent", ctx, mock.Anything).Return(nil).Once()
+		sm.On("UpdateChargePayload", orgCtx, "some-id", mock.Anything).Return(nil).Once()
+		sm.On("UpdateChargeStatus", orgCtx, "some-id", mock.Anything).Return(nil).Once()
+		xm.On("GenerateId").Return(xid, nil).Once()
+		em.On("CreateEvent", orgCtx, mock.Anything).Return(nil).Once()
 
 		err := s.SyncCharges(ctx)
 		assert.NoError(t, err)
@@ -1004,16 +1006,18 @@ func TestService_SyncCharges(t *testing.T) {
 	})
 
 	t.Run("error getting recurrent charge", func(t *testing.T) {
+		orgCtx := context.WithValue(ctx, OrganizationIDCtxKey{}, lcoid)
+		orgCtx = context.WithValue(orgCtx, EventIDCtxKey{}, xid)
 		sm.On("GetChargesByStatuses", ctx, GetSyncValidStatuses()).Return([]Charge{
 			{
 				ID:               "some-id",
 				LCOrganizationID: lcoid,
 			},
 		}, nil).Once()
-		em.On("ToEvent", ctx, lcoid, events.EventActionSyncRecurrentCharge, events.EventTypeInfo, map[string]interface{}{"id": "some-id"}).Return(events.Event{}).Once()
-		am.On("GetRecurrentCharge", ctx, "some-id").Return(nil, errors.New("whoopsie")).Once()
-		em.On("ToError", ctx, mock.Anything).Return(errors.New("failed to get recurrent charge: whoopsie")).Once()
-		xm.On("GenerateId").Return("some-id", nil).Once()
+		em.On("ToEvent", orgCtx, lcoid, events.EventActionSyncRecurrentCharge, events.EventTypeInfo, map[string]interface{}{"id": "some-id"}).Return(events.Event{}).Once()
+		am.On("GetRecurrentCharge", orgCtx, "some-id").Return(nil, errors.New("whoopsie")).Once()
+		em.On("ToError", orgCtx, mock.Anything).Return(errors.New("failed to get recurrent charge: whoopsie")).Once()
+		xm.On("GenerateId").Return(xid, nil).Once()
 
 		err := s.SyncCharges(ctx)
 		assert.ErrorContains(t, err, "failed to get recurrent charge")
@@ -1022,20 +1026,22 @@ func TestService_SyncCharges(t *testing.T) {
 	})
 
 	t.Run("error updating payload", func(t *testing.T) {
+		orgCtx := context.WithValue(ctx, OrganizationIDCtxKey{}, lcoid)
+		orgCtx = context.WithValue(orgCtx, EventIDCtxKey{}, xid)
 		sm.On("GetChargesByStatuses", ctx, GetSyncValidStatuses()).Return([]Charge{
 			{
 				ID:               "some-id",
 				LCOrganizationID: lcoid,
 			},
 		}, nil).Once()
-		em.On("ToEvent", ctx, lcoid, events.EventActionSyncRecurrentCharge, events.EventTypeInfo, map[string]interface{}{"id": "some-id"}).Return(events.Event{}).Once()
-		am.On("GetRecurrentCharge", ctx, "some-id").Return(&livechat.RecurrentCharge{
+		em.On("ToEvent", orgCtx, lcoid, events.EventActionSyncRecurrentCharge, events.EventTypeInfo, map[string]interface{}{"id": "some-id"}).Return(events.Event{}).Once()
+		am.On("GetRecurrentCharge", orgCtx, "some-id").Return(&livechat.RecurrentCharge{
 			BaseCharge: livechat.BaseCharge{},
 		}, nil).Once()
 
-		sm.On("UpdateChargePayload", ctx, "some-id", mock.Anything).Return(errors.New("whoopsie")).Once()
-		em.On("ToError", ctx, mock.Anything).Return(errors.New("failed to update charge payload: whoopsie")).Once()
-		xm.On("GenerateId").Return("some-id", nil).Once()
+		sm.On("UpdateChargePayload", orgCtx, "some-id", mock.Anything).Return(errors.New("whoopsie")).Once()
+		em.On("ToError", orgCtx, mock.Anything).Return(errors.New("failed to update charge payload: whoopsie")).Once()
+		xm.On("GenerateId").Return(xid, nil).Once()
 
 		err := s.SyncCharges(ctx)
 		assert.ErrorContains(t, err, "failed to update charge payload")

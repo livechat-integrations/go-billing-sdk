@@ -60,6 +60,26 @@ func (r *PostgresqlPGX) GetLedgerOperations(ctx context.Context, organizationID 
 	return ops, nil
 }
 
+func (r *PostgresqlPGX) GetLedgerOperation(ctx context.Context, params ledger.GetLedgerOperationParams) (*ledger.Operation, error) {
+	dbOp, err := r.queries.GetLedgerOperation(ctx, sqlc.GetLedgerOperationParams{
+		ID:               params.ID,
+		LcOrganizationID: params.OrganizationID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	op, err := dbOp.ToLedgerOperation()
+	if err != nil {
+		return nil, err
+	}
+
+	return op, nil
+}
+
 func (r *PostgresqlPGX) GetBalance(ctx context.Context, organizationID string) (float32, error) {
 	b, err := r.queries.GetOrganizationBalance(ctx, organizationID)
 	if err != nil {

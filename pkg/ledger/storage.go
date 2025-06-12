@@ -33,9 +33,15 @@ type GetTopUpsByTypeWhereStatusNotInParams struct {
 	Statuses []TopUpStatus
 }
 
+type GetLedgerOperationParams struct {
+	ID             string
+	OrganizationID string
+}
+
 type Storage interface {
 	CreateLedgerOperation(ctx context.Context, c Operation) error
 	GetLedgerOperations(ctx context.Context, organizationID string) ([]Operation, error)
+	GetLedgerOperation(ctx context.Context, params GetLedgerOperationParams) (*Operation, error)
 	GetBalance(ctx context.Context, organizationID string) (float32, error)
 	GetTopUpsByOrganizationID(ctx context.Context, organizationID string) ([]TopUp, error)
 	GetTopUpByIDAndOrganizationID(ctx context.Context, organizationID string, id string) (*TopUp, error)
