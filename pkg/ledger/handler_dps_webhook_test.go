@@ -36,6 +36,11 @@ type ledgerMock struct {
 	mock.Mock
 }
 
+func (l *ledgerMock) AddFunds(ctx context.Context, Amount float32, OrganizationID, Namespace string) error {
+	//TODO implement me
+	panic("implement me")
+}
+
 func (l *ledgerMock) GetTopUpByIDAndOrganizationID(ctx context.Context, organizationID string, ID string) (*TopUp, error) {
 	args := l.Called(ctx, organizationID, ID)
 	if args.Get(0) == nil {

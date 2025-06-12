@@ -146,6 +146,69 @@ func TestPostgresqlSQLC_GetLedgerOperations(t *testing.T) {
 	})
 }
 
+func TestPostgresqlSQLC_GetLedgerOperation(t *testing.T) {
+	id := "1"
+	lcoid := "lcOrganizationID"
+	t.Run("success", func(t *testing.T) {
+		amount := float32(3.14)
+		v := pgtype.Numeric{}
+		_ = v.Scan(fmt.Sprintf("%f", amount))
+		someDate, _ := time.Parse(time.DateTime, "2025-03-14 12:31:56")
+		dbMock.ExpectQuery("GetLedgerOperation :one SELECT id, amount, lc_organization_id, payload, created_at").
+			WithArgs(lcoid, id).
+			WillReturnRows(
+				pgxmock.NewRows([]string{"id", "amount", "lc_organization_id", "payload", "created_at"}).
+					AddRow(id, v, lcoid, []byte("{}"), pgtype.Timestamptz{Time: someDate, Valid: true})).Times(1)
+
+		c, err := s.GetLedgerOperation(context.Background(), ledger.GetLedgerOperationParams{
+			ID:             id,
+			OrganizationID: lcoid,
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, id, c.ID)
+		assert.Equal(t, amount, c.Amount)
+		assert.Equal(t, lcoid, c.LCOrganizationID)
+		assert.Equal(t, json.RawMessage("{}"), c.Payload)
+		assert.Equal(t, someDate, c.CreatedAt)
+
+		assert.NoError(t, dbMock.ExpectationsWereMet())
+	})
+	t.Run("no records", func(t *testing.T) {
+		amount := float32(3.14)
+		v := pgtype.Numeric{}
+		_ = v.Scan(fmt.Sprintf("%f", amount))
+		dbMock.ExpectQuery("GetLedgerOperation :one SELECT id, amount, lc_organization_id, payload, created_at").
+			WithArgs(lcoid, id).
+			WillReturnRows(
+				pgxmock.NewRows([]string{"id", "amount", "lc_organization_id", "payload", "created_at"})).Times(1)
+
+		c, err := s.GetLedgerOperation(context.Background(), ledger.GetLedgerOperationParams{
+			ID:             id,
+			OrganizationID: lcoid,
+		})
+		assert.NoError(t, err)
+		assert.Nil(t, c)
+
+		assert.NoError(t, dbMock.ExpectationsWereMet())
+	})
+	t.Run("error", func(t *testing.T) {
+		amount := float32(3.14)
+		v := pgtype.Numeric{}
+		_ = v.Scan(fmt.Sprintf("%f", amount))
+		dbMock.ExpectQuery("GetLedgerOperation :one SELECT id, amount, lc_organization_id, payload, created_at").
+			WithArgs(lcoid, id).
+			Times(1).WillReturnError(assert.AnError)
+		c, err := s.GetLedgerOperation(context.Background(), ledger.GetLedgerOperationParams{
+			ID:             id,
+			OrganizationID: lcoid,
+		})
+		assert.ErrorIs(t, err, assert.AnError)
+		assert.Nil(t, c)
+
+		assert.NoError(t, dbMock.ExpectationsWereMet())
+	})
+}
+
 func TestPostgresqlSQLC_UpsertTopUp(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		emptyRawPayload, _ := json.Marshal(json.RawMessage("{}"))
