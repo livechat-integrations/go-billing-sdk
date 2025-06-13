@@ -409,6 +409,11 @@ func (s *Service) DeleteSubscription(ctx context.Context, lcOrganizationID, subs
 		})
 	}
 
+	if sub.Charge == nil {
+		_ = s.eventService.CreateEvent(ctx, event)
+		return nil
+	}
+
 	if err = s.storage.UpdateChargeStatus(ctx, sub.Charge.ID, livechat.RecurrentChargeStatusCancelled); err != nil {
 		event.Type = events.EventTypeError
 		return s.eventService.ToError(ctx, events.ToErrorParams{

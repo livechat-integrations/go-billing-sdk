@@ -52,7 +52,7 @@ func (h *Handler) HandleDPSWebhook(ctx context.Context, req DPSWebhookRequest) e
 	switch req.Event {
 	case "application_uninstalled":
 		event.Action = events.EventActionDPSWebhookApplicationUninstalled
-		charges, err := h.billing.GetChargesByOrganizationID(ctx, req.LCOrganizationID)
+		subs, err := h.billing.GetSubscriptionsByOrganizationID(ctx, req.LCOrganizationID)
 		if err != nil {
 			event.Type = events.EventTypeError
 			return h.eventService.ToError(ctx, events.ToErrorParams{
@@ -61,8 +61,8 @@ func (h *Handler) HandleDPSWebhook(ctx context.Context, req DPSWebhookRequest) e
 			})
 		}
 
-		for _, charge := range charges {
-			if err := h.billing.DeleteSubscriptionWithCharge(ctx, req.LCOrganizationID, charge.ID); err != nil {
+		for _, sub := range subs {
+			if err = h.billing.DeleteSubscription(ctx, req.LCOrganizationID, sub.ID); err != nil {
 				event.Type = events.EventTypeError
 				return h.eventService.ToError(ctx, events.ToErrorParams{
 					Event: event,
