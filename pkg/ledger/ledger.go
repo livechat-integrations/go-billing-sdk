@@ -26,7 +26,7 @@ type LedgerInterface interface {
 	GetTopUpByIDAndOrganizationID(ctx context.Context, organizationID string, ID string) (*TopUp, error)
 	SyncTopUp(ctx context.Context, topUp TopUp) (*TopUp, error)
 	SyncOrCancelTopUpRequests(ctx context.Context) error
-	AddFunds(ctx context.Context, Amount float32, OrganizationID, Namespace string) error
+	AddFunds(ctx context.Context, Amount float32, OrganizationID, Namespace string, Payload *json.RawMessage) error
 	RecentlyAddedFunds(ctx context.Context, OrganizationID, Namespace string) (*Operation, error)
 }
 
@@ -275,7 +275,7 @@ func (s *Service) GetTopUps(ctx context.Context, organizationID string) ([]TopUp
 	return s.storage.GetTopUpsByOrganizationID(ctx, organizationID)
 }
 
-func (s *Service) AddFunds(ctx context.Context, Amount float32, OrganizationID, Namespace string) error {
+func (s *Service) AddFunds(ctx context.Context, Amount float32, OrganizationID, Namespace string, Payload *json.RawMessage) error {
 	event := s.eventService.ToEvent(ctx, OrganizationID, events.EventActionAddFunds, events.EventTypeInfo, map[string]interface{}{"amount": Amount, "namespace": Namespace})
 	key := getFundsKey(Namespace, OrganizationID)
 	operation, err := s.storage.GetLedgerOperation(ctx, GetLedgerOperationParams{
@@ -298,6 +298,9 @@ func (s *Service) AddFunds(ctx context.Context, Amount float32, OrganizationID, 
 		ID:               key,
 		LCOrganizationID: OrganizationID,
 		Amount:           Amount,
+	}
+	if Payload != nil {
+		operation.Payload = *Payload
 	}
 	_, err = s.createOperation(ctx, *operation)
 	if err != nil {

@@ -1213,7 +1213,56 @@ func TestService_AddFunds(t *testing.T) {
 		em.On("CreateEvent", context.Background(), event).Return(nil).Once()
 		em.On("ToEvent", context.Background(), lcoid, events.EventActionAddFunds, events.EventTypeInfo, p).Return(event).Once()
 
-		err := s.AddFunds(ctx, amount, lcoid, namespace)
+		err := s.AddFunds(ctx, amount, lcoid, namespace, nil)
+
+		assert.Nil(t, err)
+
+		assertExpectations(t)
+	})
+	t.Run("success with payload", func(t *testing.T) {
+		amount := float32(5.23)
+		lcoid := "lcOrganizationID"
+		namespace := "namespace"
+		key := fmt.Sprintf("add-funds-%s-%s", namespace, lcoid)
+		sm.On("GetLedgerOperation", ctx, GetLedgerOperationParams{
+			ID:             key,
+			OrganizationID: lcoid,
+		}).Return(nil, nil).Once()
+
+		payload := map[string]interface{}{"clientID": lcoid}
+		jPayload, _ := json.Marshal(payload)
+		rawPayload := json.RawMessage(jPayload)
+
+		operation := Operation{
+			ID:               key,
+			LCOrganizationID: lcoid,
+			Amount:           amount,
+			Payload:          rawPayload,
+		}
+		sm.On("CreateLedgerOperation", ctx, operation).Return(nil).Once()
+		sc, _ := json.Marshal(operation)
+		p := map[string]interface{}{"amount": amount, "namespace": namespace}
+		jp, _ := json.Marshal(p)
+		event := events.Event{
+			ID:               xid,
+			LCOrganizationID: lcoid,
+			Type:             events.EventTypeInfo,
+			Action:           events.EventActionAddFunds,
+			Payload:          jp,
+		}
+		levent := events.Event{
+			ID:               xid,
+			LCOrganizationID: lcoid,
+			Type:             events.EventTypeInfo,
+			Action:           events.EventActionCreateOperation,
+			Payload:          sc,
+		}
+		em.On("CreateEvent", context.Background(), levent).Return(nil).Once()
+		em.On("ToEvent", context.Background(), lcoid, events.EventActionCreateOperation, events.EventTypeInfo, operation).Return(levent).Once()
+		em.On("CreateEvent", context.Background(), event).Return(nil).Once()
+		em.On("ToEvent", context.Background(), lcoid, events.EventActionAddFunds, events.EventTypeInfo, p).Return(event).Once()
+
+		err := s.AddFunds(ctx, amount, lcoid, namespace, &rawPayload)
 
 		assert.Nil(t, err)
 
@@ -1246,7 +1295,7 @@ func TestService_AddFunds(t *testing.T) {
 		em.On("CreateEvent", context.Background(), event).Return(nil).Once()
 		em.On("ToEvent", context.Background(), lcoid, events.EventActionAddFunds, events.EventTypeInfo, p).Return(event).Once()
 
-		err := s.AddFunds(ctx, amount, lcoid, namespace)
+		err := s.AddFunds(ctx, amount, lcoid, namespace, nil)
 
 		assert.Nil(t, err)
 
@@ -1277,7 +1326,7 @@ func TestService_AddFunds(t *testing.T) {
 		}).Return(assert.AnError).Once()
 		em.On("ToEvent", ctx, lcoid, events.EventActionAddFunds, events.EventTypeInfo, p).Return(event).Once()
 
-		err := s.AddFunds(ctx, amount, lcoid, namespace)
+		err := s.AddFunds(ctx, amount, lcoid, namespace, nil)
 
 		assert.ErrorIs(t, err, assert.AnError)
 
@@ -1326,7 +1375,7 @@ func TestService_AddFunds(t *testing.T) {
 		}).Return(assert.AnError).Once()
 		em.On("ToEvent", context.Background(), lcoid, events.EventActionAddFunds, events.EventTypeInfo, p).Return(event).Once()
 
-		err := s.AddFunds(ctx, amount, lcoid, namespace)
+		err := s.AddFunds(ctx, amount, lcoid, namespace, nil)
 
 		assert.ErrorIs(t, err, assert.AnError)
 

@@ -122,10 +122,11 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 			LCOrganizationID: lcoid,
 			Type:             ChargeTypeRecurring,
 		}
-		ch2 := Charge{
-			ID:               "id2",
+		sub := Subscription{
+			ID:               "sub1",
+			Charge:           &ch1,
 			LCOrganizationID: lcoid,
-			Type:             ChargeTypeRecurring,
+			PlanName:         "unlimited",
 		}
 		sc, _ := json.Marshal(req)
 		levent := events.Event{
@@ -136,9 +137,8 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 			Payload:          sc,
 		}
 
-		bm.On("GetChargesByOrganizationID", billingCtx, lcoid).Return([]Charge{ch1, ch2}, nil).Once()
-		bm.On("DeleteSubscriptionWithCharge", billingCtx, lcoid, ch1.ID).Return(nil).Once()
-		bm.On("DeleteSubscriptionWithCharge", billingCtx, lcoid, ch2.ID).Return(nil).Once()
+		bm.On("GetSubscriptionsByOrganizationID", billingCtx, lcoid).Return([]Subscription{sub}, nil)
+		bm.On("DeleteSubscription", billingCtx, lcoid, sub.ID).Return(nil).Once()
 		em.On("ToEvent", billingCtx, lcoid, events.EventActionUnknown, events.EventTypeInfo, req).Return(levent).Once()
 		em.On("CreateEvent", billingCtx, levent).Return(nil).Once()
 		lctx := context.WithValue(context.Background(), SubscriptionPlanNameCtxKey{}, planName)
@@ -148,7 +148,7 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 
 		assertExpectations(t)
 	})
-	t.Run("application_uninstalled get charges error", func(t *testing.T) {
+	t.Run("application_uninstalled get subscriptions error", func(t *testing.T) {
 		eventType := "application_uninstalled"
 		someDate, _ := time.Parse(time.DateTime, "2025-03-14 12:31:56")
 		paymentID := "x1c2v3"
@@ -178,7 +178,7 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 			Payload:          sc,
 		}
 
-		bm.On("GetChargesByOrganizationID", billingCtx, lcoid).Return(nil, assert.AnError).Once()
+		bm.On("GetSubscriptionsByOrganizationID", billingCtx, lcoid).Return(nil, assert.AnError).Once()
 		em.On("ToEvent", billingCtx, lcoid, events.EventActionUnknown, events.EventTypeInfo, req).Return(levent).Once()
 		em.On("ToError", billingCtx, events.ToErrorParams{
 			Event: levent,
@@ -216,10 +216,11 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 			LCOrganizationID: lcoid,
 			Type:             ChargeTypeRecurring,
 		}
-		ch2 := Charge{
-			ID:               "id2",
+		sub := Subscription{
+			ID:               "sub1",
+			Charge:           &ch1,
 			LCOrganizationID: lcoid,
-			Type:             ChargeTypeRecurring,
+			PlanName:         "unlimited",
 		}
 		sc, _ := json.Marshal(req)
 		levent := events.Event{
@@ -230,9 +231,8 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 			Payload:          sc,
 		}
 
-		bm.On("GetChargesByOrganizationID", billingCtx, lcoid).Return([]Charge{ch1, ch2}, nil).Once()
-		bm.On("DeleteSubscriptionWithCharge", billingCtx, lcoid, ch1.ID).Return(nil).Once()
-		bm.On("DeleteSubscriptionWithCharge", billingCtx, lcoid, ch2.ID).Return(assert.AnError).Once()
+		bm.On("GetSubscriptionsByOrganizationID", billingCtx, lcoid).Return([]Subscription{sub}, nil)
+		bm.On("DeleteSubscription", billingCtx, lcoid, sub.ID).Return(assert.AnError).Once()
 		em.On("ToEvent", billingCtx, lcoid, events.EventActionUnknown, events.EventTypeInfo, req).Return(levent).Once()
 		em.On("ToError", billingCtx, events.ToErrorParams{
 			Event: levent,

@@ -178,7 +178,7 @@ func TestPostgresqlSQLC_GetChargeByOrganizationID(t *testing.T) {
 
 func TestPostgresqlSQLC_GetSubscriptionsByOrganizationID(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
-		dbMock.ExpectQuery("SELECT s.id, s.lc_organization_id, plan_name, charge_id, s.created_at, s.deleted_at, c.id, c.lc_organization_id, type, payload, c.created_at, c.deleted_at, status FROM subscriptions s LEFT JOIN charges c on s.charge_id = c.id").
+		dbMock.ExpectQuery("SELECT s.id, s.lc_organization_id, plan_name, charge_id, s.created_at, s.deleted_at, c.id, c.lc_organization_id, type, payload, c.created_at, c.deleted_at, status FROM active_subscriptions s LEFT JOIN charges c on s.charge_id = c.id").
 			WithArgs("lcOrganizationID").
 			WillReturnRows(pgxmock.NewRows([]string{"id", "lc_organization_id", "plan_name", "charge_id", "created_at", "deleted_at", "id", "lc_organization_id", "type", "payload", "created_at", "deleted_at", "status"}).
 				AddRow("1", "lcOrganizationID", "planName", "chargeID", nil, nil, "chargeID", "lcOrganizationID", "recurring", []byte("{}"), nil, nil, "active")).Times(1)
@@ -193,7 +193,7 @@ func TestPostgresqlSQLC_GetSubscriptionsByOrganizationID(t *testing.T) {
 	})
 
 	t.Run("no rows", func(t *testing.T) {
-		dbMock.ExpectQuery("SELECT s.id, s.lc_organization_id, plan_name, charge_id, s.created_at, s.deleted_at, c.id, c.lc_organization_id, type, payload, c.created_at, c.deleted_at, status FROM subscriptions s LEFT JOIN charges c on s.charge_id = c.id").
+		dbMock.ExpectQuery("SELECT s.id, s.lc_organization_id, plan_name, charge_id, s.created_at, s.deleted_at, c.id, c.lc_organization_id, type, payload, c.created_at, c.deleted_at, status FROM active_subscriptions s LEFT JOIN charges c on s.charge_id = c.id").
 			WithArgs("lcOrganizationID").Times(1).
 			WillReturnError(pgx.ErrNoRows)
 
@@ -204,7 +204,7 @@ func TestPostgresqlSQLC_GetSubscriptionsByOrganizationID(t *testing.T) {
 	})
 
 	t.Run("error", func(t *testing.T) {
-		dbMock.ExpectQuery("SELECT s.id, s.lc_organization_id, plan_name, charge_id, s.created_at, s.deleted_at, c.id, c.lc_organization_id, type, payload, c.created_at, c.deleted_at, status FROM subscriptions s LEFT JOIN charges c on s.charge_id = c.id").
+		dbMock.ExpectQuery("SELECT s.id, s.lc_organization_id, plan_name, charge_id, s.created_at, s.deleted_at, c.id, c.lc_organization_id, type, payload, c.created_at, c.deleted_at, status FROM active_subscriptions s LEFT JOIN charges c on s.charge_id = c.id").
 			WithArgs("lcOrganizationID").Times(1).
 			WillReturnError(assert.AnError)
 
