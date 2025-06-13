@@ -36,7 +36,12 @@ type ledgerMock struct {
 	mock.Mock
 }
 
-func (l *ledgerMock) AddFunds(ctx context.Context, Amount float32, OrganizationID, Namespace string) error {
+func (l *ledgerMock) RecentlyAddedFunds(ctx context.Context, OrganizationID, Namespace string) (*Operation, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (l *ledgerMock) AddFunds(ctx context.Context, Amount float32, OrganizationID, Namespace string, Payload *json.RawMessage) error {
 	//TODO implement me
 	panic("implement me")
 }

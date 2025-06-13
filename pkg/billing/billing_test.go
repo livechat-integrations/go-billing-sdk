@@ -821,10 +821,11 @@ func TestService_SyncRecurrentCharge(t *testing.T) {
 		}, nil).Once()
 		charge := livechat.RecurrentCharge{
 			BaseCharge: livechat.BaseCharge{
-				ID:    "id",
-				Name:  "name",
-				Test:  false,
-				Price: 10,
+				ID:     "id",
+				Name:   "name",
+				Test:   false,
+				Price:  10,
+				Status: "active",
 			},
 			TrialDays: 0,
 			Months:    1,
@@ -838,6 +839,7 @@ func TestService_SyncRecurrentCharge(t *testing.T) {
 			assert.Equal(t, "name", p.Name)
 			assert.Equal(t, 10, p.Price)
 		}).Return(nil).Once()
+		sm.On("UpdateChargeStatus", ctx, "id", livechat.ChargeStatus("active")).Return(nil).Once()
 		payload := map[string]interface{}{"id": "id"}
 		sc, _ := json.Marshal(charge)
 		levent := events.Event{
