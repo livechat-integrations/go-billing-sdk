@@ -144,6 +144,14 @@ func (s *Service) SyncRecurrentCharge(ctx context.Context, lcOrganizationID stri
 		})
 	}
 
+	if err = s.storage.UpdateChargeStatus(ctx, id, lcCharge.Status); err != nil {
+		event.Type = events.EventTypeError
+		return s.eventService.ToError(ctx, events.ToErrorParams{
+			Event: event,
+			Err:   fmt.Errorf("failed to update charge status: %w", err),
+		})
+	}
+
 	event.SetPayload(lcCharge)
 	_ = s.eventService.CreateEvent(ctx, event)
 
