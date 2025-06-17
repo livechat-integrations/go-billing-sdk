@@ -1175,7 +1175,7 @@ func TestService_CreateTopUpRequest(t *testing.T) {
 	})
 }
 
-func TestService_AddFunds(t *testing.T) {
+func TestService_AddVoucherFunds(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		amount := float32(5.23)
 		lcoid := "lcOrganizationID"
@@ -1199,7 +1199,7 @@ func TestService_AddFunds(t *testing.T) {
 			ID:               xid,
 			LCOrganizationID: lcoid,
 			Type:             events.EventTypeInfo,
-			Action:           events.EventActionAddFunds,
+			Action:           events.EventActionAddVoucherFunds,
 			Payload:          jp,
 		}
 		levent := events.Event{
@@ -1212,9 +1212,9 @@ func TestService_AddFunds(t *testing.T) {
 		em.On("CreateEvent", context.Background(), levent).Return(nil).Once()
 		em.On("ToEvent", context.Background(), lcoid, events.EventActionCreateOperation, events.EventTypeInfo, operation).Return(levent).Once()
 		em.On("CreateEvent", context.Background(), event).Return(nil).Once()
-		em.On("ToEvent", context.Background(), lcoid, events.EventActionAddFunds, events.EventTypeInfo, p).Return(event).Once()
+		em.On("ToEvent", context.Background(), lcoid, events.EventActionAddVoucherFunds, events.EventTypeInfo, p).Return(event).Once()
 
-		err := s.AddFunds(ctx, amount, lcoid, namespace, nil)
+		err := s.AddVoucherFunds(ctx, amount, lcoid, namespace, nil)
 
 		assert.Nil(t, err)
 
@@ -1249,7 +1249,7 @@ func TestService_AddFunds(t *testing.T) {
 			ID:               xid,
 			LCOrganizationID: lcoid,
 			Type:             events.EventTypeInfo,
-			Action:           events.EventActionAddFunds,
+			Action:           events.EventActionAddVoucherFunds,
 			Payload:          jp,
 		}
 		levent := events.Event{
@@ -1262,9 +1262,9 @@ func TestService_AddFunds(t *testing.T) {
 		em.On("CreateEvent", context.Background(), levent).Return(nil).Once()
 		em.On("ToEvent", context.Background(), lcoid, events.EventActionCreateOperation, events.EventTypeInfo, operation).Return(levent).Once()
 		em.On("CreateEvent", context.Background(), event).Return(nil).Once()
-		em.On("ToEvent", context.Background(), lcoid, events.EventActionAddFunds, events.EventTypeInfo, p).Return(event).Once()
+		em.On("ToEvent", context.Background(), lcoid, events.EventActionAddVoucherFunds, events.EventTypeInfo, p).Return(event).Once()
 
-		err := s.AddFunds(ctx, amount, lcoid, namespace, &rawPayload)
+		err := s.AddVoucherFunds(ctx, amount, lcoid, namespace, &rawPayload)
 
 		assert.Nil(t, err)
 
@@ -1290,14 +1290,14 @@ func TestService_AddFunds(t *testing.T) {
 			ID:               xid,
 			LCOrganizationID: lcoid,
 			Type:             events.EventTypeInfo,
-			Action:           events.EventActionAddFunds,
+			Action:           events.EventActionAddVoucherFunds,
 			Payload:          jp,
 		}
 
 		em.On("CreateEvent", context.Background(), event).Return(nil).Once()
-		em.On("ToEvent", context.Background(), lcoid, events.EventActionAddFunds, events.EventTypeInfo, p).Return(event).Once()
+		em.On("ToEvent", context.Background(), lcoid, events.EventActionAddVoucherFunds, events.EventTypeInfo, p).Return(event).Once()
 
-		err := s.AddFunds(ctx, amount, lcoid, namespace, nil)
+		err := s.AddVoucherFunds(ctx, amount, lcoid, namespace, nil)
 
 		assert.Nil(t, err)
 
@@ -1318,7 +1318,7 @@ func TestService_AddFunds(t *testing.T) {
 			ID:               xid,
 			LCOrganizationID: lcoid,
 			Type:             events.EventTypeError,
-			Action:           events.EventActionAddFunds,
+			Action:           events.EventActionAddVoucherFunds,
 			Payload:          jp,
 		}
 
@@ -1326,9 +1326,9 @@ func TestService_AddFunds(t *testing.T) {
 			Event: event,
 			Err:   fmt.Errorf("failed get ledger operation from database: %w", assert.AnError),
 		}).Return(assert.AnError).Once()
-		em.On("ToEvent", ctx, lcoid, events.EventActionAddFunds, events.EventTypeInfo, p).Return(event).Once()
+		em.On("ToEvent", ctx, lcoid, events.EventActionAddVoucherFunds, events.EventTypeInfo, p).Return(event).Once()
 
-		err := s.AddFunds(ctx, amount, lcoid, namespace, nil)
+		err := s.AddVoucherFunds(ctx, amount, lcoid, namespace, nil)
 
 		assert.ErrorIs(t, err, assert.AnError)
 
@@ -1357,7 +1357,7 @@ func TestService_AddFunds(t *testing.T) {
 			ID:               xid,
 			LCOrganizationID: lcoid,
 			Type:             events.EventTypeError,
-			Action:           events.EventActionAddFunds,
+			Action:           events.EventActionAddVoucherFunds,
 			Payload:          jp,
 		}
 		levent := events.Event{
@@ -1376,9 +1376,9 @@ func TestService_AddFunds(t *testing.T) {
 			Event: event,
 			Err:   assert.AnError,
 		}).Return(assert.AnError).Once()
-		em.On("ToEvent", context.Background(), lcoid, events.EventActionAddFunds, events.EventTypeInfo, p).Return(event).Once()
+		em.On("ToEvent", context.Background(), lcoid, events.EventActionAddVoucherFunds, events.EventTypeInfo, p).Return(event).Once()
 
-		err := s.AddFunds(ctx, amount, lcoid, namespace, nil)
+		err := s.AddVoucherFunds(ctx, amount, lcoid, namespace, nil)
 
 		assert.ErrorIs(t, err, assert.AnError)
 
