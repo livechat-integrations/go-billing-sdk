@@ -33,6 +33,7 @@ func (r *PostgresqlPGX) CreateLedgerOperation(ctx context.Context, c ledger.Oper
 		ID:               c.ID,
 		Amount:           ToPGNumeric(&c.Amount),
 		LcOrganizationID: c.LCOrganizationID,
+		IsVoucher:        c.IsVoucher,
 		Payload:          c.Payload,
 	}); err != nil {
 		return err
@@ -41,9 +42,12 @@ func (r *PostgresqlPGX) CreateLedgerOperation(ctx context.Context, c ledger.Oper
 	return nil
 }
 
-func (r *PostgresqlPGX) GetLedgerOperations(ctx context.Context, organizationID string) ([]ledger.Operation, error) {
+func (r *PostgresqlPGX) GetLedgerOperations(ctx context.Context, organizationID string, isVoucher bool) ([]ledger.Operation, error) {
 	var ops []ledger.Operation
-	rows, err := r.queries.GetLedgerOperationsByOrganizationID(ctx, organizationID)
+	rows, err := r.queries.GetLedgerOperationsByOrganizationID(ctx, sqlc.GetLedgerOperationsByOrganizationIDParams{
+		LcOrganizationID: organizationID,
+		IsVoucher:        isVoucher,
+	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ops, nil

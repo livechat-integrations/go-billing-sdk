@@ -17,6 +17,7 @@ func (o *LedgerLedger) ToLedgerOperation() (*ledger.Operation, error) {
 		LCOrganizationID: o.LcOrganizationID,
 		Amount:           float32(v.Float64),
 		Payload:          o.Payload,
+		IsVoucher:        o.IsVoucher,
 		CreatedAt:        o.CreatedAt.Time,
 	}, nil
 }

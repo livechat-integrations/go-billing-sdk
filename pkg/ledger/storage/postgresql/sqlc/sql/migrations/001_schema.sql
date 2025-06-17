@@ -4,6 +4,7 @@ CREATE TABLE IF NOT EXISTS ledger_ledger
     amount             numeric(9,3) NOT NULL,
     lc_organization_id varchar(36) NOT NULL,
     payload            jsonb,
+    is_voucher         boolean NOT NULL DEFAULT FALSE,
     created_at         TIMESTAMPTZ  NOT NULL DEFAULT now()
     );
 CREATE INDEX ON ledger_ledger (lc_organization_id);

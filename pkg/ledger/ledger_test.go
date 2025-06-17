@@ -186,8 +186,8 @@ func (m *storageMock) CreateLedgerOperation(ctx context.Context, c Operation) er
 	return args.Error(0)
 }
 
-func (m *storageMock) GetLedgerOperations(ctx context.Context, organizationID string) ([]Operation, error) {
-	args := m.Called(ctx, organizationID)
+func (m *storageMock) GetLedgerOperations(ctx context.Context, organizationID string, isVoucher bool) ([]Operation, error) {
+	args := m.Called(ctx, organizationID, isVoucher)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
@@ -1189,6 +1189,7 @@ func TestService_AddFunds(t *testing.T) {
 			ID:               key,
 			LCOrganizationID: lcoid,
 			Amount:           amount,
+			IsVoucher:        true,
 		}
 		sm.On("CreateLedgerOperation", ctx, operation).Return(nil).Once()
 		sc, _ := json.Marshal(operation)
@@ -1238,6 +1239,7 @@ func TestService_AddFunds(t *testing.T) {
 			LCOrganizationID: lcoid,
 			Amount:           amount,
 			Payload:          rawPayload,
+			IsVoucher:        true,
 		}
 		sm.On("CreateLedgerOperation", ctx, operation).Return(nil).Once()
 		sc, _ := json.Marshal(operation)
@@ -1345,6 +1347,7 @@ func TestService_AddFunds(t *testing.T) {
 			ID:               key,
 			LCOrganizationID: lcoid,
 			Amount:           amount,
+			IsVoucher:        true,
 		}
 		sm.On("CreateLedgerOperation", ctx, operation).Return(assert.AnError).Once()
 		sc, _ := json.Marshal(operation)
@@ -1376,66 +1379,6 @@ func TestService_AddFunds(t *testing.T) {
 		em.On("ToEvent", context.Background(), lcoid, events.EventActionAddFunds, events.EventTypeInfo, p).Return(event).Once()
 
 		err := s.AddFunds(ctx, amount, lcoid, namespace, nil)
-
-		assert.ErrorIs(t, err, assert.AnError)
-
-		assertExpectations(t)
-	})
-}
-
-func TestService_RecentlyAddedFunds(t *testing.T) {
-	t.Run("success", func(t *testing.T) {
-		amount := float32(5.23)
-		lcoid := "lcOrganizationID"
-		namespace := "namespace"
-		key := fmt.Sprintf("add-funds-%s-%s", namespace, lcoid)
-
-		operation := Operation{
-			ID:               key,
-			LCOrganizationID: lcoid,
-			Amount:           amount,
-		}
-
-		sm.On("GetLedgerOperation", ctx, GetLedgerOperationParams{
-			ID:             key,
-			OrganizationID: lcoid,
-		}).Return(&operation, nil).Once()
-
-		op, err := s.RecentlyAddedFunds(ctx, lcoid, namespace)
-
-		assert.Nil(t, err)
-		assert.Equal(t, &operation, op)
-
-		assertExpectations(t)
-	})
-	t.Run("not found", func(t *testing.T) {
-		lcoid := "lcOrganizationID"
-		namespace := "namespace"
-		key := fmt.Sprintf("add-funds-%s-%s", namespace, lcoid)
-
-		sm.On("GetLedgerOperation", ctx, GetLedgerOperationParams{
-			ID:             key,
-			OrganizationID: lcoid,
-		}).Return(nil, nil).Once()
-
-		op, err := s.RecentlyAddedFunds(ctx, lcoid, namespace)
-
-		assert.Nil(t, err)
-		assert.Nil(t, op)
-
-		assertExpectations(t)
-	})
-	t.Run("error", func(t *testing.T) {
-		lcoid := "lcOrganizationID"
-		namespace := "namespace"
-		key := fmt.Sprintf("add-funds-%s-%s", namespace, lcoid)
-
-		sm.On("GetLedgerOperation", ctx, GetLedgerOperationParams{
-			ID:             key,
-			OrganizationID: lcoid,
-		}).Return(nil, assert.AnError).Once()
-
-		_, err := s.RecentlyAddedFunds(ctx, lcoid, namespace)
 
 		assert.ErrorIs(t, err, assert.AnError)
 

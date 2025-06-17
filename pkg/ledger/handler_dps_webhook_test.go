@@ -62,7 +62,7 @@ func (l *ledgerMock) SyncTopUp(ctx context.Context, topUp TopUp) (*TopUp, error)
 	return args.Get(0).(*TopUp), args.Error(1)
 }
 
-func (l *ledgerMock) GetOperations(ctx context.Context, organizationID string) ([]Operation, error) {
+func (l *ledgerMock) GetOperations(ctx context.Context, organizationID string, isVoucher bool) ([]Operation, error) {
 	//TODO implement me
 	panic("implement me")
 }
