@@ -181,7 +181,7 @@ func TestPostgresqlSQLC_GetSubscriptionsByOrganizationID(t *testing.T) {
 		dbMock.ExpectQuery("SELECT s.id, s.lc_organization_id, plan_name, charge_id, s.created_at, s.deleted_at, c.id, c.lc_organization_id, type, payload, c.created_at, c.deleted_at, status FROM active_subscriptions s LEFT JOIN charges c on s.charge_id = c.id").
 			WithArgs("lcOrganizationID").
 			WillReturnRows(pgxmock.NewRows([]string{"id", "lc_organization_id", "plan_name", "charge_id", "created_at", "deleted_at", "id", "lc_organization_id", "type", "payload", "created_at", "deleted_at", "status"}).
-				AddRow("1", "lcOrganizationID", "planName", "chargeID", nil, nil, "chargeID", "lcOrganizationID", "recurring", []byte("{}"), nil, nil, "active")).Times(1)
+				AddRow("1", "lcOrganizationID", "planName", "chargeID", "2024-10-20 13:31:27Z", nil, "chargeID", "lcOrganizationID", "recurring", []byte(`{"created_at": "2017-10-20T13:31:27Z"}`), "2024-10-20 13:31:27Z", nil, "active")).Times(1)
 
 		c, err := s.GetSubscriptionsByOrganizationID(context.Background(), "lcOrganizationID")
 		assert.NoError(t, err)
