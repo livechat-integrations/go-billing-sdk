@@ -28,7 +28,7 @@ func TestPostgresqlSQLC_CreateCharge(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		emptyRawPayload, _ := json.Marshal(json.RawMessage("{}"))
 		dbMock.ExpectExec("INSERT INTO charges").
-			WithArgs("1", "recurring", emptyRawPayload, "lcOrganizationID", string(livechat.RecurrentChargeStatusPending)).
+			WithArgs("1", "recurring", emptyRawPayload, "lcOrganizationID").
 			WillReturnResult(pgxmock.NewResult("INSERT", 1)).Times(1)
 
 		err := s.CreateCharge(context.Background(), billing.Charge{
@@ -36,7 +36,6 @@ func TestPostgresqlSQLC_CreateCharge(t *testing.T) {
 			Type:             billing.ChargeTypeRecurring,
 			Payload:          json.RawMessage("{}"),
 			LCOrganizationID: "lcOrganizationID",
-			Status:           livechat.RecurrentChargeStatusPending,
 		})
 		assert.NoError(t, err)
 		assert.NoError(t, dbMock.ExpectationsWereMet())
@@ -46,7 +45,7 @@ func TestPostgresqlSQLC_CreateCharge(t *testing.T) {
 		emptyRawPayload, _ := json.Marshal(json.RawMessage("{}"))
 		dbMock.
 			ExpectExec("INSERT INTO charges").
-			WithArgs("1", "recurring", emptyRawPayload, "lcOrganizationID", string(livechat.RecurrentChargeStatusPending)).Times(1).
+			WithArgs("1", "recurring", emptyRawPayload, "lcOrganizationID").Times(1).
 			WillReturnError(assert.AnError)
 
 		err := s.CreateCharge(context.Background(), billing.Charge{
@@ -54,7 +53,6 @@ func TestPostgresqlSQLC_CreateCharge(t *testing.T) {
 			Type:             billing.ChargeTypeRecurring,
 			Payload:          json.RawMessage("{}"),
 			LCOrganizationID: "lcOrganizationID",
-			Status:           livechat.RecurrentChargeStatusPending,
 		})
 		assert.ErrorIs(t, err, assert.AnError)
 		assert.NoError(t, dbMock.ExpectationsWereMet())
@@ -99,11 +97,11 @@ func TestPostgresqlSQLC_CreateSubscription(t *testing.T) {
 
 func TestPostgresqlSQLC_GetCharge(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
-		dbMock.ExpectQuery("SELECT id, lc_organization_id, type, payload, created_at, deleted_at, status FROM charges").
+		dbMock.ExpectQuery("SELECT id, lc_organization_id, type, payload, created_at, deleted_at FROM charges").
 			WithArgs("1").
 			WillReturnRows(
-				pgxmock.NewRows([]string{"id", "lc_organization_id", "type", "payload", "created_at", "deleted_at", "status"}).
-					AddRow("1", "lcOrganizationID", "recurring", []byte("{}"), nil, nil, "active")).Times(1)
+				pgxmock.NewRows([]string{"id", "lc_organization_id", "type", "payload", "created_at", "deleted_at"}).
+					AddRow("1", "lcOrganizationID", "recurring", []byte("{}"), nil, nil)).Times(1)
 
 		c, err := s.GetCharge(context.Background(), "1")
 		assert.NoError(t, err)
@@ -116,7 +114,7 @@ func TestPostgresqlSQLC_GetCharge(t *testing.T) {
 	})
 
 	t.Run("no rows", func(t *testing.T) {
-		dbMock.ExpectQuery("SELECT id, lc_organization_id, type, payload, created_at, deleted_at, status FROM charges").
+		dbMock.ExpectQuery("SELECT id, lc_organization_id, type, payload, created_at, deleted_at FROM charges").
 			WithArgs("1").Times(1).
 			WillReturnError(pgx.ErrNoRows)
 
@@ -127,7 +125,7 @@ func TestPostgresqlSQLC_GetCharge(t *testing.T) {
 	})
 
 	t.Run("error", func(t *testing.T) {
-		dbMock.ExpectQuery("SELECT id, lc_organization_id, type, payload, created_at, deleted_at, status FROM charges").
+		dbMock.ExpectQuery("SELECT id, lc_organization_id, type, payload, created_at, deleted_at FROM charges").
 			WithArgs("1").Times(1).
 			WillReturnError(assert.AnError)
 
@@ -139,11 +137,11 @@ func TestPostgresqlSQLC_GetCharge(t *testing.T) {
 
 func TestPostgresqlSQLC_GetChargeByOrganizationID(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
-		dbMock.ExpectQuery("SELECT id, lc_organization_id, type, payload, created_at, deleted_at, status FROM charges").
+		dbMock.ExpectQuery("SELECT id, lc_organization_id, type, payload, created_at, deleted_at FROM charges").
 			WithArgs("lcOrganizationID").
 			WillReturnRows(
-				pgxmock.NewRows([]string{"id", "lc_organization_id", "type", "payload", "created_at", "deleted_at", "status"}).
-					AddRow("1", "lcOrganizationID", "recurring", []byte("{}"), nil, nil, "active")).Times(1)
+				pgxmock.NewRows([]string{"id", "lc_organization_id", "type", "payload", "created_at", "deleted_at"}).
+					AddRow("1", "lcOrganizationID", "recurring", []byte("{}"), nil, nil)).Times(1)
 
 		c, err := s.GetChargeByOrganizationID(context.Background(), "lcOrganizationID")
 		assert.NoError(t, err)
@@ -155,7 +153,7 @@ func TestPostgresqlSQLC_GetChargeByOrganizationID(t *testing.T) {
 	})
 
 	t.Run("no rows", func(t *testing.T) {
-		dbMock.ExpectQuery("SELECT id, lc_organization_id, type, payload, created_at, deleted_at, status FROM charges").
+		dbMock.ExpectQuery("SELECT id, lc_organization_id, type, payload, created_at, deleted_at FROM charges").
 			WithArgs("lcOrganizationID").Times(1).
 			WillReturnError(pgx.ErrNoRows)
 
@@ -166,7 +164,7 @@ func TestPostgresqlSQLC_GetChargeByOrganizationID(t *testing.T) {
 	})
 
 	t.Run("error", func(t *testing.T) {
-		dbMock.ExpectQuery("SELECT id, lc_organization_id, type, payload, created_at, deleted_at, status FROM charges").
+		dbMock.ExpectQuery("SELECT id, lc_organization_id, type, payload, created_at, deleted_at FROM charges").
 			WithArgs("lcOrganizationID").Times(1).
 			WillReturnError(assert.AnError)
 
@@ -178,10 +176,10 @@ func TestPostgresqlSQLC_GetChargeByOrganizationID(t *testing.T) {
 
 func TestPostgresqlSQLC_GetSubscriptionsByOrganizationID(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
-		dbMock.ExpectQuery("SELECT s.id, s.lc_organization_id, plan_name, charge_id, s.created_at, s.deleted_at, c.id, c.lc_organization_id, type, payload, c.created_at, c.deleted_at, status FROM active_subscriptions s LEFT JOIN charges c on s.charge_id = c.id").
+		dbMock.ExpectQuery("SELECT s.id, s.lc_organization_id, plan_name, charge_id, s.created_at, s.deleted_at, c.id, c.lc_organization_id, type, payload, c.created_at, c.deleted_at FROM active_subscriptions s LEFT JOIN charges c on s.charge_id = c.id").
 			WithArgs("lcOrganizationID").
-			WillReturnRows(pgxmock.NewRows([]string{"id", "lc_organization_id", "plan_name", "charge_id", "created_at", "deleted_at", "id", "lc_organization_id", "type", "payload", "created_at", "deleted_at", "status"}).
-				AddRow("1", "lcOrganizationID", "planName", "chargeID", "2024-10-20 13:31:27Z", nil, "chargeID", "lcOrganizationID", "recurring", []byte(`{"created_at": "2017-10-20T13:31:27Z"}`), "2024-10-20 13:31:27Z", nil, "active")).Times(1)
+			WillReturnRows(pgxmock.NewRows([]string{"id", "lc_organization_id", "plan_name", "charge_id", "created_at", "deleted_at", "id", "lc_organization_id", "type", "payload", "created_at", "deleted_at"}).
+				AddRow("1", "lcOrganizationID", "planName", "chargeID", "2024-10-20 13:31:27Z", nil, "chargeID", "lcOrganizationID", "recurring", []byte(`{"created_at": "2017-10-20T13:31:27Z"}`), "2024-10-20 13:31:27Z", nil)).Times(1)
 
 		c, err := s.GetSubscriptionsByOrganizationID(context.Background(), "lcOrganizationID")
 		assert.NoError(t, err)
@@ -193,7 +191,7 @@ func TestPostgresqlSQLC_GetSubscriptionsByOrganizationID(t *testing.T) {
 	})
 
 	t.Run("no rows", func(t *testing.T) {
-		dbMock.ExpectQuery("SELECT s.id, s.lc_organization_id, plan_name, charge_id, s.created_at, s.deleted_at, c.id, c.lc_organization_id, type, payload, c.created_at, c.deleted_at, status FROM active_subscriptions s LEFT JOIN charges c on s.charge_id = c.id").
+		dbMock.ExpectQuery("SELECT s.id, s.lc_organization_id, plan_name, charge_id, s.created_at, s.deleted_at, c.id, c.lc_organization_id, type, payload, c.created_at, c.deleted_at FROM active_subscriptions s LEFT JOIN charges c on s.charge_id = c.id").
 			WithArgs("lcOrganizationID").Times(1).
 			WillReturnError(pgx.ErrNoRows)
 
@@ -204,7 +202,7 @@ func TestPostgresqlSQLC_GetSubscriptionsByOrganizationID(t *testing.T) {
 	})
 
 	t.Run("error", func(t *testing.T) {
-		dbMock.ExpectQuery("SELECT s.id, s.lc_organization_id, plan_name, charge_id, s.created_at, s.deleted_at, c.id, c.lc_organization_id, type, payload, c.created_at, c.deleted_at, status FROM active_subscriptions s LEFT JOIN charges c on s.charge_id = c.id").
+		dbMock.ExpectQuery("SELECT s.id, s.lc_organization_id, plan_name, charge_id, s.created_at, s.deleted_at, c.id, c.lc_organization_id, type, payload, c.created_at, c.deleted_at FROM active_subscriptions s LEFT JOIN charges c on s.charge_id = c.id").
 			WithArgs("lcOrganizationID").Times(1).
 			WillReturnError(assert.AnError)
 
@@ -295,11 +293,11 @@ func TestPostgresqlPGX_DeleteSubscriptionByChargeID(t *testing.T) {
 
 func TestPostgresqlPGX_GetChargesByOrganizationID(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
-		dbMock.ExpectQuery("SELECT id, lc_organization_id, type, payload, created_at, deleted_at, status FROM charges").
+		dbMock.ExpectQuery("SELECT id, lc_organization_id, type, payload, created_at, deleted_at FROM charges").
 			WithArgs("lcOrganizationID").
 			WillReturnRows(
-				pgxmock.NewRows([]string{"id", "lc_organization_id", "type", "payload", "created_at", "deleted_at", "status"}).
-					AddRow("1", "lcOrganizationID", "recurring", []byte("{}"), nil, nil, "active")).Times(1)
+				pgxmock.NewRows([]string{"id", "lc_organization_id", "type", "payload", "created_at", "deleted_at"}).
+					AddRow("1", "lcOrganizationID", "recurring", []byte("{}"), nil, nil)).Times(1)
 
 		c, err := s.GetChargesByOrganizationID(context.Background(), "lcOrganizationID")
 		assert.NoError(t, err)
@@ -311,7 +309,7 @@ func TestPostgresqlPGX_GetChargesByOrganizationID(t *testing.T) {
 	})
 
 	t.Run("no rows", func(t *testing.T) {
-		dbMock.ExpectQuery("SELECT id, lc_organization_id, type, payload, created_at, deleted_at, status FROM charges").
+		dbMock.ExpectQuery("SELECT id, lc_organization_id, type, payload, created_at, deleted_at FROM charges").
 			WithArgs("lcOrganizationID").Times(1).
 			WillReturnError(pgx.ErrNoRows)
 
@@ -322,7 +320,7 @@ func TestPostgresqlPGX_GetChargesByOrganizationID(t *testing.T) {
 	})
 
 	t.Run("error", func(t *testing.T) {
-		dbMock.ExpectQuery("SELECT id, lc_organization_id, type, payload, created_at, deleted_at, status FROM charges").
+		dbMock.ExpectQuery("SELECT id, lc_organization_id, type, payload, created_at, deleted_at FROM charges").
 			WithArgs("lcOrganizationID").Times(1).
 			WillReturnError(assert.AnError)
 

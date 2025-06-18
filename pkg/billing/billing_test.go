@@ -246,11 +246,6 @@ func (m *storageMock) GetChargesByStatuses(ctx context.Context, statuses []strin
 	return args.Get(0).([]Charge), args.Error(1)
 }
 
-func (m *storageMock) UpdateChargeStatus(ctx context.Context, id string, status livechat.ChargeStatus) error {
-	args := m.Called(ctx, id, status)
-	return args.Error(0)
-}
-
 func (m *storageMock) DeleteSubscription(ctx context.Context, lcID, subID string) error {
 	args := m.Called(ctx, lcID, subID)
 	return args.Error(0)
@@ -283,7 +278,6 @@ func TestService_CreateRecurrentCharge(t *testing.T) {
 			Type:             ChargeTypeRecurring,
 			Payload:          rawRC,
 			LCOrganizationID: lcoid,
-			Status:           livechat.RecurrentChargeStatusPending,
 		}
 		am.On("CreateRecurrentCharge", ctx, livechat.CreateRecurrentChargeParams{
 			Name:      "name",
@@ -331,7 +325,6 @@ func TestService_CreateRecurrentCharge(t *testing.T) {
 			ID:               "id",
 			Type:             ChargeTypeRecurring,
 			Payload:          rawRC,
-			Status:           livechat.RecurrentChargeStatusPending,
 			LCOrganizationID: "masterOrgID",
 		}
 		am.On("CreateRecurrentCharge", ctx, livechat.CreateRecurrentChargeParams{
@@ -446,7 +439,6 @@ func TestService_CreateRecurrentCharge(t *testing.T) {
 			ID:               "id",
 			Type:             ChargeTypeRecurring,
 			Payload:          rawRC,
-			Status:           livechat.RecurrentChargeStatusPending,
 			LCOrganizationID: lcoid,
 		}
 
@@ -839,7 +831,6 @@ func TestService_SyncRecurrentCharge(t *testing.T) {
 			assert.Equal(t, "name", p.Name)
 			assert.Equal(t, 10, p.Price)
 		}).Return(nil).Once()
-		sm.On("UpdateChargeStatus", ctx, "id", livechat.ChargeStatus("active")).Return(nil).Once()
 		payload := map[string]interface{}{"id": "id"}
 		sc, _ := json.Marshal(charge)
 		levent := events.Event{
@@ -988,7 +979,6 @@ func TestService_SyncCharges(t *testing.T) {
 		}, nil).Once()
 
 		sm.On("UpdateChargePayload", orgCtx, "some-id", mock.Anything).Return(nil).Once()
-		sm.On("UpdateChargeStatus", orgCtx, "some-id", mock.Anything).Return(nil).Once()
 		xm.On("GenerateId").Return(xid, nil).Once()
 		em.On("CreateEvent", orgCtx, mock.Anything).Return(nil).Once()
 
