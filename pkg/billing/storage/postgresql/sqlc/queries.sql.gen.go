@@ -12,8 +12,8 @@ import (
 )
 
 const createCharge = `-- name: CreateCharge :exec
-INSERT INTO charges(id, type, payload, lc_organization_id, status, created_at)
-VALUES ($1, $2, $3, $4, $5, NOW())
+INSERT INTO charges(id, type, payload, lc_organization_id, created_at)
+VALUES ($1, $2, $3, $4, NOW())
 `
 
 type CreateChargeParams struct {
@@ -21,7 +21,6 @@ type CreateChargeParams struct {
 	Type             string
 	Payload          []byte
 	LcOrganizationID string
-	Status           string
 }
 
 func (q *Queries) CreateCharge(ctx context.Context, arg CreateChargeParams) error {
@@ -30,7 +29,6 @@ func (q *Queries) CreateCharge(ctx context.Context, arg CreateChargeParams) erro
 		arg.Type,
 		arg.Payload,
 		arg.LcOrganizationID,
-		arg.Status,
 	)
 	return err
 }
@@ -128,7 +126,7 @@ func (q *Queries) DeleteSubscriptionByChargeID(ctx context.Context, arg DeleteSu
 }
 
 const getChargeByID = `-- name: GetChargeByID :one
-SELECT id, lc_organization_id, type, payload, created_at, deleted_at, status
+SELECT id, lc_organization_id, type, payload, created_at, deleted_at
 FROM charges
 WHERE id = $1
 AND deleted_at IS NULL
@@ -144,13 +142,12 @@ func (q *Queries) GetChargeByID(ctx context.Context, id string) (Charge, error) 
 		&i.Payload,
 		&i.CreatedAt,
 		&i.DeletedAt,
-		&i.Status,
 	)
 	return i, err
 }
 
 const getChargeByOrganizationID = `-- name: GetChargeByOrganizationID :one
-SELECT id, lc_organization_id, type, payload, created_at, deleted_at, status
+SELECT id, lc_organization_id, type, payload, created_at, deleted_at
 FROM charges
 WHERE lc_organization_id = $1
 AND deleted_at IS NULL
@@ -166,13 +163,12 @@ func (q *Queries) GetChargeByOrganizationID(ctx context.Context, lcOrganizationI
 		&i.Payload,
 		&i.CreatedAt,
 		&i.DeletedAt,
-		&i.Status,
 	)
 	return i, err
 }
 
 const getChargesByOrganizationID = `-- name: GetChargesByOrganizationID :many
-SELECT id, lc_organization_id, type, payload, created_at, deleted_at, status
+SELECT id, lc_organization_id, type, payload, created_at, deleted_at
 FROM charges
 WHERE lc_organization_id = $1
 `
@@ -193,7 +189,6 @@ func (q *Queries) GetChargesByOrganizationID(ctx context.Context, lcOrganization
 			&i.Payload,
 			&i.CreatedAt,
 			&i.DeletedAt,
-			&i.Status,
 		); err != nil {
 			return nil, err
 		}
@@ -206,9 +201,9 @@ func (q *Queries) GetChargesByOrganizationID(ctx context.Context, lcOrganization
 }
 
 const getChargesByStatuses = `-- name: GetChargesByStatuses :many
-SELECT id, lc_organization_id, type, payload, created_at, deleted_at, status
+SELECT id, lc_organization_id, type, payload, created_at, deleted_at
 FROM charges
-WHERE status = ANY($1::text[])
+WHERE payload->>'status' = ANY($1::text[])
 `
 
 func (q *Queries) GetChargesByStatuses(ctx context.Context, dollar_1 []string) ([]Charge, error) {
@@ -227,7 +222,6 @@ func (q *Queries) GetChargesByStatuses(ctx context.Context, dollar_1 []string) (
 			&i.Payload,
 			&i.CreatedAt,
 			&i.DeletedAt,
-			&i.Status,
 		); err != nil {
 			return nil, err
 		}
@@ -260,7 +254,7 @@ func (q *Queries) GetSubscriptionByChargeID(ctx context.Context, chargeID pgtype
 }
 
 const getSubscriptionsByOrganizationID = `-- name: GetSubscriptionsByOrganizationID :many
-SELECT s.id, s.lc_organization_id, plan_name, charge_id, s.created_at, s.deleted_at, c.id, c.lc_organization_id, type, payload, c.created_at, c.deleted_at, status
+SELECT s.id, s.lc_organization_id, plan_name, charge_id, s.created_at, s.deleted_at, c.id, c.lc_organization_id, type, payload, c.created_at, c.deleted_at
 FROM active_subscriptions s
 LEFT JOIN charges c on s.charge_id = c.id
 WHERE s.lc_organization_id = $1
@@ -280,7 +274,6 @@ type GetSubscriptionsByOrganizationIDRow struct {
 	Payload            []byte
 	CreatedAt_2        pgtype.Timestamptz
 	DeletedAt_2        pgtype.Timestamptz
-	Status             pgtype.Text
 }
 
 func (q *Queries) GetSubscriptionsByOrganizationID(ctx context.Context, lcOrganizationID string) ([]GetSubscriptionsByOrganizationIDRow, error) {
@@ -305,7 +298,6 @@ func (q *Queries) GetSubscriptionsByOrganizationID(ctx context.Context, lcOrgani
 			&i.Payload,
 			&i.CreatedAt_2,
 			&i.DeletedAt_2,
-			&i.Status,
 		); err != nil {
 			return nil, err
 		}
@@ -331,21 +323,5 @@ type UpdateChargeParams struct {
 
 func (q *Queries) UpdateCharge(ctx context.Context, arg UpdateChargeParams) error {
 	_, err := q.db.Exec(ctx, updateCharge, arg.ID, arg.Payload)
-	return err
-}
-
-const updateChargeStatus = `-- name: UpdateChargeStatus :exec
-UPDATE charges
-SET status = $2
-WHERE id = $1
-`
-
-type UpdateChargeStatusParams struct {
-	ID     string
-	Status string
-}
-
-func (q *Queries) UpdateChargeStatus(ctx context.Context, arg UpdateChargeStatusParams) error {
-	_, err := q.db.Exec(ctx, updateChargeStatus, arg.ID, arg.Status)
 	return err
 }
