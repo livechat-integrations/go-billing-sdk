@@ -92,6 +92,7 @@ func (s *Service) CreateRecurrentCharge(ctx context.Context, name string, price 
 		Type:             ChargeTypeRecurring,
 		Payload:          rawCharge,
 	}
+
 	if err = s.storage.CreateCharge(ctx, charge); err != nil {
 		event.Type = events.EventTypeError
 		return "", s.eventService.ToError(ctx, events.ToErrorParams{
