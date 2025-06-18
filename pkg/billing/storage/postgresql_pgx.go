@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/livechat-integrations/go-billing-sdk/v2/internal/livechat"
-
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -40,7 +38,6 @@ func (r *PostgresqlPGX) CreateCharge(ctx context.Context, c billing.Charge) erro
 		Type:             string(c.Type),
 		LcOrganizationID: c.LCOrganizationID,
 		Payload:          rawPayload,
-		Status:           string(c.Status),
 	}); err != nil {
 		return err
 	}
@@ -171,13 +168,6 @@ func (r *PostgresqlPGX) GetChargesByStatuses(ctx context.Context, statuses []str
 	}
 
 	return charges, nil
-}
-
-func (r *PostgresqlPGX) UpdateChargeStatus(ctx context.Context, id string, status livechat.ChargeStatus) error {
-	return r.queries.UpdateChargeStatus(ctx, sqlc.UpdateChargeStatusParams{
-		ID:     id,
-		Status: string(status),
-	})
 }
 
 func (r *PostgresqlPGX) DeleteSubscription(ctx context.Context, lcID, subID string) error {
