@@ -90,8 +90,19 @@ func (h *Handler) HandleDPSWebhook(ctx context.Context, req DPSWebhookRequest) e
 			})
 		}
 
-		if req.Event != "payment_activated" {
-			break
+		subs, err := h.billing.GetSubscriptionsByOrganizationID(ctx, req.LCOrganizationID)
+		if err != nil {
+			event.Type = events.EventTypeError
+			return h.eventService.ToError(ctx, events.ToErrorParams{
+				Event: event,
+				Err:   fmt.Errorf("get subscriptions: %w", err),
+			})
+		}
+
+		if len(subs) > 0 {
+			_ = h.eventService.CreateEvent(ctx, event)
+
+			return nil
 		}
 
 		planName, ok := ctx.Value(SubscriptionPlanNameCtxKey{}).(string)
@@ -103,7 +114,7 @@ func (h *Handler) HandleDPSWebhook(ctx context.Context, req DPSWebhookRequest) e
 			})
 		}
 
-		if err := h.billing.CreateSubscription(ctx, req.LCOrganizationID, chargeID, planName); err != nil {
+		if err = h.billing.CreateSubscription(ctx, req.LCOrganizationID, chargeID, planName); err != nil {
 			event.Type = events.EventTypeError
 			return h.eventService.ToError(ctx, events.ToErrorParams{
 				Event: event,

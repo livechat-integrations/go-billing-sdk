@@ -277,6 +277,7 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 
 		bm.On("SyncRecurrentCharge", billingCtx, lcoid, paymentID).Return(nil).Once()
 		bm.On("CreateSubscription", billingCtx, lcoid, paymentID, planName).Return(nil).Once()
+		bm.On("GetSubscriptionsByOrganizationID", billingCtx, lcoid).Return([]Subscription{}, nil)
 		em.On("ToEvent", billingCtx, lcoid, events.EventActionUnknown, events.EventTypeInfo, req).Return(levent).Once()
 		em.On("CreateEvent", billingCtx, levent).Return(nil).Once()
 		lctx := context.WithValue(context.Background(), SubscriptionPlanNameCtxKey{}, planName)
@@ -316,6 +317,11 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 			Payload:          sc,
 		}
 
+		bm.On("GetSubscriptionsByOrganizationID", billingCtx, lcoid).Return([]Subscription{
+			{
+				ID: "sub1",
+			},
+		}, nil)
 		bm.On("SyncRecurrentCharge", billingCtx, lcoid, paymentID).Return(nil).Once()
 		em.On("ToEvent", billingCtx, lcoid, events.EventActionUnknown, events.EventTypeInfo, req).Return(levent).Once()
 		em.On("CreateEvent", billingCtx, levent).Return(nil).Once()
@@ -404,6 +410,7 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 		wCtx = context.WithValue(wCtx, LicenseIDCtxKey{}, lid)
 
 		bm.On("SyncRecurrentCharge", wCtx, lcoid, paymentID).Return(nil).Once()
+		bm.On("GetSubscriptionsByOrganizationID", wCtx, lcoid).Return([]Subscription{}, nil)
 		em.On("ToEvent", wCtx, lcoid, events.EventActionUnknown, events.EventTypeInfo, req).Return(levent).Once()
 		em.On("ToError", wCtx, events.ToErrorParams{
 			Event: levent,
