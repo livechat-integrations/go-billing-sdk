@@ -324,7 +324,7 @@ func (s *Service) SyncCharges(ctx context.Context) error {
 
 		var recCharge livechat.RecurrentCharge
 		_ = json.Unmarshal(charge.Payload, &recCharge)
-		if recCharge.Status == livechat.RecurrentChargeStatusActive && recCharge.NextChargeAt.Before(time.Now()) {
+		if recCharge.Status == livechat.RecurrentChargeStatusActive && recCharge.NextChargeAt != nil && recCharge.NextChargeAt.Before(time.Now()) {
 			continue
 		}
 
