@@ -69,5 +69,5 @@ func (c Subscription) IsActive() bool {
 }
 
 func GetSyncValidStatuses() []string {
-	return []string{"active", "pending", "accepted"}
+	return []string{"active", "pending", "accepted", "past_due"}
 }

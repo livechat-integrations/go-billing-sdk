@@ -90,9 +90,9 @@ func (s *Service) CreateRecurrentCharge(ctx context.Context, name string, price 
 		LCOrganizationID: lcOrganizationID,
 		ID:               lcCharge.ID,
 		Type:             ChargeTypeRecurring,
-		Status:           livechat.RecurrentChargeStatusPending,
 		Payload:          rawCharge,
 	}
+
 	if err = s.storage.CreateCharge(ctx, charge); err != nil {
 		event.Type = events.EventTypeError
 		return "", s.eventService.ToError(ctx, events.ToErrorParams{
@@ -141,14 +141,6 @@ func (s *Service) SyncRecurrentCharge(ctx context.Context, lcOrganizationID stri
 		return s.eventService.ToError(ctx, events.ToErrorParams{
 			Event: event,
 			Err:   fmt.Errorf("failed to update charge payload: %w", err),
-		})
-	}
-
-	if err = s.storage.UpdateChargeStatus(ctx, id, lcCharge.Status); err != nil {
-		event.Type = events.EventTypeError
-		return s.eventService.ToError(ctx, events.ToErrorParams{
-			Event: event,
-			Err:   fmt.Errorf("failed to update charge status: %w", err),
 		})
 	}
 
@@ -271,14 +263,6 @@ func (s *Service) DeleteSubscriptionWithCharge(ctx context.Context, lcOrganizati
 		})
 	}
 
-	if err := s.storage.UpdateChargeStatus(ctx, chargeID, livechat.RecurrentChargeStatusCancelled); err != nil {
-		event.Type = events.EventTypeError
-		return s.eventService.ToError(ctx, events.ToErrorParams{
-			Event: event,
-			Err:   fmt.Errorf("failed to delete subscription: %w", err),
-		})
-	}
-
 	if err := s.storage.DeleteCharge(ctx, chargeID); err != nil {
 		event.Type = events.EventTypeError
 		return s.eventService.ToError(ctx, events.ToErrorParams{
@@ -368,14 +352,6 @@ func (s *Service) SyncCharges(ctx context.Context) error {
 			})
 		}
 
-		if err = s.storage.UpdateChargeStatus(organizationCtx, charge.ID, charge.Status); err != nil {
-			event.Type = events.EventTypeError
-			return s.eventService.ToError(organizationCtx, events.ToErrorParams{
-				Event: event,
-				Err:   fmt.Errorf("failed to update charge: %w", err),
-			})
-		}
-
 		event.SetPayload(lcCharge)
 		_ = s.eventService.CreateEvent(organizationCtx, event)
 	}
@@ -422,15 +398,7 @@ func (s *Service) DeleteSubscription(ctx context.Context, lcOrganizationID, subs
 		return nil
 	}
 
-	if err = s.storage.UpdateChargeStatus(ctx, sub.Charge.ID, livechat.RecurrentChargeStatusCancelled); err != nil {
-		event.Type = events.EventTypeError
-		return s.eventService.ToError(ctx, events.ToErrorParams{
-			Event: event,
-			Err:   fmt.Errorf("failed to delete subscription: %w", err),
-		})
-	}
-
-	if err = s.storage.DeleteCharge(ctx, sub.Charge.ID); err != nil {
+	if err = s.CancelRecurrentCharge(ctx, sub.Charge.ID); err != nil {
 		event.Type = events.EventTypeError
 		return s.eventService.ToError(ctx, events.ToErrorParams{
 			Event: event,
@@ -460,14 +428,6 @@ func (s *Service) cancelChange(ctx context.Context, charge Charge) error {
 		return s.eventService.ToError(ctx, events.ToErrorParams{
 			Event: event,
 			Err:   fmt.Errorf("failed to cancel charge: %w", err),
-		})
-	}
-
-	if err = s.storage.UpdateChargeStatus(ctx, charge.ID, livechat.RecurrentChargeStatusCancelled); err != nil {
-		event.Type = events.EventTypeError
-		return s.eventService.ToError(ctx, events.ToErrorParams{
-			Event: event,
-			Err:   fmt.Errorf("failed to update charge: %w", err),
 		})
 	}
 

@@ -23,11 +23,14 @@ func (c *Charge) ToBillingCharge() *billing.Charge {
 		nextChargeAt = p.NextChargeAt
 	}
 
+	var b livechat.BaseCharge
+	_ = json.Unmarshal(c.Payload, &b)
+
 	return &billing.Charge{
 		ID:               c.ID,
 		LCOrganizationID: c.LcOrganizationID,
 		Type:             billing.ChargeType(c.Type),
-		Status:           livechat.ChargeStatus(c.Status),
+		Status:           b.Status,
 		Payload:          c.Payload,
 		NextChargeAt:     nextChargeAt,
 		CreatedAt:        c.CreatedAt.Time,
@@ -69,11 +72,11 @@ func (r *GetSubscriptionsByOrganizationIDRow) ToBillingSubscription() *billing.S
 		NextChargeAt:     p.NextChargeAt,
 		CreatedAt:        r.CreatedAt_2.Time,
 		CanceledAt:       chargeDeletedAt,
-		Status:           livechat.ChargeStatus(r.Status.String),
+		Status:           p.Status,
 	}
 
 	var dunningEndDate time.Time
-	if r.Status.String == string(livechat.RecurrentChargeStatusPastDue) {
+	if p.Status == livechat.RecurrentChargeStatusPastDue || p.Status == livechat.RecurrentChargeStatusFrozen {
 		if p.NextChargeAt != nil {
 			dunningEndDate = p.NextChargeAt.AddDate(0, 0, 16)
 			for dunningEndDate.Before(time.Now()) {
@@ -84,7 +87,7 @@ func (r *GetSubscriptionsByOrganizationIDRow) ToBillingSubscription() *billing.S
 		subscription.DunningEndDate = &dunningEndDate
 	}
 
-	if r.Status.String == string(livechat.RecurrentChargeStatusActive) && p.NextChargeAt == nil {
+	if (p.Status == livechat.RecurrentChargeStatusActive || p.Status == livechat.RecurrentChargeStatusFrozen) && p.NextChargeAt == nil {
 		dunningEndDate = p.CreatedAt.AddDate(0, 0, 16)
 		for dunningEndDate.Before(time.Now()) {
 			dunningEndDate = dunningEndDate.AddDate(0, 0, 16)

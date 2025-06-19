@@ -34,7 +34,6 @@ type Charge struct {
 	Payload          []byte
 	CreatedAt        pgtype.Timestamptz
 	DeletedAt        pgtype.Timestamptz
-	Status           string
 }
 
 type Subscription struct {
