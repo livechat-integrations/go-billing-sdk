@@ -343,7 +343,7 @@ func (s *Service) SyncCharges(ctx context.Context) error {
 			}
 		}
 
-		rawCharge, _ := json.Marshal(recCharge)
+		rawCharge, _ := json.Marshal(lcCharge)
 		if err = s.storage.UpdateChargePayload(organizationCtx, charge.ID, rawCharge); err != nil {
 			event.Type = events.EventTypeError
 			return s.eventService.ToError(organizationCtx, events.ToErrorParams{

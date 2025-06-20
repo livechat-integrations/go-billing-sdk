@@ -204,6 +204,7 @@ const getChargesByStatuses = `-- name: GetChargesByStatuses :many
 SELECT id, lc_organization_id, type, payload, created_at, deleted_at
 FROM charges
 WHERE payload->>'status' = ANY($1::text[])
+AND deleted_at IS NULL
 `
 
 func (q *Queries) GetChargesByStatuses(ctx context.Context, dollar_1 []string) ([]Charge, error) {
