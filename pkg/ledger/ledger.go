@@ -14,7 +14,7 @@ import (
 )
 
 type LedgerInterface interface {
-	GetOperations(ctx context.Context, organizationID string) ([]Operation, error)
+	GetOperations(ctx context.Context, organizationID string, isVoucher bool) ([]Operation, error)
 	CreateCharge(ctx context.Context, params CreateChargeParams) (string, error)
 	TopUp(ctx context.Context, topUp TopUp) (string, error)
 	CreateTopUpRequest(ctx context.Context, params CreateTopUpRequestParams) (*TopUp, error)
@@ -26,8 +26,7 @@ type LedgerInterface interface {
 	GetTopUpByIDAndOrganizationID(ctx context.Context, organizationID string, ID string) (*TopUp, error)
 	SyncTopUp(ctx context.Context, topUp TopUp) (*TopUp, error)
 	SyncOrCancelTopUpRequests(ctx context.Context) error
-	AddFunds(ctx context.Context, Amount float32, OrganizationID, Namespace string, Payload *json.RawMessage) error
-	RecentlyAddedFunds(ctx context.Context, OrganizationID, Namespace string) (*Operation, error)
+	AddVoucherFunds(ctx context.Context, Amount float32, OrganizationID, Namespace string, Payload *json.RawMessage) error
 }
 
 var (
@@ -73,8 +72,8 @@ type CreateChargeParams struct {
 	OrganizationID string  `json:"organizationId"`
 }
 
-func (s *Service) GetOperations(ctx context.Context, organizationID string) ([]Operation, error) {
-	return s.storage.GetLedgerOperations(ctx, organizationID)
+func (s *Service) GetOperations(ctx context.Context, organizationID string, isVoucher bool) ([]Operation, error) {
+	return s.storage.GetLedgerOperations(ctx, organizationID, isVoucher)
 }
 
 func (s *Service) CreateCharge(ctx context.Context, params CreateChargeParams) (string, error) {
@@ -82,6 +81,7 @@ func (s *Service) CreateCharge(ctx context.Context, params CreateChargeParams) (
 		ID:               s.idProvider.GenerateId(),
 		Amount:           -params.Amount,
 		LCOrganizationID: params.OrganizationID,
+		IsVoucher:        false,
 	}
 	_, err := s.createOperation(ctx, operation)
 	if err != nil {
@@ -163,6 +163,7 @@ func (s *Service) TopUp(ctx context.Context, topUp TopUp) (string, error) {
 		Amount:           dbTopUp.Amount,
 		LCOrganizationID: dbTopUp.LCOrganizationID,
 		Payload:          dbTopUp.LCCharge,
+		IsVoucher:        false,
 	}
 	_, err = s.createOperation(ctx, operation)
 	if err != nil {
@@ -275,8 +276,8 @@ func (s *Service) GetTopUps(ctx context.Context, organizationID string) ([]TopUp
 	return s.storage.GetTopUpsByOrganizationID(ctx, organizationID)
 }
 
-func (s *Service) AddFunds(ctx context.Context, Amount float32, OrganizationID, Namespace string, Payload *json.RawMessage) error {
-	event := s.eventService.ToEvent(ctx, OrganizationID, events.EventActionAddFunds, events.EventTypeInfo, map[string]interface{}{"amount": Amount, "namespace": Namespace})
+func (s *Service) AddVoucherFunds(ctx context.Context, Amount float32, OrganizationID, Namespace string, Payload *json.RawMessage) error {
+	event := s.eventService.ToEvent(ctx, OrganizationID, events.EventActionAddVoucherFunds, events.EventTypeInfo, map[string]interface{}{"amount": Amount, "namespace": Namespace})
 	key := getFundsKey(Namespace, OrganizationID)
 	operation, err := s.storage.GetLedgerOperation(ctx, GetLedgerOperationParams{
 		ID:             key,
@@ -298,6 +299,7 @@ func (s *Service) AddFunds(ctx context.Context, Amount float32, OrganizationID, 
 		ID:               key,
 		LCOrganizationID: OrganizationID,
 		Amount:           Amount,
+		IsVoucher:        true,
 	}
 	if Payload != nil {
 		operation.Payload = *Payload
@@ -313,21 +315,6 @@ func (s *Service) AddFunds(ctx context.Context, Amount float32, OrganizationID, 
 	_ = s.eventService.CreateEvent(ctx, event)
 
 	return nil
-}
-
-func (s *Service) RecentlyAddedFunds(ctx context.Context, OrganizationID, Namespace string) (*Operation, error) {
-	key := getFundsKey(Namespace, OrganizationID)
-	operation, err := s.storage.GetLedgerOperation(ctx, GetLedgerOperationParams{
-		ID:             key,
-		OrganizationID: OrganizationID,
-	})
-	if err != nil {
-		return nil, err
-	}
-	if operation != nil {
-		return operation, nil
-	}
-	return nil, nil
 }
 
 func (s *Service) CancelTopUpRequest(ctx context.Context, organizationID string, ID string) error {

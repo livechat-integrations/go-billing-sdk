@@ -41,7 +41,7 @@ func (l *ledgerMock) RecentlyAddedFunds(ctx context.Context, OrganizationID, Nam
 	panic("implement me")
 }
 
-func (l *ledgerMock) AddFunds(ctx context.Context, Amount float32, OrganizationID, Namespace string, Payload *json.RawMessage) error {
+func (l *ledgerMock) AddVoucherFunds(ctx context.Context, Amount float32, OrganizationID, Namespace string, Payload *json.RawMessage) error {
 	//TODO implement me
 	panic("implement me")
 }
@@ -62,7 +62,7 @@ func (l *ledgerMock) SyncTopUp(ctx context.Context, topUp TopUp) (*TopUp, error)
 	return args.Get(0).(*TopUp), args.Error(1)
 }
 
-func (l *ledgerMock) GetOperations(ctx context.Context, organizationID string) ([]Operation, error) {
+func (l *ledgerMock) GetOperations(ctx context.Context, organizationID string, isVoucher bool) ([]Operation, error) {
 	//TODO implement me
 	panic("implement me")
 }

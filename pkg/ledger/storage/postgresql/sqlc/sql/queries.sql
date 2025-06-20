@@ -3,8 +3,8 @@ INSERT INTO ledger_events(id, lc_organization_id, type, action, payload, error, 
 VALUES ($1, $2, $3, $4, $5, $6, NOW());
 
 -- name: CreateLedgerOperation :exec
-INSERT INTO ledger_ledger(id, amount, lc_organization_id, payload, created_at)
-VALUES ($1, $2, $3, $4, NOW());
+INSERT INTO ledger_ledger(id, amount, lc_organization_id, payload, is_voucher, created_at)
+VALUES ($1, $2, $3, $4, $5, NOW());
 
 
 -- name: UpsertTopUp :one
@@ -42,6 +42,7 @@ ORDER BY created_at ASC
 SELECT *
 FROM ledger_ledger
 WHERE lc_organization_id = $1
+  AND is_voucher = $2
 ORDER BY created_at DESC
 ;
 
@@ -49,7 +50,7 @@ ORDER BY created_at DESC
 SELECT *
 FROM ledger_ledger
 WHERE lc_organization_id = $1
-AND id = $2
+  AND id = $2
 ORDER BY created_at DESC
 ;
 

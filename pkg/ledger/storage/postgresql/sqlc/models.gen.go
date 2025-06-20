@@ -23,6 +23,7 @@ type LedgerLedger struct {
 	Amount           pgtype.Numeric
 	LcOrganizationID string
 	Payload          []byte
+	IsVoucher        bool
 	CreatedAt        pgtype.Timestamptz
 }
 

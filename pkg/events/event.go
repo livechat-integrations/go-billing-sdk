@@ -31,7 +31,7 @@ const (
 	EventActionDPSWebhookPayment                EventAction = "dps_webhook_event_payment"
 	EventActionSyncTopUp                        EventAction = "sync_top_up_event"
 	EventActionActivateCharge                   EventAction = "activate_charge"
-	EventActionAddFunds                         EventAction = "add_funds"
+	EventActionAddVoucherFunds                  EventAction = "add_voucher_funds"
 	EventActionUnknown                          EventAction = "unknown"
 )
 

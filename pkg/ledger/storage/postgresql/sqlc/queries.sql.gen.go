@@ -38,8 +38,8 @@ func (q *Queries) CreateEvent(ctx context.Context, arg CreateEventParams) error 
 }
 
 const createLedgerOperation = `-- name: CreateLedgerOperation :exec
-INSERT INTO ledger_ledger(id, amount, lc_organization_id, payload, created_at)
-VALUES ($1, $2, $3, $4, NOW())
+INSERT INTO ledger_ledger(id, amount, lc_organization_id, payload, is_voucher, created_at)
+VALUES ($1, $2, $3, $4, $5, NOW())
 `
 
 type CreateLedgerOperationParams struct {
@@ -47,6 +47,7 @@ type CreateLedgerOperationParams struct {
 	Amount           pgtype.Numeric
 	LcOrganizationID string
 	Payload          []byte
+	IsVoucher        bool
 }
 
 func (q *Queries) CreateLedgerOperation(ctx context.Context, arg CreateLedgerOperationParams) error {
@@ -55,6 +56,7 @@ func (q *Queries) CreateLedgerOperation(ctx context.Context, arg CreateLedgerOpe
 		arg.Amount,
 		arg.LcOrganizationID,
 		arg.Payload,
+		arg.IsVoucher,
 	)
 	return err
 }
@@ -102,10 +104,10 @@ func (q *Queries) GetDirectTopUpsWithoutOperations(ctx context.Context) ([]Ledge
 }
 
 const getLedgerOperation = `-- name: GetLedgerOperation :one
-SELECT id, amount, lc_organization_id, payload, created_at
+SELECT id, amount, lc_organization_id, payload, is_voucher, created_at
 FROM ledger_ledger
 WHERE lc_organization_id = $1
-AND id = $2
+  AND id = $2
 ORDER BY created_at DESC
 `
 
@@ -122,20 +124,27 @@ func (q *Queries) GetLedgerOperation(ctx context.Context, arg GetLedgerOperation
 		&i.Amount,
 		&i.LcOrganizationID,
 		&i.Payload,
+		&i.IsVoucher,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const getLedgerOperationsByOrganizationID = `-- name: GetLedgerOperationsByOrganizationID :many
-SELECT id, amount, lc_organization_id, payload, created_at
+SELECT id, amount, lc_organization_id, payload, is_voucher, created_at
 FROM ledger_ledger
 WHERE lc_organization_id = $1
+  AND is_voucher = $2
 ORDER BY created_at DESC
 `
 
-func (q *Queries) GetLedgerOperationsByOrganizationID(ctx context.Context, lcOrganizationID string) ([]LedgerLedger, error) {
-	rows, err := q.db.Query(ctx, getLedgerOperationsByOrganizationID, lcOrganizationID)
+type GetLedgerOperationsByOrganizationIDParams struct {
+	LcOrganizationID string
+	IsVoucher        bool
+}
+
+func (q *Queries) GetLedgerOperationsByOrganizationID(ctx context.Context, arg GetLedgerOperationsByOrganizationIDParams) ([]LedgerLedger, error) {
+	rows, err := q.db.Query(ctx, getLedgerOperationsByOrganizationID, arg.LcOrganizationID, arg.IsVoucher)
 	if err != nil {
 		return nil, err
 	}
@@ -148,6 +157,7 @@ func (q *Queries) GetLedgerOperationsByOrganizationID(ctx context.Context, lcOrg
 			&i.Amount,
 			&i.LcOrganizationID,
 			&i.Payload,
+			&i.IsVoucher,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err

@@ -40,7 +40,7 @@ type GetLedgerOperationParams struct {
 
 type Storage interface {
 	CreateLedgerOperation(ctx context.Context, c Operation) error
-	GetLedgerOperations(ctx context.Context, organizationID string) ([]Operation, error)
+	GetLedgerOperations(ctx context.Context, organizationID string, isVoucher bool) ([]Operation, error)
 	GetLedgerOperation(ctx context.Context, params GetLedgerOperationParams) (*Operation, error)
 	GetBalance(ctx context.Context, organizationID string) (float32, error)
 	GetTopUpsByOrganizationID(ctx context.Context, organizationID string) ([]TopUp, error)

@@ -36,7 +36,7 @@ func TestPostgresqlSQLC_CreateLedgerOperation(t *testing.T) {
 		jp, _ := json.Marshal(payload)
 
 		dbMock.ExpectExec("INSERT INTO ledger_ledger").
-			WithArgs(id, v, lcoid, jp).
+			WithArgs(id, v, lcoid, jp, true).
 			WillReturnResult(pgxmock.NewResult("INSERT", 1)).Times(1)
 
 		err := s.CreateLedgerOperation(context.Background(), ledger.Operation{
@@ -44,6 +44,7 @@ func TestPostgresqlSQLC_CreateLedgerOperation(t *testing.T) {
 			Amount:           amount,
 			Payload:          jp,
 			LCOrganizationID: lcoid,
+			IsVoucher:        true,
 		})
 		assert.NoError(t, err)
 		assert.NoError(t, dbMock.ExpectationsWereMet())
@@ -58,7 +59,7 @@ func TestPostgresqlSQLC_CreateLedgerOperation(t *testing.T) {
 		jp, _ := json.Marshal(payload)
 
 		dbMock.ExpectExec("INSERT INTO ledger_ledger").
-			WithArgs(id, v, lcoid, jp).
+			WithArgs(id, v, lcoid, jp, false).
 			WillReturnResult(pgxmock.NewResult("INSERT", 1)).Times(1)
 
 		err := s.CreateLedgerOperation(context.Background(), ledger.Operation{
@@ -66,6 +67,7 @@ func TestPostgresqlSQLC_CreateLedgerOperation(t *testing.T) {
 			Amount:           amount,
 			Payload:          jp,
 			LCOrganizationID: lcoid,
+			IsVoucher:        false,
 		})
 		assert.NoError(t, err)
 		assert.NoError(t, dbMock.ExpectationsWereMet())
@@ -80,13 +82,14 @@ func TestPostgresqlSQLC_CreateLedgerOperation(t *testing.T) {
 		jp, _ := json.Marshal(payload)
 
 		dbMock.ExpectExec("INSERT INTO ledger_ledger").
-			WithArgs(id, v, lcoid, jp).Times(1).WillReturnError(assert.AnError)
+			WithArgs(id, v, lcoid, jp, false).Times(1).WillReturnError(assert.AnError)
 
 		err := s.CreateLedgerOperation(context.Background(), ledger.Operation{
 			ID:               id,
 			Amount:           amount,
 			Payload:          jp,
 			LCOrganizationID: lcoid,
+			IsVoucher:        false,
 		})
 		assert.ErrorIs(t, err, assert.AnError)
 		assert.NoError(t, dbMock.ExpectationsWereMet())
@@ -99,17 +102,41 @@ func TestPostgresqlSQLC_GetLedgerOperations(t *testing.T) {
 		v := pgtype.Numeric{}
 		_ = v.Scan(fmt.Sprintf("%f", amount))
 		someDate, _ := time.Parse(time.DateTime, "2025-03-14 12:31:56")
-		dbMock.ExpectQuery("GetLedgerOperationsByOrganizationID :many SELECT id, amount, lc_organization_id, payload, created_at").
-			WithArgs("lcOrganizationID").
+		dbMock.ExpectQuery("GetLedgerOperationsByOrganizationID :many SELECT id, amount, lc_organization_id, payload, is_voucher, created_at").
+			WithArgs("lcOrganizationID", false).
 			WillReturnRows(
-				pgxmock.NewRows([]string{"id", "amount", "lc_organization_id", "payload", "created_at"}).
-					AddRow("1", v, "lcOrganizationID", []byte("{}"), pgtype.Timestamptz{Time: someDate, Valid: true})).Times(1)
+				pgxmock.NewRows([]string{"id", "amount", "lc_organization_id", "payload", "is_voucher", "created_at"}).
+					AddRow("1", v, "lcOrganizationID", []byte("{}"), false, pgtype.Timestamptz{Time: someDate, Valid: true})).Times(1)
 
-		c, err := s.GetLedgerOperations(context.Background(), "lcOrganizationID")
+		c, err := s.GetLedgerOperations(context.Background(), "lcOrganizationID", false)
 		assert.NoError(t, err)
 		assert.Len(t, c, 1)
 		assert.Equal(t, "1", c[0].ID)
 		assert.Equal(t, amount, c[0].Amount)
+		assert.Equal(t, false, c[0].IsVoucher)
+		assert.Equal(t, "lcOrganizationID", c[0].LCOrganizationID)
+		assert.Equal(t, json.RawMessage("{}"), c[0].Payload)
+		assert.Equal(t, someDate, c[0].CreatedAt)
+
+		assert.NoError(t, dbMock.ExpectationsWereMet())
+	})
+	t.Run("success voucher", func(t *testing.T) {
+		amount := float32(3.14)
+		v := pgtype.Numeric{}
+		_ = v.Scan(fmt.Sprintf("%f", amount))
+		someDate, _ := time.Parse(time.DateTime, "2025-03-14 12:31:56")
+		dbMock.ExpectQuery("GetLedgerOperationsByOrganizationID :many SELECT id, amount, lc_organization_id, payload, is_voucher, created_at").
+			WithArgs("lcOrganizationID", true).
+			WillReturnRows(
+				pgxmock.NewRows([]string{"id", "amount", "lc_organization_id", "payload", "is_voucher", "created_at"}).
+					AddRow("1", v, "lcOrganizationID", []byte("{}"), true, pgtype.Timestamptz{Time: someDate, Valid: true})).Times(1)
+
+		c, err := s.GetLedgerOperations(context.Background(), "lcOrganizationID", true)
+		assert.NoError(t, err)
+		assert.Len(t, c, 1)
+		assert.Equal(t, "1", c[0].ID)
+		assert.Equal(t, amount, c[0].Amount)
+		assert.Equal(t, true, c[0].IsVoucher)
 		assert.Equal(t, "lcOrganizationID", c[0].LCOrganizationID)
 		assert.Equal(t, json.RawMessage("{}"), c[0].Payload)
 		assert.Equal(t, someDate, c[0].CreatedAt)
@@ -120,12 +147,12 @@ func TestPostgresqlSQLC_GetLedgerOperations(t *testing.T) {
 		amount := float32(3.14)
 		v := pgtype.Numeric{}
 		_ = v.Scan(fmt.Sprintf("%f", amount))
-		dbMock.ExpectQuery("GetLedgerOperationsByOrganizationID :many SELECT id, amount, lc_organization_id, payload, created_at").
-			WithArgs("lcOrganizationID").
+		dbMock.ExpectQuery("GetLedgerOperationsByOrganizationID :many SELECT id, amount, lc_organization_id, payload, is_voucher, created_at").
+			WithArgs("lcOrganizationID", false).
 			WillReturnRows(
-				pgxmock.NewRows([]string{"id", "amount", "lc_organization_id", "payload", "created_at"})).Times(1)
+				pgxmock.NewRows([]string{"id", "amount", "lc_organization_id", "payload", "is_voucher", "created_at"})).Times(1)
 
-		c, err := s.GetLedgerOperations(context.Background(), "lcOrganizationID")
+		c, err := s.GetLedgerOperations(context.Background(), "lcOrganizationID", false)
 		assert.NoError(t, err)
 		assert.Len(t, c, 0)
 
@@ -135,10 +162,10 @@ func TestPostgresqlSQLC_GetLedgerOperations(t *testing.T) {
 		amount := float32(3.14)
 		v := pgtype.Numeric{}
 		_ = v.Scan(fmt.Sprintf("%f", amount))
-		dbMock.ExpectQuery("GetLedgerOperationsByOrganizationID :many SELECT id, amount, lc_organization_id, payload, created_at").
-			WithArgs("lcOrganizationID").Times(1).WillReturnError(assert.AnError)
+		dbMock.ExpectQuery("GetLedgerOperationsByOrganizationID :many SELECT id, amount, lc_organization_id, payload, is_voucher, created_at").
+			WithArgs("lcOrganizationID", false).Times(1).WillReturnError(assert.AnError)
 
-		c, err := s.GetLedgerOperations(context.Background(), "lcOrganizationID")
+		c, err := s.GetLedgerOperations(context.Background(), "lcOrganizationID", false)
 		assert.ErrorIs(t, err, assert.AnError)
 		assert.Len(t, c, 0)
 
@@ -154,11 +181,11 @@ func TestPostgresqlSQLC_GetLedgerOperation(t *testing.T) {
 		v := pgtype.Numeric{}
 		_ = v.Scan(fmt.Sprintf("%f", amount))
 		someDate, _ := time.Parse(time.DateTime, "2025-03-14 12:31:56")
-		dbMock.ExpectQuery("GetLedgerOperation :one SELECT id, amount, lc_organization_id, payload, created_at").
+		dbMock.ExpectQuery("GetLedgerOperation :one SELECT id, amount, lc_organization_id, payload, is_voucher, created_at").
 			WithArgs(lcoid, id).
 			WillReturnRows(
-				pgxmock.NewRows([]string{"id", "amount", "lc_organization_id", "payload", "created_at"}).
-					AddRow(id, v, lcoid, []byte("{}"), pgtype.Timestamptz{Time: someDate, Valid: true})).Times(1)
+				pgxmock.NewRows([]string{"id", "amount", "lc_organization_id", "payload", "is_voucher", "created_at"}).
+					AddRow(id, v, lcoid, []byte("{}"), false, pgtype.Timestamptz{Time: someDate, Valid: true})).Times(1)
 
 		c, err := s.GetLedgerOperation(context.Background(), ledger.GetLedgerOperationParams{
 			ID:             id,
@@ -167,6 +194,7 @@ func TestPostgresqlSQLC_GetLedgerOperation(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, id, c.ID)
 		assert.Equal(t, amount, c.Amount)
+		assert.Equal(t, false, c.IsVoucher)
 		assert.Equal(t, lcoid, c.LCOrganizationID)
 		assert.Equal(t, json.RawMessage("{}"), c.Payload)
 		assert.Equal(t, someDate, c.CreatedAt)
@@ -177,10 +205,10 @@ func TestPostgresqlSQLC_GetLedgerOperation(t *testing.T) {
 		amount := float32(3.14)
 		v := pgtype.Numeric{}
 		_ = v.Scan(fmt.Sprintf("%f", amount))
-		dbMock.ExpectQuery("GetLedgerOperation :one SELECT id, amount, lc_organization_id, payload, created_at").
+		dbMock.ExpectQuery("GetLedgerOperation :one SELECT id, amount, lc_organization_id, payload, is_voucher, created_at").
 			WithArgs(lcoid, id).
 			WillReturnRows(
-				pgxmock.NewRows([]string{"id", "amount", "lc_organization_id", "payload", "created_at"})).Times(1)
+				pgxmock.NewRows([]string{"id", "amount", "lc_organization_id", "payload", "is_voucher", "created_at"})).Times(1)
 
 		c, err := s.GetLedgerOperation(context.Background(), ledger.GetLedgerOperationParams{
 			ID:             id,
@@ -195,7 +223,7 @@ func TestPostgresqlSQLC_GetLedgerOperation(t *testing.T) {
 		amount := float32(3.14)
 		v := pgtype.Numeric{}
 		_ = v.Scan(fmt.Sprintf("%f", amount))
-		dbMock.ExpectQuery("GetLedgerOperation :one SELECT id, amount, lc_organization_id, payload, created_at").
+		dbMock.ExpectQuery("GetLedgerOperation :one SELECT id, amount, lc_organization_id, payload, is_voucher, created_at").
 			WithArgs(lcoid, id).
 			Times(1).WillReturnError(assert.AnError)
 		c, err := s.GetLedgerOperation(context.Background(), ledger.GetLedgerOperationParams{
