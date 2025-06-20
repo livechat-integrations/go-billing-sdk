@@ -60,7 +60,8 @@ VALUES ($1, $2, $3, $4, $5, $6, NOW());
 -- name: GetChargesByStatuses :many
 SELECT *
 FROM charges
-WHERE payload->>'status' = ANY($1::text[]);
+WHERE payload->>'status' = ANY($1::text[])
+AND deleted_at IS NULL;
 
 -- name: DeleteSubscription :exec
 UPDATE subscriptions
