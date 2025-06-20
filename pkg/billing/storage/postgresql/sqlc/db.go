@@ -76,24 +76,24 @@ func (r *GetSubscriptionsByOrganizationIDRow) ToBillingSubscription() *billing.S
 	}
 
 	var dunningEndDate time.Time
-	if p.Status == livechat.RecurrentChargeStatusPastDue || p.Status == livechat.RecurrentChargeStatusFrozen {
+
+	switch p.Status {
+	case livechat.RecurrentChargeStatusPastDue, livechat.RecurrentChargeStatusFrozen, livechat.RecurrentChargeStatusActive:
 		if p.NextChargeAt != nil {
-			dunningEndDate = p.NextChargeAt.AddDate(0, 0, 16)
-			for dunningEndDate.Before(time.Now()) {
-				dunningEndDate = dunningEndDate.AddDate(0, 0, 16)
-			}
-		}
-
-		subscription.DunningEndDate = &dunningEndDate
-	}
-
-	if (p.Status == livechat.RecurrentChargeStatusActive || p.Status == livechat.RecurrentChargeStatusFrozen) && p.NextChargeAt == nil {
-		dunningEndDate = p.CreatedAt.AddDate(0, 0, 16)
-		for dunningEndDate.Before(time.Now()) {
-			dunningEndDate = dunningEndDate.AddDate(0, 0, 16)
+			dunningEndDate = calculateNextDunningDate(*p.NextChargeAt)
+		} else {
+			dunningEndDate = calculateNextDunningDate(*p.CreatedAt)
 		}
 		subscription.DunningEndDate = &dunningEndDate
 	}
 
 	return subscription
+}
+
+func calculateNextDunningDate(start time.Time) time.Time {
+	dunningDate := start.AddDate(0, 0, 16)
+	for dunningDate.Before(time.Now()) {
+		dunningDate = dunningDate.AddDate(0, 0, 16)
+	}
+	return dunningDate
 }
