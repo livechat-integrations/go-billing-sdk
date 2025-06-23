@@ -78,7 +78,7 @@ func (r *GetSubscriptionsByOrganizationIDRow) ToBillingSubscription() *billing.S
 	var dunningEndDate time.Time
 
 	switch p.Status {
-	case livechat.RecurrentChargeStatusPastDue, livechat.RecurrentChargeStatusFrozen, livechat.RecurrentChargeStatusActive:
+	case livechat.RecurrentChargeStatusPastDue, livechat.RecurrentChargeStatusFrozen:
 		if p.NextChargeAt != nil {
 			dunningEndDate = calculateNextDunningDate(*p.NextChargeAt)
 		} else {
