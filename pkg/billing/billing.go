@@ -313,7 +313,7 @@ func (s *Service) SyncCharges(ctx context.Context) error {
 		}
 
 		if recCharge.Status == livechat.RecurrentChargeStatusPending && recCharge.CreatedAt.AddDate(0, 1, 0).Before(time.Now()) {
-			if err = s.cancelChange(ctx, charge); err != nil {
+			if err = s.cancelChange(organizationCtx, charge); err != nil {
 				return err
 			}
 
