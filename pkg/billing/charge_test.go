@@ -36,7 +36,9 @@ func TestSubscription_IsActive(t *testing.T) {
 	t.Run("charge is active", func(t *testing.T) {
 		subscription := Subscription{
 			Charge: &Charge{
-				Payload: []byte(`{"status": "active", "next_charge_at": "` + time.Now().AddDate(0, 0, 1).Format(time.RFC3339) + `"}`),
+				Payload: []byte(`{"status": "active", "current_charge_at": "` +
+					time.Now().AddDate(0, -1, 0).Format(time.RFC3339) +
+					`", "next_charge_at": "` + time.Now().AddDate(0, 0, 1).Format(time.RFC3339) + `"}`),
 			},
 		}
 		assert.True(t, subscription.IsActive())
@@ -55,7 +57,9 @@ func TestSubscription_IsActive(t *testing.T) {
 	t.Run("charge is past_due, but in the retention period", func(t *testing.T) {
 		subscription := Subscription{
 			Charge: &Charge{
-				Payload: []byte(`{"status": "past_due", "next_charge_at": "` + time.Now().AddDate(0, 0, -1).Format(time.RFC3339) + `"}`),
+				Payload: []byte(`{"status": "past_due", "current_charge_at": "` +
+					time.Now().AddDate(0, -1, 0).Format(time.RFC3339) +
+					`", "next_charge_at": "` + time.Now().AddDate(0, 0, -1).Format(time.RFC3339) + `"}`),
 			},
 		}
 
@@ -76,6 +80,16 @@ func TestSubscription_IsActive(t *testing.T) {
 		subscription := Subscription{
 			Charge: &Charge{
 				Payload: []byte(`{"status": "active", "next_charge_at": null}`),
+			},
+		}
+
+		assert.False(t, subscription.IsActive())
+	})
+
+	t.Run("charge is active, current_charge_at null, next_charge_at not null", func(t *testing.T) {
+		subscription := Subscription{
+			Charge: &Charge{
+				Payload: []byte(`{"status": "active", "next_charge_at": "` + time.Now().AddDate(0, 0, 1).Format(time.RFC3339) + `", "current_charge_at": null}`),
 			},
 		}
 

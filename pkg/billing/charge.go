@@ -22,6 +22,7 @@ type Charge struct {
 	Type             ChargeType
 	Status           livechat.ChargeStatus
 	Payload          json.RawMessage
+	CurrentChargeAt  *time.Time
 	NextChargeAt     *time.Time
 	CreatedAt        time.Time
 	CanceledAt       *time.Time
@@ -60,6 +61,10 @@ func (c Subscription) IsActive() bool {
 	var p livechat.RecurrentCharge
 	_ = json.Unmarshal(c.Charge.Payload, &p)
 	if p.NextChargeAt == nil {
+		return false
+	}
+
+	if p.NextChargeAt != nil && p.CurrentChargeAt == nil {
 		return false
 	}
 
