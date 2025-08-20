@@ -81,4 +81,14 @@ func TestSubscription_IsActive(t *testing.T) {
 
 		assert.False(t, subscription.IsActive())
 	})
+
+	t.Run("charge is active, current_charge_at null, next_charge_at not null", func(t *testing.T) {
+		subscription := Subscription{
+			Charge: &Charge{
+				Payload: []byte(`{"status": "active", "next_charge_at": "` + time.Now().AddDate(0, 0, 1).Format(time.RFC3339) + `", "current_charge_at": null}`),
+			},
+		}
+
+		assert.False(t, subscription.IsActive())
+	})
 }
