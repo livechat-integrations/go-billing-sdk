@@ -732,12 +732,14 @@ func TestService_GetActiveSubscriptionsByOrganizationID(t *testing.T) {
 	})
 	t.Run("success when LC charge is active", func(t *testing.T) {
 		tNextDay := time.Now().AddDate(0, 0, 1)
+		tMonthBefore := tNextDay.AddDate(0, -1, 0)
 		baseCharge := livechat.RecurrentCharge{
 			BaseCharge: livechat.BaseCharge{
 				ID:     "id",
 				Status: "active",
 			},
-			NextChargeAt: &tNextDay,
+			NextChargeAt:    &tNextDay,
+			CurrentChargeAt: &tMonthBefore,
 		}
 		payload, _ := json.Marshal(baseCharge)
 		rsubs := []Subscription{{
