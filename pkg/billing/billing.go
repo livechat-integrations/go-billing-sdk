@@ -12,6 +12,11 @@ import (
 	"github.com/livechat-integrations/go-billing-sdk/v2/pkg/events"
 )
 
+const (
+	ChargeFrequencyMonthly = 1
+	ChargeFrequencyYearly  = 12
+)
+
 type (
 	EventIDCtxKey              struct{}
 	LicenseIDCtxKey            struct{}
@@ -58,15 +63,15 @@ func NewService(eventService events.EventService, idProvider events.IdProviderIn
 	}
 }
 
-func (s *Service) CreateRecurrentCharge(ctx context.Context, name string, price int, lcOrganizationID string) (string, error) {
-	event := s.eventService.ToEvent(ctx, lcOrganizationID, events.EventActionCreateCharge, events.EventTypeInfo, map[string]interface{}{"name": name, "price": price})
+func (s *Service) CreateRecurrentCharge(ctx context.Context, name string, price int, lcOrganizationID string, chargeFrequency int) (string, error) {
+	event := s.eventService.ToEvent(ctx, lcOrganizationID, events.EventActionCreateCharge, events.EventTypeInfo, map[string]interface{}{"name": name, "price": price, "chargeFrequency": chargeFrequency})
 	lcCharge, err := s.billingAPI.CreateRecurrentCharge(ctx, livechat.CreateRecurrentChargeParams{
 		Name:      name,
 		ReturnURL: s.returnURL,
 		Price:     price,
 		Test:      s.masterOrgID == lcOrganizationID,
 		TrialDays: 0,
-		Months:    1,
+		Months:    chargeFrequency,
 	})
 
 	if err != nil {
