@@ -596,10 +596,10 @@ func TestService_CreateRecurrentCharge(t *testing.T) {
 			Price:     10,
 			Test:      false,
 			TrialDays: 0,
-			Months:    ChargeFrequencyYearly,
+			Months:    ChargeFrequencyAnnually,
 		}).Return(rc, nil).Once()
 		sm.On("CreateCharge", ctx, domainCharge).Return(nil).Once()
-		payload := map[string]interface{}{"name": "name", "price": 10, "chargeFrequency": ChargeFrequencyYearly}
+		payload := map[string]interface{}{"name": "name", "price": 10, "chargeFrequency": ChargeFrequencyAnnually}
 		sc, _ := json.Marshal(domainCharge)
 		levent := events.Event{
 			ID:               xid,
@@ -611,7 +611,7 @@ func TestService_CreateRecurrentCharge(t *testing.T) {
 		em.On("CreateEvent", context.Background(), levent).Return(nil).Once()
 		em.On("ToEvent", context.Background(), lcoid, events.EventActionCreateCharge, events.EventTypeInfo, payload).Return(levent).Once()
 
-		id, err := s.CreateRecurrentCharge(context.Background(), "name", 10, lcoid, ChargeFrequencyYearly)
+		id, err := s.CreateRecurrentCharge(context.Background(), "name", 10, lcoid, ChargeFrequencyAnnually)
 
 		assert.Equal(t, "id", id)
 		assert.Nil(t, err)

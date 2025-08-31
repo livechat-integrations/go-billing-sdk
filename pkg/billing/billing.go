@@ -13,8 +13,8 @@ import (
 )
 
 const (
-	ChargeFrequencyMonthly = 1
-	ChargeFrequencyYearly  = 12
+	ChargeFrequencyMonthly  = 1
+	ChargeFrequencyAnnually = 12
 )
 
 type (
