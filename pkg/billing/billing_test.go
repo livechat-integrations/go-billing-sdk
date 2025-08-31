@@ -288,7 +288,7 @@ func TestService_CreateRecurrentCharge(t *testing.T) {
 			Months:    1,
 		}).Return(rc, nil).Once()
 		sm.On("CreateCharge", ctx, domainCharge).Return(nil).Once()
-		payload := map[string]interface{}{"name": "name", "price": 10}
+		payload := map[string]interface{}{"name": "name", "price": 10, "chargeFrequency": 1}
 		sc, _ := json.Marshal(domainCharge)
 		levent := events.Event{
 			ID:               xid,
@@ -300,7 +300,7 @@ func TestService_CreateRecurrentCharge(t *testing.T) {
 		em.On("CreateEvent", context.Background(), levent).Return(nil).Once()
 		em.On("ToEvent", context.Background(), lcoid, events.EventActionCreateCharge, events.EventTypeInfo, payload).Return(levent).Once()
 
-		id, err := s.CreateRecurrentCharge(context.Background(), "name", 10, lcoid)
+		id, err := s.CreateRecurrentCharge(context.Background(), "name", 10, lcoid, 1)
 
 		assert.Equal(t, "id", id)
 		assert.Nil(t, err)
@@ -336,7 +336,7 @@ func TestService_CreateRecurrentCharge(t *testing.T) {
 			Months:    1,
 		}).Return(rc, nil).Once()
 		sm.On("CreateCharge", ctx, domainCharge).Return(nil).Once()
-		payload := map[string]interface{}{"name": "name", "price": 10}
+		payload := map[string]interface{}{"name": "name", "price": 10, "chargeFrequency": 1}
 		sc, _ := json.Marshal(domainCharge)
 		levent := events.Event{
 			ID:               xid,
@@ -348,7 +348,7 @@ func TestService_CreateRecurrentCharge(t *testing.T) {
 		em.On("CreateEvent", context.Background(), levent).Return(nil).Once()
 		em.On("ToEvent", context.Background(), "masterOrgID", events.EventActionCreateCharge, events.EventTypeInfo, payload).Return(levent).Once()
 
-		id, err := s.CreateRecurrentCharge(context.Background(), "name", 10, "masterOrgID")
+		id, err := s.CreateRecurrentCharge(context.Background(), "name", 10, "masterOrgID", 1)
 
 		assert.Equal(t, "id", id)
 		assert.Nil(t, err)
@@ -365,7 +365,7 @@ func TestService_CreateRecurrentCharge(t *testing.T) {
 			TrialDays: 0,
 			Months:    1,
 		}).Return(nil, assert.AnError).Once()
-		payload := map[string]interface{}{"name": "name", "price": 10}
+		payload := map[string]interface{}{"name": "name", "price": 10, "chargeFrequency": 1}
 		sc, _ := json.Marshal(payload)
 		levent := events.Event{
 			ID:               xid,
@@ -381,7 +381,7 @@ func TestService_CreateRecurrentCharge(t *testing.T) {
 			Err:   fmt.Errorf("failed to create recurrent charge via lc: %w", assert.AnError),
 		}).Return(assert.AnError).Once()
 
-		id, err := s.CreateRecurrentCharge(context.Background(), "name", 10, lcoid)
+		id, err := s.CreateRecurrentCharge(context.Background(), "name", 10, lcoid, 1)
 
 		assert.Empty(t, id)
 		assert.Error(t, err)
@@ -398,7 +398,7 @@ func TestService_CreateRecurrentCharge(t *testing.T) {
 			TrialDays: 0,
 			Months:    1,
 		}).Return(nil, nil).Once()
-		payload := map[string]interface{}{"name": "name", "price": 10}
+		payload := map[string]interface{}{"name": "name", "price": 10, "chargeFrequency": 1}
 		sc, _ := json.Marshal(payload)
 		levent := events.Event{
 			ID:               xid,
@@ -414,7 +414,7 @@ func TestService_CreateRecurrentCharge(t *testing.T) {
 			Err:   fmt.Errorf("failed to create recurrent charge via lc: charge is nil"),
 		}).Return(assert.AnError).Once()
 
-		id, err := s.CreateRecurrentCharge(context.Background(), "name", 10, lcoid)
+		id, err := s.CreateRecurrentCharge(context.Background(), "name", 10, lcoid, 1)
 
 		assert.Empty(t, id)
 		assert.ErrorIs(t, err, assert.AnError)
@@ -451,7 +451,7 @@ func TestService_CreateRecurrentCharge(t *testing.T) {
 			Months:    1,
 		}).Return(rc, nil).Once()
 		sm.On("CreateCharge", ctx, domainCharge).Return(assert.AnError).Once()
-		payload := map[string]interface{}{"name": "name", "price": 10}
+		payload := map[string]interface{}{"name": "name", "price": 10, "chargeFrequency": 1}
 		sc, _ := json.Marshal(payload)
 		levent := events.Event{
 			ID:               xid,
@@ -467,10 +467,154 @@ func TestService_CreateRecurrentCharge(t *testing.T) {
 			Err:   fmt.Errorf("failed to create charge in database: %w", assert.AnError),
 		}).Return(assert.AnError).Once()
 
-		id, err := s.CreateRecurrentCharge(context.Background(), "name", 10, lcoid)
+		id, err := s.CreateRecurrentCharge(context.Background(), "name", 10, lcoid, 1)
 
 		assert.Empty(t, id)
 		assert.Error(t, err)
+
+		assertExpectations(t)
+	})
+
+	t.Run("success with yearly charge", func(t *testing.T) {
+		rc := &livechat.RecurrentCharge{
+			BaseCharge: livechat.BaseCharge{
+				ID:    "id",
+				Name:  "name",
+				Test:  false,
+				Price: 10,
+			},
+			TrialDays: 0,
+			Months:    12,
+		}
+
+		rawRC, _ := json.Marshal(rc)
+		domainCharge := Charge{
+			ID:               "id",
+			Type:             ChargeTypeRecurring,
+			Payload:          rawRC,
+			LCOrganizationID: lcoid,
+		}
+		am.On("CreateRecurrentCharge", ctx, livechat.CreateRecurrentChargeParams{
+			Name:      "name",
+			ReturnURL: "returnURL",
+			Price:     10,
+			Test:      false,
+			TrialDays: 0,
+			Months:    12,
+		}).Return(rc, nil).Once()
+		sm.On("CreateCharge", ctx, domainCharge).Return(nil).Once()
+		payload := map[string]interface{}{"name": "name", "price": 10, "chargeFrequency": 12}
+		sc, _ := json.Marshal(domainCharge)
+		levent := events.Event{
+			ID:               xid,
+			LCOrganizationID: lcoid,
+			Type:             events.EventTypeInfo,
+			Action:           events.EventActionCreateCharge,
+			Payload:          sc,
+		}
+		em.On("CreateEvent", context.Background(), levent).Return(nil).Once()
+		em.On("ToEvent", context.Background(), lcoid, events.EventActionCreateCharge, events.EventTypeInfo, payload).Return(levent).Once()
+
+		id, err := s.CreateRecurrentCharge(context.Background(), "name", 10, lcoid, 12)
+
+		assert.Equal(t, "id", id)
+		assert.Nil(t, err)
+
+		assertExpectations(t)
+	})
+
+	t.Run("success with monthly charge using constant", func(t *testing.T) {
+		rc := &livechat.RecurrentCharge{
+			BaseCharge: livechat.BaseCharge{
+				ID:    "id",
+				Name:  "name",
+				Test:  false,
+				Price: 10,
+			},
+			TrialDays: 0,
+			Months:    1,
+		}
+
+		rawRC, _ := json.Marshal(rc)
+		domainCharge := Charge{
+			ID:               "id",
+			Type:             ChargeTypeRecurring,
+			Payload:          rawRC,
+			LCOrganizationID: lcoid,
+		}
+		am.On("CreateRecurrentCharge", ctx, livechat.CreateRecurrentChargeParams{
+			Name:      "name",
+			ReturnURL: "returnURL",
+			Price:     10,
+			Test:      false,
+			TrialDays: 0,
+			Months:    ChargeFrequencyMonthly,
+		}).Return(rc, nil).Once()
+		sm.On("CreateCharge", ctx, domainCharge).Return(nil).Once()
+		payload := map[string]interface{}{"name": "name", "price": 10, "chargeFrequency": ChargeFrequencyMonthly}
+		sc, _ := json.Marshal(domainCharge)
+		levent := events.Event{
+			ID:               xid,
+			LCOrganizationID: lcoid,
+			Type:             events.EventTypeInfo,
+			Action:           events.EventActionCreateCharge,
+			Payload:          sc,
+		}
+		em.On("CreateEvent", context.Background(), levent).Return(nil).Once()
+		em.On("ToEvent", context.Background(), lcoid, events.EventActionCreateCharge, events.EventTypeInfo, payload).Return(levent).Once()
+
+		id, err := s.CreateRecurrentCharge(context.Background(), "name", 10, lcoid, ChargeFrequencyMonthly)
+
+		assert.Equal(t, "id", id)
+		assert.Nil(t, err)
+
+		assertExpectations(t)
+	})
+
+	t.Run("success with yearly charge using constant", func(t *testing.T) {
+		rc := &livechat.RecurrentCharge{
+			BaseCharge: livechat.BaseCharge{
+				ID:    "id",
+				Name:  "name",
+				Test:  false,
+				Price: 10,
+			},
+			TrialDays: 0,
+			Months:    12,
+		}
+
+		rawRC, _ := json.Marshal(rc)
+		domainCharge := Charge{
+			ID:               "id",
+			Type:             ChargeTypeRecurring,
+			Payload:          rawRC,
+			LCOrganizationID: lcoid,
+		}
+		am.On("CreateRecurrentCharge", ctx, livechat.CreateRecurrentChargeParams{
+			Name:      "name",
+			ReturnURL: "returnURL",
+			Price:     10,
+			Test:      false,
+			TrialDays: 0,
+			Months:    ChargeFrequencyYearly,
+		}).Return(rc, nil).Once()
+		sm.On("CreateCharge", ctx, domainCharge).Return(nil).Once()
+		payload := map[string]interface{}{"name": "name", "price": 10, "chargeFrequency": ChargeFrequencyYearly}
+		sc, _ := json.Marshal(domainCharge)
+		levent := events.Event{
+			ID:               xid,
+			LCOrganizationID: lcoid,
+			Type:             events.EventTypeInfo,
+			Action:           events.EventActionCreateCharge,
+			Payload:          sc,
+		}
+		em.On("CreateEvent", context.Background(), levent).Return(nil).Once()
+		em.On("ToEvent", context.Background(), lcoid, events.EventActionCreateCharge, events.EventTypeInfo, payload).Return(levent).Once()
+
+		id, err := s.CreateRecurrentCharge(context.Background(), "name", 10, lcoid, ChargeFrequencyYearly)
+
+		assert.Equal(t, "id", id)
+		assert.Nil(t, err)
 
 		assertExpectations(t)
 	})
