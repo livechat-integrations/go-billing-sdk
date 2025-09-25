@@ -18,6 +18,12 @@ import (
 	"github.com/livechat-integrations/go-billing-sdk/v2/pkg/events"
 )
 
+func closeDB(t *testing.T, db *stdsql.DB) {
+	// helper to satisfy errcheck on db.Close() in defers
+	t.Helper()
+	require.NoError(t, db.Close())
+}
+
 var now, _ = time.Parse("2006-01-02 15:04:05", "2025-04-02 15:04:05")
 
 type clockMock struct {
@@ -48,7 +54,6 @@ func TestNewSQLClient_CreateCharge(t *testing.T) {
 		cm := new(clockMock)
 		db, mock, err := sqlmock.New()
 		assert.NoError(t, err)
-		defer func() { require.NoError(t, db.Close()) }()
 		client := NewSQLClient(db, cm)
 		rawPayload, _ := json.Marshal(charge.Payload)
 		cm.On("Now").Return(now).Once()
@@ -91,15 +96,16 @@ func TestNewSQLClient_CreateCharge(t *testing.T) {
 		cm := new(clockMock)
 		db, mock, err := sqlmock.New()
 		assert.NoError(t, err)
-		defer db.Close()
 		client := NewSQLClient(db, cm)
 		rawPayload, _ := json.Marshal(charge.Payload)
 		cm.On("Now").Return(now).Once()
 		mock.ExpectExec(regexp.QuoteMeta("INSERT INTO charges(id, type, payload, lc_organization_id, created_at) VALUES (?, ?, ?, ?, ?)")).
 			WithArgs(charge.ID, string(charge.Type), rawPayload, charge.LCOrganizationID, now).
 			WillReturnError(assert.AnError)
+		mock.ExpectClose()
 		err = client.CreateCharge(context.Background(), charge)
 		assert.ErrorIs(t, err, assert.AnError)
+		require.NoError(t, db.Close())
 		assert.NoError(t, mock.ExpectationsWereMet())
 		cm.AssertExpectations(t)
 	})
@@ -112,7 +118,6 @@ func TestSQLClient_GetCharge(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		db, mock, err := sqlmock.New()
 		assert.NoError(t, err)
-		defer db.Close()
 		client := NewSQLClient(db, &clockMock{})
 
 		rows := sqlmock.NewRows([]string{"id", "lc_organization_id", "type", "payload", "created_at", "deleted_at"}).
@@ -120,6 +125,7 @@ func TestSQLClient_GetCharge(t *testing.T) {
 		mock.ExpectQuery(regexp.QuoteMeta("SELECT id, lc_organization_id, type, payload, created_at, deleted_at FROM charges WHERE id = ? AND deleted_at IS NULL")).
 			WithArgs(id).
 			WillReturnRows(rows)
+		mock.ExpectClose()
 
 		ch, err := client.GetCharge(ctx, id)
 		assert.NoError(t, err)
@@ -127,19 +133,21 @@ func TestSQLClient_GetCharge(t *testing.T) {
 		assert.Equal(t, "org1", ch.LCOrganizationID)
 		assert.Equal(t, billing.ChargeTypeRecurring, ch.Type)
 		assert.Nil(t, ch.CanceledAt)
+		require.NoError(t, db.Close())
 		assert.NoError(t, mock.ExpectationsWereMet())
 	})
 
 	t.Run("not found", func(t *testing.T) {
 		db, mock, err := sqlmock.New()
 		assert.NoError(t, err)
-		defer db.Close()
 		client := NewSQLClient(db, &clockMock{})
 		mock.ExpectQuery(regexp.QuoteMeta("SELECT id, lc_organization_id, type, payload, created_at, deleted_at FROM charges WHERE id = ? AND deleted_at IS NULL")).
 			WithArgs(id).
 			WillReturnError(stdsql.ErrNoRows)
+		mock.ExpectClose()
 		_, err = client.GetCharge(ctx, id)
 		assert.ErrorIs(t, err, billing.ErrChargeNotFound)
+		require.NoError(t, db.Close())
 		assert.NoError(t, mock.ExpectationsWereMet())
 	})
 
@@ -160,8 +168,8 @@ func TestSQLClient_GetCharge(t *testing.T) {
 func TestSQLClient_UpdateChargePayload(t *testing.T) {
 	ctx := context.Background()
 	id := "chg_2"
-	payload := livechat.BaseCharge{ID: id}
-	b, _ := json.Marshal(payload)
+	b, _ := json.Marshal(livechat.BaseCharge{ID: id})
+	payload := json.RawMessage(b)
 
 	t.Run("success", func(t *testing.T) {
 		db, mock, err := sqlmock.New()
@@ -528,5 +536,109 @@ func TestSQLClient_CreateEvent(t *testing.T) {
 		assert.ErrorIs(t, err, assert.AnError)
 		assert.NoError(t, mock.ExpectationsWereMet())
 		cm.AssertExpectations(t)
+	})
+}
+
+func TestSQLClient_DeleteSubscription(t *testing.T) {
+	ctx := context.Background()
+	lcID := "org1"
+	subID := "sub_1"
+	cm := new(clockMock)
+
+	t.Run("success", func(t *testing.T) {
+		db, mock, err := sqlmock.New()
+		assert.NoError(t, err)
+		defer db.Close()
+		client := NewSQLClient(db, cm)
+		cm.On("Now").Return(now).Once()
+		mock.ExpectExec(regexp.QuoteMeta("UPDATE subscriptions SET deleted_at = ? WHERE id = ? AND lc_organization_id = ?")).
+			WithArgs(now, subID, lcID).
+			WillReturnResult(sqlmock.NewResult(0, 1))
+		assert.NoError(t, client.DeleteSubscription(ctx, lcID, subID))
+		assert.NoError(t, mock.ExpectationsWereMet())
+		cm.AssertExpectations(t)
+	})
+
+	t.Run("not found", func(t *testing.T) {
+		db, mock, err := sqlmock.New()
+		assert.NoError(t, err)
+		defer db.Close()
+		client := NewSQLClient(db, cm)
+		cm.ExpectedCalls = nil
+		cm.On("Now").Return(now).Once()
+		mock.ExpectExec(regexp.QuoteMeta("UPDATE subscriptions SET deleted_at = ? WHERE id = ? AND lc_organization_id = ?")).
+			WithArgs(now, subID, lcID).
+			WillReturnResult(sqlmock.NewResult(0, 0))
+		err = client.DeleteSubscription(ctx, lcID, subID)
+		assert.ErrorIs(t, err, billing.ErrSubscriptionNotFound)
+		assert.NoError(t, mock.ExpectationsWereMet())
+		cm.AssertExpectations(t)
+	})
+
+	t.Run("db error", func(t *testing.T) {
+		db, mock, err := sqlmock.New()
+		assert.NoError(t, err)
+		defer db.Close()
+		client := NewSQLClient(db, cm)
+		cm.ExpectedCalls = nil
+		cm.On("Now").Return(now).Once()
+		mock.ExpectExec(regexp.QuoteMeta("UPDATE subscriptions SET deleted_at = ? WHERE id = ? AND lc_organization_id = ?")).
+			WithArgs(now, subID, lcID).
+			WillReturnError(assert.AnError)
+		err = client.DeleteSubscription(ctx, lcID, subID)
+		assert.ErrorIs(t, err, assert.AnError)
+		assert.NoError(t, mock.ExpectationsWereMet())
+		cm.AssertExpectations(t)
+	})
+}
+
+func TestSQLClient_GetChargesByStatuses(t *testing.T) {
+	ctx := context.Background()
+	statuses := []string{"active", "pending"}
+
+	t.Run("success", func(t *testing.T) {
+		db, mock, err := sqlmock.New()
+		assert.NoError(t, err)
+		defer db.Close()
+		client := NewSQLClient(db, &clockMock{})
+		cols := []string{"id", "lc_organization_id", "type", "payload", "created_at", "deleted_at"}
+		rows := sqlmock.NewRows(cols).
+			AddRow("chg1", "org1", string(billing.ChargeTypeRecurring), `{"status":"active"}`, now, nil)
+		// The IN clause will expand to (?,?)
+		mock.ExpectQuery(regexp.QuoteMeta("SELECT id, lc_organization_id, type, payload, created_at, deleted_at FROM charges WHERE JSON_UNQUOTE(JSON_EXTRACT(payload, '$.status')) IN (?, ?) AND deleted_at IS NULL")).
+			WithArgs(statuses[0], statuses[1]).
+			WillReturnRows(rows)
+		res, err := client.GetChargesByStatuses(ctx, statuses)
+		assert.NoError(t, err)
+		assert.Len(t, res, 1)
+		assert.Equal(t, "chg1", res[0].ID)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("empty", func(t *testing.T) {
+		db, mock, err := sqlmock.New()
+		assert.NoError(t, err)
+		defer db.Close()
+		client := NewSQLClient(db, &clockMock{})
+		mock.ExpectQuery(regexp.QuoteMeta("SELECT id, lc_organization_id, type, payload, created_at, deleted_at FROM charges WHERE JSON_UNQUOTE(JSON_EXTRACT(payload, '$.status')) IN (?, ?) AND deleted_at IS NULL")).
+			WithArgs(statuses[0], statuses[1]).
+			WillReturnRows(sqlmock.NewRows([]string{"id", "lc_organization_id", "type", "payload", "created_at", "deleted_at"}))
+		res, err := client.GetChargesByStatuses(ctx, statuses)
+		assert.NoError(t, err)
+		assert.Empty(t, res)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("db error", func(t *testing.T) {
+		db, mock, err := sqlmock.New()
+		assert.NoError(t, err)
+		defer db.Close()
+		client := NewSQLClient(db, &clockMock{})
+		mock.ExpectQuery(regexp.QuoteMeta("SELECT id, lc_organization_id, type, payload, created_at, deleted_at FROM charges WHERE JSON_UNQUOTE(JSON_EXTRACT(payload, '$.status')) IN (?, ?) AND deleted_at IS NULL")).
+			WithArgs(statuses[0], statuses[1]).
+			WillReturnError(assert.AnError)
+		_, err = client.GetChargesByStatuses(ctx, statuses)
+		assert.ErrorIs(t, err, assert.AnError)
+		assert.NoError(t, mock.ExpectationsWereMet())
 	})
 }

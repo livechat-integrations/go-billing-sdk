@@ -10,7 +10,6 @@ import (
 
 	"github.com/jmoiron/sqlx"
 
-	"github.com/livechat-integrations/go-billing-sdk/v2/internal/livechat"
 	"github.com/livechat-integrations/go-billing-sdk/v2/pkg/billing"
 	"github.com/livechat-integrations/go-billing-sdk/v2/pkg/events"
 )
@@ -24,7 +23,6 @@ type RealClock struct{}
 
 func (RealClock) Now() time.Time                         { return time.Now() }
 func (RealClock) After(d time.Duration) <-chan time.Time { return time.After(d) }
-
 
 type SQLCharge struct {
 	ID               string     `json:"id" db:"id"`
@@ -48,6 +46,9 @@ type SQLSubscription struct {
 	ChargeDeletedAt  *time.Time `json:"charge_deleted_at" db:"charge_deleted_at"`
 }
 
+// Make sure its Storage implementation
+var _ billing.Storage = (*SQLClient)(nil)
+
 type SQLClient struct {
 	db    *sqlx.DB
 	clock Clock
@@ -67,7 +68,7 @@ func (c *SQLClient) CreateCharge(ctx context.Context, ch billing.Charge) error {
 		return err
 	}
 
-res, err := c.db.ExecContext(ctx, "INSERT INTO charges(id, type, payload, lc_organization_id, created_at) VALUES (?, ?, ?, ?, ?)", ch.ID, string(ch.Type), rawPayload, ch.LCOrganizationID, c.clock.Now())
+	res, err := c.db.ExecContext(ctx, "INSERT INTO charges(id, type, payload, lc_organization_id, created_at) VALUES (?, ?, ?, ?, ?)", ch.ID, string(ch.Type), rawPayload, ch.LCOrganizationID, c.clock.Now())
 	if err != nil {
 		return fmt.Errorf("couldn't add new charge: %w", err)
 	}
@@ -90,13 +91,8 @@ func (c *SQLClient) GetCharge(ctx context.Context, id string) (*billing.Charge, 
 	return ToBillingCharge(&ch), nil
 }
 
-func (c *SQLClient) UpdateChargePayload(ctx context.Context, id string, payload livechat.BaseCharge) error {
-	rawPayload, err := json.Marshal(payload)
-	if err != nil {
-		return err
-	}
-
-	res, err := c.db.ExecContext(ctx, "UPDATE charges SET payload = ? WHERE id = ? AND deleted_at IS NULL", rawPayload, id)
+func (c *SQLClient) UpdateChargePayload(ctx context.Context, id string, payload json.RawMessage) error {
+	res, err := c.db.ExecContext(ctx, "UPDATE charges SET payload = ? WHERE id = ? AND deleted_at IS NULL", payload, id)
 	if err != nil {
 		return fmt.Errorf("couldn't update charge: %w", err)
 	}
@@ -104,7 +100,6 @@ func (c *SQLClient) UpdateChargePayload(ctx context.Context, id string, payload 
 	if affected == 0 {
 		return billing.ErrChargeNotFound
 	}
-
 	return nil
 }
 
@@ -196,9 +191,6 @@ func (c *SQLClient) CreateEvent(ctx context.Context, e events.Event) error {
 	return nil
 }
 
-
-
-
 func ToBillingSubscription(r *SQLSubscription) *billing.Subscription {
 	var canceledAt *time.Time
 	if r.DeletedAt != nil {
@@ -250,3 +242,40 @@ func ToBillingCharge(c *SQLCharge) *billing.Charge {
 	}
 }
 
+// GetChargesByStatuses returns charges with JSON payload status in the provided list.
+func (c *SQLClient) GetChargesByStatuses(ctx context.Context, statuses []string) ([]billing.Charge, error) {
+	if len(statuses) == 0 {
+		return []billing.Charge{}, nil
+	}
+	query, args, err := sqlx.In("SELECT id, lc_organization_id, type, payload, created_at, deleted_at FROM charges WHERE JSON_UNQUOTE(JSON_EXTRACT(payload, '$.status')) IN (?) AND deleted_at IS NULL", statuses)
+	if err != nil {
+		return nil, fmt.Errorf("couldn't build query: %w", err)
+	}
+	// Ensure placeholders match driver; for mysql it's already '?'
+	query = c.db.Rebind(query)
+	var rows []*SQLCharge
+	if err := c.db.SelectContext(ctx, &rows, query, args...); err != nil {
+		return nil, fmt.Errorf("couldn't select charges from DB: %w", err)
+	}
+	if len(rows) == 0 {
+		return []billing.Charge{}, nil
+	}
+	var charges []billing.Charge
+	for _, r := range rows {
+		charges = append(charges, *ToBillingCharge(r))
+	}
+	return charges, nil
+}
+
+// DeleteSubscription marks subscription as deleted by its id and organization id.
+func (c *SQLClient) DeleteSubscription(ctx context.Context, lcID, subID string) error {
+	res, err := c.db.ExecContext(ctx, "UPDATE subscriptions SET deleted_at = ? WHERE id = ? AND lc_organization_id = ?", c.clock.Now(), subID, lcID)
+	if err != nil {
+		return fmt.Errorf("couldn't delete subsctiption: %w", err)
+	}
+	affected, _ := res.RowsAffected()
+	if affected == 0 {
+		return billing.ErrSubscriptionNotFound
+	}
+	return nil
+}

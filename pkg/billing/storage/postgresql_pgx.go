@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -18,6 +19,9 @@ type PGXConn interface {
 	Query(context.Context, string, ...interface{}) (pgx.Rows, error)
 	QueryRow(context.Context, string, ...interface{}) pgx.Row
 }
+
+// Make sure its Storage implementation
+var _ billing.Storage = (*PostgresqlPGX)(nil)
 
 type PostgresqlPGX struct {
 	queries *sqlc.Queries
