@@ -110,7 +110,7 @@ func (s *Service) TopUp(ctx context.Context, topUp TopUp) (string, error) {
 			Err:   fmt.Errorf("no existing top up in database"),
 		})
 	}
-	if !(dbTopUp.Status == TopUpStatusSuccess || dbTopUp.Status == TopUpStatusActive) {
+	if dbTopUp.Status != TopUpStatusSuccess && dbTopUp.Status != TopUpStatusActive {
 		event.Type = events.EventTypeError
 		return "", s.eventService.ToError(ctx, events.ToErrorParams{
 			Event: event,
