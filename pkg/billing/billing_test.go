@@ -676,6 +676,7 @@ func TestService_CreateSubscription(t *testing.T) {
 			LCOrganizationID: lcoid,
 			PlanName:         "super",
 		}
+		sm.On("GetCharge", ctx, "id").Return(&charge, nil).Once()
 		sm.On("GetSubscriptionsByOrganizationID", ctx, lcoid).Return([]Subscription{sub}, nil).Once()
 		payload := map[string]interface{}{"planName": "super", "chargeID": "id"}
 		sc, _ := json.Marshal(payload)
@@ -703,6 +704,10 @@ func TestService_CreateSubscription(t *testing.T) {
 	})
 
 	t.Run("error plan not found", func(t *testing.T) {
+		charge := Charge{
+			ID: "xyz",
+		}
+		sm.On("GetCharge", ctx, "xyz").Return(&charge, nil).Once()
 		sm.On("GetSubscriptionsByOrganizationID", ctx, lcoid).Return([]Subscription{}, nil).Once()
 		payload := map[string]interface{}{"planName": "notFound", "chargeID": "xyz"}
 		sc, _ := json.Marshal(payload)
@@ -727,51 +732,23 @@ func TestService_CreateSubscription(t *testing.T) {
 	})
 
 	t.Run("error getting charge", func(t *testing.T) {
-		sm.On("GetSubscriptionsByOrganizationID", ctx, lcoid).Return([]Subscription{}, nil).Once()
 		sm.On("GetCharge", ctx, "id").Return(nil, assert.AnError).Once()
-		payload := map[string]interface{}{"planName": "super", "chargeID": "id"}
-		sc, _ := json.Marshal(payload)
-		levent := events.Event{
-			ID:               xid,
-			LCOrganizationID: lcoid,
-			Type:             events.EventTypeError,
-			Action:           events.EventActionCreateSubscription,
-			Payload:          sc,
-		}
-		em.On("ToEvent", context.Background(), lcoid, events.EventActionCreateSubscription, events.EventTypeInfo, payload).Return(levent).Once()
-		em.On("ToError", context.Background(), events.ToErrorParams{
-			Event: levent,
-			Err:   fmt.Errorf("failed to get charge by organization id: %w", assert.AnError),
-		}).Return(assert.AnError).Once()
 
 		err := s.CreateSubscription(context.Background(), lcoid, "id", "super")
 
 		assert.ErrorIs(t, err, assert.AnError)
+		assert.Contains(t, err.Error(), "failed to get charge")
 
 		assertExpectations(t)
 	})
 
 	t.Run("error charge is nil", func(t *testing.T) {
-		sm.On("GetSubscriptionsByOrganizationID", ctx, lcoid).Return([]Subscription{}, nil).Once()
 		sm.On("GetCharge", ctx, "id").Return(nil, nil).Once()
-		payload := map[string]interface{}{"planName": "super", "chargeID": "id"}
-		sc, _ := json.Marshal(payload)
-		levent := events.Event{
-			ID:               xid,
-			LCOrganizationID: lcoid,
-			Type:             events.EventTypeError,
-			Action:           events.EventActionCreateSubscription,
-			Payload:          sc,
-		}
-		em.On("ToEvent", context.Background(), lcoid, events.EventActionCreateSubscription, events.EventTypeInfo, payload).Return(levent).Once()
-		em.On("ToError", context.Background(), events.ToErrorParams{
-			Event: levent,
-			Err:   fmt.Errorf("charge not found"),
-		}).Return(assert.AnError).Once()
 
 		err := s.CreateSubscription(context.Background(), lcoid, "id", "super")
 
-		assert.ErrorIs(t, err, assert.AnError)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "charge not found")
 
 		assertExpectations(t)
 	})

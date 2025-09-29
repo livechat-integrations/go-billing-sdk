@@ -37,7 +37,6 @@ type ServiceInterface interface {
 
 	// Trial methods
 	CreateRecurrentChargeWithTrial(ctx context.Context, name string, price int, lcOrganizationID string, chargeFrequency int) (string, error)
-	CreateTrialSubscription(ctx context.Context, lcOrganizationID string, chargeID string, planName string) error
 	HasUsedTrial(ctx context.Context, lcOrganizationID string) (bool, error)
 }
 
@@ -208,7 +207,44 @@ func (s *Service) GetSubscriptionsByOrganizationID(ctx context.Context, lcOrgani
 }
 
 func (s *Service) CreateSubscription(ctx context.Context, lcOrganizationID string, chargeID string, planName string) error {
-	event := s.eventService.ToEvent(ctx, lcOrganizationID, events.EventActionCreateSubscription, events.EventTypeInfo, map[string]interface{}{"planName": planName, "chargeID": chargeID})
+	// Get charge first to determine if it's a trial
+	charge, err := s.storage.GetCharge(ctx, chargeID)
+	if err != nil {
+		return fmt.Errorf("failed to get charge: %w", err)
+	}
+
+	if charge == nil {
+		return fmt.Errorf("charge not found")
+	}
+
+	// Check if this is a trial charge
+	isTrial := isTrialCharge(charge)
+
+	// Create event with trial metadata if applicable
+	eventPayload := map[string]interface{}{"planName": planName, "chargeID": chargeID}
+	if isTrial {
+		eventPayload["trial"] = true
+	}
+	event := s.eventService.ToEvent(ctx, lcOrganizationID, events.EventActionCreateSubscription, events.EventTypeInfo, eventPayload)
+
+	// If trial, check if trial already used
+	if isTrial {
+		hasUsed, err := s.storage.HasUsedTrial(ctx, lcOrganizationID)
+		if err != nil {
+			event.Type = events.EventTypeError
+			return s.eventService.ToError(ctx, events.ToErrorParams{
+				Event: event,
+				Err:   fmt.Errorf("failed to check trial usage: %w", err),
+			})
+		}
+		if hasUsed {
+			event.Type = events.EventTypeError
+			return s.eventService.ToError(ctx, events.ToErrorParams{
+				Event: event,
+				Err:   fmt.Errorf("trial already used for this organization"),
+			})
+		}
+	}
 
 	dbSubscriptions, err := s.storage.GetSubscriptionsByOrganizationID(ctx, lcOrganizationID)
 	if err != nil {
@@ -220,7 +256,7 @@ func (s *Service) CreateSubscription(ctx context.Context, lcOrganizationID strin
 	}
 
 	for _, sub := range dbSubscriptions {
-		if sub.Charge.ID == chargeID {
+		if sub.Charge != nil && sub.Charge.ID == chargeID {
 			event.SetPayload(map[string]interface{}{"planName": planName, "chargeID": chargeID, "result": "subscription already exists"})
 			_ = s.eventService.CreateEvent(ctx, event)
 			return nil
@@ -236,23 +272,6 @@ func (s *Service) CreateSubscription(ctx context.Context, lcOrganizationID strin
 		})
 	}
 
-	charge, err := s.storage.GetCharge(ctx, chargeID)
-	if err != nil {
-		event.Type = events.EventTypeError
-		return s.eventService.ToError(ctx, events.ToErrorParams{
-			Event: event,
-			Err:   fmt.Errorf("failed to get charge by organization id: %w", err),
-		})
-	}
-
-	if charge == nil {
-		event.Type = events.EventTypeError
-		return s.eventService.ToError(ctx, events.ToErrorParams{
-			Event: event,
-			Err:   fmt.Errorf("charge not found"),
-		})
-	}
-
 	if err = s.storage.CreateSubscription(ctx, Subscription{
 		ID:               s.idProvider.GenerateId(),
 		Charge:           charge,
@@ -264,6 +283,14 @@ func (s *Service) CreateSubscription(ctx context.Context, lcOrganizationID strin
 			Event: event,
 			Err:   fmt.Errorf("failed to create subscription in database: %w", err),
 		})
+	}
+
+	// If trial, record trial usage
+	if isTrial {
+		if err = s.storage.RecordTrialUsage(ctx, lcOrganizationID); err != nil {
+			// Log warning but don't fail - subscription is already created
+			fmt.Printf("Warning: failed to record trial usage for org %s: %v\n", lcOrganizationID, err)
+		}
 	}
 
 	event.SetPayload(charge)
@@ -430,102 +457,18 @@ func (s *Service) DeleteSubscription(ctx context.Context, lcOrganizationID, subs
 	return nil
 }
 
-func (s *Service) CreateTrialSubscription(ctx context.Context, lcOrganizationID string, chargeID string, planName string) error {
-	event := s.eventService.ToEvent(ctx, lcOrganizationID, events.EventActionCreateSubscription, events.EventTypeInfo,
-		map[string]interface{}{"planName": planName, "chargeID": chargeID, "trial": true})
-
-	// Check if trial already used
-	hasUsed, err := s.storage.HasUsedTrial(ctx, lcOrganizationID)
-	if err != nil {
-		event.Type = events.EventTypeError
-		return s.eventService.ToError(ctx, events.ToErrorParams{
-			Event: event,
-			Err:   fmt.Errorf("failed to check trial usage: %w", err),
-		})
-	}
-	if hasUsed {
-		event.Type = events.EventTypeError
-		return s.eventService.ToError(ctx, events.ToErrorParams{
-			Event: event,
-			Err:   fmt.Errorf("trial already used for this organization"),
-		})
-	}
-
-	// Check for existing subscriptions with this charge
-	dbSubscriptions, err := s.storage.GetSubscriptionsByOrganizationID(ctx, lcOrganizationID)
-	if err != nil {
-		event.Type = events.EventTypeError
-		return s.eventService.ToError(ctx, events.ToErrorParams{
-			Event: event,
-			Err:   fmt.Errorf("failed to get subscriptions by organization id: %w", err),
-		})
-	}
-
-	for _, sub := range dbSubscriptions {
-		if sub.Charge != nil && sub.Charge.ID == chargeID {
-			event.SetPayload(map[string]interface{}{"planName": planName, "chargeID": chargeID, "result": "subscription already exists"})
-			_ = s.eventService.CreateEvent(ctx, event)
-			return nil
-		}
-	}
-
-	// Get plan details
-	plan := s.plans.GetPlan(planName)
-	if plan == nil {
-		event.Type = events.EventTypeError
-		return s.eventService.ToError(ctx, events.ToErrorParams{
-			Event: event,
-			Err:   fmt.Errorf("plan not found"),
-		})
-	}
-
-	// Get charge
-	charge, err := s.storage.GetCharge(ctx, chargeID)
-	if err != nil {
-		event.Type = events.EventTypeError
-		return s.eventService.ToError(ctx, events.ToErrorParams{
-			Event: event,
-			Err:   fmt.Errorf("failed to get charge by organization id: %w", err),
-		})
-	}
-
-	if charge == nil {
-		event.Type = events.EventTypeError
-		return s.eventService.ToError(ctx, events.ToErrorParams{
-			Event: event,
-			Err:   fmt.Errorf("charge not found"),
-		})
-	}
-
-	// Create subscription
-	if err = s.storage.CreateSubscription(ctx, Subscription{
-		ID:               s.idProvider.GenerateId(),
-		Charge:           charge,
-		LCOrganizationID: lcOrganizationID,
-		PlanName:         planName,
-	}); err != nil {
-		event.Type = events.EventTypeError
-		return s.eventService.ToError(ctx, events.ToErrorParams{
-			Event: event,
-			Err:   fmt.Errorf("failed to create subscription in database: %w", err),
-		})
-	}
-
-	// Record trial usage
-	if err = s.storage.RecordTrialUsage(ctx, lcOrganizationID); err != nil {
-		// Log warning but don't fail - subscription is already created
-		// This is a non-critical error as the trial is already active
-		fmt.Printf("Warning: failed to record trial usage for org %s: %v\n", lcOrganizationID, err)
-	}
-
-	event.SetPayload(charge)
-	_ = s.eventService.CreateEvent(ctx, event)
-
-	return nil
-}
-
 func (s *Service) HasUsedTrial(ctx context.Context, lcOrganizationID string) (bool, error) {
 	return s.storage.HasUsedTrial(ctx, lcOrganizationID)
+}
+
+func isTrialCharge(charge *Charge) bool {
+	if charge == nil {
+		return false
+	}
+
+	var lcCharge livechat.RecurrentCharge
+	_ = json.Unmarshal(charge.Payload, &lcCharge)
+	return lcCharge.TrialDays > 0 || lcCharge.TrialEndsAt != nil
 }
 
 func (s *Service) cancelChange(ctx context.Context, charge Charge) error {

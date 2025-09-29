@@ -97,11 +97,6 @@ func (b *billingMock) CreateRecurrentChargeWithTrial(ctx context.Context, name s
 	return args.String(0), args.Error(1)
 }
 
-func (b *billingMock) CreateTrialSubscription(ctx context.Context, lcOrganizationID string, chargeID string, planName string) error {
-	args := b.Called(ctx, lcOrganizationID, chargeID, planName)
-	return args.Error(0)
-}
-
 func (b *billingMock) HasUsedTrial(ctx context.Context, lcOrganizationID string) (bool, error) {
 	args := b.Called(ctx, lcOrganizationID)
 	return args.Bool(0), args.Error(1)
