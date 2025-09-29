@@ -62,6 +62,11 @@ func (b *billingMock) CreateSubscription(ctx context.Context, lcOrganizationID s
 	return args.Error(0)
 }
 
+func (b *billingMock) CreateRecurrentCharge(ctx context.Context, name string, price int, lcOrganizationID string, chargeFrequency int) (string, error) {
+	args := b.Called(ctx, name, price, lcOrganizationID, chargeFrequency)
+	return args.String(0), args.Error(1)
+}
+
 func (b *billingMock) GetChargesByOrganizationID(ctx context.Context, lcOrganizationID string) ([]Charge, error) {
 	args := b.Called(ctx, lcOrganizationID)
 	if args.Get(0) == nil {
@@ -85,6 +90,21 @@ func (b *billingMock) GetSubscriptionsByOrganizationID(ctx context.Context, lcOr
 	}
 
 	return args.Get(0).([]Subscription), nil
+}
+
+func (b *billingMock) CreateRecurrentChargeWithTrial(ctx context.Context, name string, price int, lcOrganizationID string, chargeFrequency int) (string, error) {
+	args := b.Called(ctx, name, price, lcOrganizationID, chargeFrequency)
+	return args.String(0), args.Error(1)
+}
+
+func (b *billingMock) CreateTrialSubscription(ctx context.Context, lcOrganizationID string, chargeID string, planName string) error {
+	args := b.Called(ctx, lcOrganizationID, chargeID, planName)
+	return args.Error(0)
+}
+
+func (b *billingMock) HasUsedTrial(ctx context.Context, lcOrganizationID string) (bool, error) {
+	args := b.Called(ctx, lcOrganizationID)
+	return args.Bool(0), args.Error(1)
 }
 
 func TestNewHandler(t *testing.T) {

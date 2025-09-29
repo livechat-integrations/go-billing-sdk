@@ -251,6 +251,16 @@ func (m *storageMock) DeleteSubscription(ctx context.Context, lcID, subID string
 	return args.Error(0)
 }
 
+func (m *storageMock) RecordTrialUsage(ctx context.Context, lcOrganizationID string) error {
+	args := m.Called(ctx, lcOrganizationID)
+	return args.Error(0)
+}
+
+func (m *storageMock) HasUsedTrial(ctx context.Context, lcOrganizationID string) (bool, error) {
+	args := m.Called(ctx, lcOrganizationID)
+	return args.Bool(0), args.Error(1)
+}
+
 func TestNewService(t *testing.T) {
 	t.Run("NewService", func(t *testing.T) {
 		newService := NewService(nil, nil, nil, "labs", func(ctx context.Context) (string, error) { return "", nil }, &storageMock{}, nil, "returnURL", "masterOrgID")

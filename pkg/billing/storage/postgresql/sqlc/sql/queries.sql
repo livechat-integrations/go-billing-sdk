@@ -67,3 +67,14 @@ AND deleted_at IS NULL;
 UPDATE subscriptions
 SET deleted_at = NOW()
 WHERE id = $1 and lc_organization_id = $2;
+
+-- name: CreateTrialUsage :exec
+INSERT INTO trial_usage (lc_organization_id)
+VALUES ($1)
+ON CONFLICT (lc_organization_id) DO NOTHING;
+
+-- name: HasTrialUsage :one
+SELECT EXISTS(
+    SELECT 1 FROM trial_usage
+    WHERE lc_organization_id = $1
+);
