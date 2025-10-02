@@ -62,6 +62,13 @@ func NewSQLClient(client *stdsql.DB, clock Clock) *SQLClient {
 	}
 }
 
+func NewSQLClientWithSQLX(db *sqlx.DB, clock Clock) *SQLClient {
+	return &SQLClient{
+		db:    db,
+		clock: clock,
+	}
+}
+
 func (c *SQLClient) CreateCharge(ctx context.Context, ch billing.Charge) error {
 	rawPayload, err := json.Marshal(ch.Payload)
 	if err != nil {
