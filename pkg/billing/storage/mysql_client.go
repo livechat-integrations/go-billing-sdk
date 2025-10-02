@@ -279,3 +279,28 @@ func (c *SQLClient) DeleteSubscription(ctx context.Context, lcID, subID string) 
 	}
 	return nil
 }
+
+// RecordTrialUsage records that an organization has used their trial
+func (c *SQLClient) RecordTrialUsage(ctx context.Context, lcOrganizationID string) error {
+	_, err := c.db.ExecContext(ctx, `
+		INSERT IGNORE INTO trial_usage (lc_organization_id)
+		VALUES (?)`,
+		lcOrganizationID)
+	if err != nil {
+		return fmt.Errorf("couldn't record trial usage: %w", err)
+	}
+	return nil
+}
+
+// HasUsedTrial checks if an organization has already used their trial
+func (c *SQLClient) HasUsedTrial(ctx context.Context, lcOrganizationID string) (bool, error) {
+	var count int
+	err := c.db.GetContext(ctx, &count, `
+		SELECT COUNT(*) FROM trial_usage
+		WHERE lc_organization_id = ?`,
+		lcOrganizationID)
+	if err != nil {
+		return false, fmt.Errorf("couldn't check trial usage: %w", err)
+	}
+	return count > 0, nil
+}

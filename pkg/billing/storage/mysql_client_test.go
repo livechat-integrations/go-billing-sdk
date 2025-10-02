@@ -18,12 +18,6 @@ import (
 	"github.com/livechat-integrations/go-billing-sdk/v2/pkg/events"
 )
 
-func closeDB(t *testing.T, db *stdsql.DB) {
-	// helper to satisfy errcheck on db.Close() in defers
-	t.Helper()
-	require.NoError(t, db.Close())
-}
-
 var now, _ = time.Parse("2006-01-02 15:04:05", "2025-04-02 15:04:05")
 
 type clockMock struct {

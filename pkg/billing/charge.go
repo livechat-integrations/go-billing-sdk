@@ -64,6 +64,16 @@ func (c Subscription) IsActive() bool {
 		return false
 	}
 
+	// During trial period: has TrialEndsAt and no CurrentChargeAt yet
+	if p.TrialEndsAt != nil && p.CurrentChargeAt == nil {
+		// Active if still in trial period
+		if p.TrialEndsAt.After(time.Now()) {
+			return true
+		}
+		return false
+	}
+
+	// For regular subscriptions: NextChargeAt is set but CurrentChargeAt is nil means pending/not active
 	if p.NextChargeAt != nil && p.CurrentChargeAt == nil {
 		return false
 	}
@@ -71,6 +81,19 @@ func (c Subscription) IsActive() bool {
 	return c.Charge.CanceledAt == nil &&
 		p.NextChargeAt.Add(RetentionPeriod).After(time.Now()) &&
 		(p.Status == "active" || p.Status == "past_due")
+}
+
+func (c Subscription) IsTrialActive() bool {
+	if c.Charge == nil {
+		return false
+	}
+
+	var p livechat.RecurrentCharge
+	_ = json.Unmarshal(c.Charge.Payload, &p)
+
+	return p.TrialEndsAt != nil &&
+		p.TrialEndsAt.After(time.Now()) &&
+		p.CurrentChargeAt == nil
 }
 
 func GetSyncValidStatuses() []string {

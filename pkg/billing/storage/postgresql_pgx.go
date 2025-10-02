@@ -28,7 +28,9 @@ type PostgresqlPGX struct {
 }
 
 func NewPostgresqlPGX(conn PGXConn) *PostgresqlPGX {
-	return &PostgresqlPGX{queries: sqlc.New(conn)}
+	return &PostgresqlPGX{
+		queries: sqlc.New(conn),
+	}
 }
 
 func (r *PostgresqlPGX) CreateCharge(ctx context.Context, c billing.Charge) error {
@@ -179,4 +181,12 @@ func (r *PostgresqlPGX) DeleteSubscription(ctx context.Context, lcID, subID stri
 		ID:               subID,
 		LcOrganizationID: lcID,
 	})
+}
+
+func (r *PostgresqlPGX) RecordTrialUsage(ctx context.Context, lcOrganizationID string) error {
+	return r.queries.CreateTrialUsage(ctx, lcOrganizationID)
+}
+
+func (r *PostgresqlPGX) HasUsedTrial(ctx context.Context, lcOrganizationID string) (bool, error) {
+	return r.queries.HasTrialUsage(ctx, lcOrganizationID)
 }

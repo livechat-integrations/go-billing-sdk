@@ -26,4 +26,8 @@ type Storage interface {
 	DeleteSubscription(ctx context.Context, lcID, subID string) error
 
 	CreateEvent(ctx context.Context, event events.Event) error
+
+	// Trial management
+	RecordTrialUsage(ctx context.Context, lcOrganizationID string) error
+	HasUsedTrial(ctx context.Context, lcOrganizationID string) (bool, error)
 }
