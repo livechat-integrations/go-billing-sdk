@@ -3,6 +3,7 @@ package billing
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -475,6 +476,10 @@ func (s *Service) cancelChange(ctx context.Context, charge Charge) error {
 	event := s.eventService.ToEvent(ctx, charge.LCOrganizationID, events.EventActionForceCancelCharge, events.EventTypeInfo, map[string]interface{}{"id": charge.ID})
 	cancelledCharge, err := s.billingAPI.CancelRecurrentCharge(ctx, charge.ID)
 	if err != nil {
+		if errors.Is(err, livechat.ErrUnprocessableEntity) {
+			return s.storage.DeleteCharge(ctx, charge.ID)
+		}
+
 		event.Type = events.EventTypeError
 		return s.eventService.ToError(ctx, events.ToErrorParams{
 			Event: event,

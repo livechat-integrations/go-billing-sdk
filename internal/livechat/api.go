@@ -12,6 +12,8 @@ import (
 	"github.com/livechat-integrations/go-billing-sdk/v2/common"
 )
 
+var ErrUnprocessableEntity = fmt.Errorf("unprocessable entity")
+
 const BillingAPIBaseURL = "https://billing.livechatinc.com"
 
 const (
@@ -251,6 +253,9 @@ func (a *Api) call(ctx context.Context, method, path string, body interface{}) (
 
 	if resp.StatusCode == 404 {
 		return nil, nil
+	}
+	if resp.StatusCode == 422 {
+		return nil, ErrUnprocessableEntity
 	}
 	if resp.StatusCode >= 300 {
 		var e []byte
