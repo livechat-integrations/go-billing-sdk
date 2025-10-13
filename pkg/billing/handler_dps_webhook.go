@@ -79,7 +79,7 @@ func (h *Handler) HandleDPSWebhook(ctx context.Context, req DPSWebhookRequest) e
 				Err:   fmt.Errorf("delete subscription with charge: %w", err),
 			})
 		}
-	case "payment_activated", "payment_collected":
+	case "payment_activated", "payment_collected", "payment_trialstarted":
 		event.Action = events.EventActionDPSWebhookPayment
 
 		if err := h.billing.SyncRecurrentCharge(ctx, req.LCOrganizationID, chargeID); err != nil {
