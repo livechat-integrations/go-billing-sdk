@@ -114,9 +114,9 @@ func TestSQLClient_GetCharge(t *testing.T) {
 		assert.NoError(t, err)
 		client := NewSQLClient(db, &clockMock{})
 
-		rows := sqlmock.NewRows([]string{"id", "lc_organization_id", "type", "payload", "created_at", "deleted_at"}).
-			AddRow(id, "org1", string(billing.ChargeTypeRecurring), `{"foo":"bar"}`, now, nil)
-		mock.ExpectQuery(regexp.QuoteMeta("SELECT id, lc_organization_id, type, payload, created_at, deleted_at FROM charges WHERE id = ? AND deleted_at IS NULL")).
+		rows := sqlmock.NewRows([]string{"id", "lc_organization_id", "type", "payload", "created_at", "deleted_at", "sync_error_count", "last_sync_error_at"}).
+			AddRow(id, "org1", string(billing.ChargeTypeRecurring), `{"foo":"bar"}`, now, nil, 0, nil)
+		mock.ExpectQuery(regexp.QuoteMeta("SELECT id, lc_organization_id, type, payload, created_at, deleted_at, sync_error_count, last_sync_error_at FROM charges WHERE id = ? AND deleted_at IS NULL")).
 			WithArgs(id).
 			WillReturnRows(rows)
 		mock.ExpectClose()
@@ -135,7 +135,7 @@ func TestSQLClient_GetCharge(t *testing.T) {
 		db, mock, err := sqlmock.New()
 		assert.NoError(t, err)
 		client := NewSQLClient(db, &clockMock{})
-		mock.ExpectQuery(regexp.QuoteMeta("SELECT id, lc_organization_id, type, payload, created_at, deleted_at FROM charges WHERE id = ? AND deleted_at IS NULL")).
+		mock.ExpectQuery(regexp.QuoteMeta("SELECT id, lc_organization_id, type, payload, created_at, deleted_at, sync_error_count, last_sync_error_at FROM charges WHERE id = ? AND deleted_at IS NULL")).
 			WithArgs(id).
 			WillReturnError(stdsql.ErrNoRows)
 		mock.ExpectClose()
@@ -150,7 +150,7 @@ func TestSQLClient_GetCharge(t *testing.T) {
 		assert.NoError(t, err)
 		defer db.Close()
 		client := NewSQLClient(db, &clockMock{})
-		mock.ExpectQuery(regexp.QuoteMeta("SELECT id, lc_organization_id, type, payload, created_at, deleted_at FROM charges WHERE id = ? AND deleted_at IS NULL")).
+		mock.ExpectQuery(regexp.QuoteMeta("SELECT id, lc_organization_id, type, payload, created_at, deleted_at, sync_error_count, last_sync_error_at FROM charges WHERE id = ? AND deleted_at IS NULL")).
 			WithArgs(id).
 			WillReturnError(assert.AnError)
 		_, err = client.GetCharge(ctx, id)
@@ -428,11 +428,11 @@ func TestSQLClient_GetChargesByOrganizationID(t *testing.T) {
 		assert.NoError(t, err)
 		defer db.Close()
 		client := NewSQLClient(db, &clockMock{})
-		cols := []string{"id", "lc_organization_id", "type", "payload", "created_at", "deleted_at"}
+		cols := []string{"id", "lc_organization_id", "type", "payload", "created_at", "deleted_at", "sync_error_count", "last_sync_error_at"}
 		rows := sqlmock.NewRows(cols).
-			AddRow("chg1", lcID, string(billing.ChargeTypeRecurring), `{"x":1}`, now, nil).
-			AddRow("chg2", lcID, string(billing.ChargeTypeRecurring), `{"y":2}`, now, &now)
-		mock.ExpectQuery(regexp.QuoteMeta("SELECT id, lc_organization_id, type, payload, created_at, deleted_at FROM charges WHERE lc_organization_id = ?")).
+			AddRow("chg1", lcID, string(billing.ChargeTypeRecurring), `{"x":1}`, now, nil, 0, nil).
+			AddRow("chg2", lcID, string(billing.ChargeTypeRecurring), `{"y":2}`, now, &now, 0, nil)
+		mock.ExpectQuery(regexp.QuoteMeta("SELECT id, lc_organization_id, type, payload, created_at, deleted_at, sync_error_count, last_sync_error_at FROM charges WHERE lc_organization_id = ?")).
 			WithArgs(lcID).
 			WillReturnRows(rows)
 		chs, err := client.GetChargesByOrganizationID(ctx, lcID)
@@ -447,9 +447,9 @@ func TestSQLClient_GetChargesByOrganizationID(t *testing.T) {
 		assert.NoError(t, err)
 		defer db.Close()
 		client := NewSQLClient(db, &clockMock{})
-		cols := []string{"id", "lc_organization_id", "type", "payload", "created_at", "deleted_at"}
+		cols := []string{"id", "lc_organization_id", "type", "payload", "created_at", "deleted_at", "sync_error_count", "last_sync_error_at"}
 		rows := sqlmock.NewRows(cols)
-		mock.ExpectQuery(regexp.QuoteMeta("SELECT id, lc_organization_id, type, payload, created_at, deleted_at FROM charges WHERE lc_organization_id = ?")).
+		mock.ExpectQuery(regexp.QuoteMeta("SELECT id, lc_organization_id, type, payload, created_at, deleted_at, sync_error_count, last_sync_error_at FROM charges WHERE lc_organization_id = ?")).
 			WithArgs(lcID).
 			WillReturnRows(rows)
 		chs, err := client.GetChargesByOrganizationID(ctx, lcID)
@@ -463,7 +463,7 @@ func TestSQLClient_GetChargesByOrganizationID(t *testing.T) {
 		assert.NoError(t, err)
 		defer db.Close()
 		client := NewSQLClient(db, &clockMock{})
-		mock.ExpectQuery(regexp.QuoteMeta("SELECT id, lc_organization_id, type, payload, created_at, deleted_at FROM charges WHERE lc_organization_id = ?")).
+		mock.ExpectQuery(regexp.QuoteMeta("SELECT id, lc_organization_id, type, payload, created_at, deleted_at, sync_error_count, last_sync_error_at FROM charges WHERE lc_organization_id = ?")).
 			WithArgs(lcID).
 			WillReturnError(assert.AnError)
 		_, err = client.GetChargesByOrganizationID(ctx, lcID)
@@ -595,11 +595,11 @@ func TestSQLClient_GetChargesByStatuses(t *testing.T) {
 		assert.NoError(t, err)
 		defer db.Close()
 		client := NewSQLClient(db, &clockMock{})
-		cols := []string{"id", "lc_organization_id", "type", "payload", "created_at", "deleted_at"}
+		cols := []string{"id", "lc_organization_id", "type", "payload", "created_at", "deleted_at", "sync_error_count", "last_sync_error_at"}
 		rows := sqlmock.NewRows(cols).
-			AddRow("chg1", "org1", string(billing.ChargeTypeRecurring), `{"status":"active"}`, now, nil)
+			AddRow("chg1", "org1", string(billing.ChargeTypeRecurring), `{"status":"active"}`, now, nil, 0, nil)
 		// The IN clause will expand to (?,?)
-		mock.ExpectQuery(regexp.QuoteMeta("SELECT id, lc_organization_id, type, payload, created_at, deleted_at FROM charges WHERE JSON_UNQUOTE(JSON_EXTRACT(payload, '$.status')) IN (?, ?) AND deleted_at IS NULL")).
+		mock.ExpectQuery(regexp.QuoteMeta("SELECT id, lc_organization_id, type, payload, created_at, deleted_at, sync_error_count, last_sync_error_at FROM charges WHERE JSON_UNQUOTE(JSON_EXTRACT(payload, '$.status')) IN (?, ?) AND deleted_at IS NULL")).
 			WithArgs(statuses[0], statuses[1]).
 			WillReturnRows(rows)
 		res, err := client.GetChargesByStatuses(ctx, statuses)
@@ -614,9 +614,9 @@ func TestSQLClient_GetChargesByStatuses(t *testing.T) {
 		assert.NoError(t, err)
 		defer db.Close()
 		client := NewSQLClient(db, &clockMock{})
-		mock.ExpectQuery(regexp.QuoteMeta("SELECT id, lc_organization_id, type, payload, created_at, deleted_at FROM charges WHERE JSON_UNQUOTE(JSON_EXTRACT(payload, '$.status')) IN (?, ?) AND deleted_at IS NULL")).
+		mock.ExpectQuery(regexp.QuoteMeta("SELECT id, lc_organization_id, type, payload, created_at, deleted_at, sync_error_count, last_sync_error_at FROM charges WHERE JSON_UNQUOTE(JSON_EXTRACT(payload, '$.status')) IN (?, ?) AND deleted_at IS NULL")).
 			WithArgs(statuses[0], statuses[1]).
-			WillReturnRows(sqlmock.NewRows([]string{"id", "lc_organization_id", "type", "payload", "created_at", "deleted_at"}))
+			WillReturnRows(sqlmock.NewRows([]string{"id", "lc_organization_id", "type", "payload", "created_at", "deleted_at", "sync_error_count", "last_sync_error_at"}))
 		res, err := client.GetChargesByStatuses(ctx, statuses)
 		assert.NoError(t, err)
 		assert.Empty(t, res)
@@ -628,7 +628,7 @@ func TestSQLClient_GetChargesByStatuses(t *testing.T) {
 		assert.NoError(t, err)
 		defer db.Close()
 		client := NewSQLClient(db, &clockMock{})
-		mock.ExpectQuery(regexp.QuoteMeta("SELECT id, lc_organization_id, type, payload, created_at, deleted_at FROM charges WHERE JSON_UNQUOTE(JSON_EXTRACT(payload, '$.status')) IN (?, ?) AND deleted_at IS NULL")).
+		mock.ExpectQuery(regexp.QuoteMeta("SELECT id, lc_organization_id, type, payload, created_at, deleted_at, sync_error_count, last_sync_error_at FROM charges WHERE JSON_UNQUOTE(JSON_EXTRACT(payload, '$.status')) IN (?, ?) AND deleted_at IS NULL")).
 			WithArgs(statuses[0], statuses[1]).
 			WillReturnError(assert.AnError)
 		_, err = client.GetChargesByStatuses(ctx, statuses)

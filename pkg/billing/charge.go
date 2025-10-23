@@ -26,6 +26,8 @@ type Charge struct {
 	NextChargeAt     *time.Time
 	CreatedAt        time.Time
 	CanceledAt       *time.Time
+	SyncErrorCount   int
+	LastSyncErrorAt  *time.Time
 }
 type Subscription struct {
 	ID               string

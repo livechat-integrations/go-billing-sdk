@@ -31,6 +31,8 @@ type SQLCharge struct {
 	Payload          string     `json:"payload" db:"payload"`
 	CreatedAt        time.Time  `json:"created_at" db:"created_at"`
 	DeletedAt        *time.Time `json:"deleted_at" db:"deleted_at"`
+	SyncErrorCount   int        `json:"sync_error_count" db:"sync_error_count"`
+	LastSyncErrorAt  *time.Time `json:"last_sync_error_at" db:"last_sync_error_at"`
 }
 
 type SQLSubscription struct {
@@ -82,7 +84,7 @@ func (c *SQLClient) CreateCharge(ctx context.Context, ch billing.Charge) error {
 
 func (c *SQLClient) GetCharge(ctx context.Context, id string) (*billing.Charge, error) {
 	var ch SQLCharge
-	if err := c.db.GetContext(ctx, &ch, "SELECT id, lc_organization_id, type, payload, created_at, deleted_at FROM charges WHERE id = ? AND deleted_at IS NULL", id); err != nil {
+	if err := c.db.GetContext(ctx, &ch, "SELECT id, lc_organization_id, type, payload, created_at, deleted_at, sync_error_count, last_sync_error_at FROM charges WHERE id = ? AND deleted_at IS NULL", id); err != nil {
 		if errors.Is(err, stdsql.ErrNoRows) {
 			return nil, billing.ErrChargeNotFound
 		}
@@ -160,7 +162,7 @@ func (c *SQLClient) DeleteSubscriptionByChargeID(ctx context.Context, lcID strin
 
 func (c *SQLClient) GetChargesByOrganizationID(ctx context.Context, lcID string) ([]billing.Charge, error) {
 	var chs []*SQLCharge
-	if err := c.db.SelectContext(ctx, &chs, "SELECT id, lc_organization_id, type, payload, created_at, deleted_at FROM charges WHERE lc_organization_id = ?", lcID); err != nil {
+	if err := c.db.SelectContext(ctx, &chs, "SELECT id, lc_organization_id, type, payload, created_at, deleted_at, sync_error_count, last_sync_error_at FROM charges WHERE lc_organization_id = ?", lcID); err != nil {
 		return nil, fmt.Errorf("couldn't select charges from DB: %w", err)
 	}
 	if len(chs) == 0 {
@@ -239,6 +241,8 @@ func ToBillingCharge(c *SQLCharge) *billing.Charge {
 		Payload:          json.RawMessage(c.Payload),
 		CreatedAt:        c.CreatedAt,
 		CanceledAt:       canceledAt,
+		SyncErrorCount:   c.SyncErrorCount,
+		LastSyncErrorAt:  c.LastSyncErrorAt,
 	}
 }
 
@@ -247,7 +251,7 @@ func (c *SQLClient) GetChargesByStatuses(ctx context.Context, statuses []string)
 	if len(statuses) == 0 {
 		return []billing.Charge{}, nil
 	}
-	query, args, err := sqlx.In("SELECT id, lc_organization_id, type, payload, created_at, deleted_at FROM charges WHERE JSON_UNQUOTE(JSON_EXTRACT(payload, '$.status')) IN (?) AND deleted_at IS NULL", statuses)
+	query, args, err := sqlx.In("SELECT id, lc_organization_id, type, payload, created_at, deleted_at, sync_error_count, last_sync_error_at FROM charges WHERE JSON_UNQUOTE(JSON_EXTRACT(payload, '$.status')) IN (?) AND deleted_at IS NULL", statuses)
 	if err != nil {
 		return nil, fmt.Errorf("couldn't build query: %w", err)
 	}
@@ -303,4 +307,38 @@ func (c *SQLClient) HasUsedTrial(ctx context.Context, lcOrganizationID string) (
 		return false, fmt.Errorf("couldn't check trial usage: %w", err)
 	}
 	return count > 0, nil
+}
+
+func (c *SQLClient) IncrementChargeSyncErrorCount(ctx context.Context, chargeID string) error {
+	_, err := c.db.ExecContext(ctx, `
+		UPDATE charges
+		SET sync_error_count = sync_error_count + 1,
+		    last_sync_error_at = NOW()
+		WHERE id = ?
+		AND deleted_at IS NULL`,
+		chargeID)
+	if err != nil {
+		return fmt.Errorf("couldn't increment charge sync error count: %w", err)
+	}
+	return nil
+}
+
+func (c *SQLClient) GetChargesWithHighErrorCount(ctx context.Context, threshold int) ([]billing.Charge, error) {
+	var chs []*SQLCharge
+	if err := c.db.SelectContext(ctx, &chs, `
+		SELECT id, lc_organization_id, type, payload, created_at, deleted_at, sync_error_count, last_sync_error_at
+		FROM charges
+		WHERE sync_error_count >= ?
+		AND deleted_at IS NULL`,
+		threshold); err != nil {
+		return nil, fmt.Errorf("couldn't select charges with high error count: %w", err)
+	}
+	if len(chs) == 0 {
+		return []billing.Charge{}, nil
+	}
+	var charges []billing.Charge
+	for _, ch := range chs {
+		charges = append(charges, *ToBillingCharge(ch))
+	}
+	return charges, nil
 }

@@ -102,6 +102,11 @@ func (b *billingMock) HasUsedTrial(ctx context.Context, lcOrganizationID string)
 	return args.Bool(0), args.Error(1)
 }
 
+func (b *billingMock) CleanupFailedCharges(ctx context.Context) error {
+	args := b.Called(ctx)
+	return args.Error(0)
+}
+
 func TestNewHandler(t *testing.T) {
 	t.Run("NewHandler", func(t *testing.T) {
 		newService := NewHandler(&eventMock{}, &billingMock{}, &xIdMock{})

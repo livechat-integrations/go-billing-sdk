@@ -261,6 +261,19 @@ func (m *storageMock) HasUsedTrial(ctx context.Context, lcOrganizationID string)
 	return args.Bool(0), args.Error(1)
 }
 
+func (m *storageMock) IncrementChargeSyncErrorCount(ctx context.Context, chargeID string) error {
+	args := m.Called(ctx, chargeID)
+	return args.Error(0)
+}
+
+func (m *storageMock) GetChargesWithHighErrorCount(ctx context.Context, threshold int) ([]Charge, error) {
+	args := m.Called(ctx, threshold)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]Charge), args.Error(1)
+}
+
 func TestNewService(t *testing.T) {
 	t.Run("NewService", func(t *testing.T) {
 		newService := NewService(nil, nil, nil, "labs", func(ctx context.Context) (string, error) { return "", nil }, &storageMock{}, nil, "returnURL", "masterOrgID")
@@ -1142,6 +1155,7 @@ func TestService_SyncCharges(t *testing.T) {
 		em.On("ToEvent", orgCtx, lcoid, events.EventActionSyncRecurrentCharge, events.EventTypeInfo, map[string]interface{}{"id": "some-id"}).Return(events.Event{}).Once()
 		am.On("GetRecurrentCharge", orgCtx, "some-id").Return(nil, errors.New("whoopsie")).Once()
 		em.On("ToError", orgCtx, mock.Anything).Return(errors.New("failed to get recurrent charge: whoopsie")).Once()
+		sm.On("IncrementChargeSyncErrorCount", orgCtx, "some-id").Return(nil).Once()
 		xm.On("GenerateId").Return(xid, nil).Once()
 
 		err := s.SyncCharges(ctx)
@@ -1166,9 +1180,71 @@ func TestService_SyncCharges(t *testing.T) {
 
 		sm.On("UpdateChargePayload", orgCtx, "some-id", mock.Anything).Return(errors.New("whoopsie")).Once()
 		em.On("ToError", orgCtx, mock.Anything).Return(errors.New("failed to update charge payload: whoopsie")).Once()
+		sm.On("IncrementChargeSyncErrorCount", orgCtx, "some-id").Return(nil).Once()
 		xm.On("GenerateId").Return(xid, nil).Once()
 
 		err := s.SyncCharges(ctx)
+		assert.ErrorContains(t, err, "failed to update charge payload")
+
+		assertExpectations(t)
+	})
+
+	t.Run("processes all charges even when some fail", func(t *testing.T) {
+		xid1 := "event-id-1"
+		xid2 := "event-id-2"
+		xid3 := "event-id-3"
+
+		orgCtx1 := context.WithValue(ctx, OrganizationIDCtxKey{}, lcoid)
+		orgCtx1 = context.WithValue(orgCtx1, EventIDCtxKey{}, xid1)
+		orgCtx2 := context.WithValue(ctx, OrganizationIDCtxKey{}, lcoid)
+		orgCtx2 = context.WithValue(orgCtx2, EventIDCtxKey{}, xid2)
+		orgCtx3 := context.WithValue(ctx, OrganizationIDCtxKey{}, lcoid)
+		orgCtx3 = context.WithValue(orgCtx3, EventIDCtxKey{}, xid3)
+
+		sm.On("GetChargesByStatuses", ctx, GetSyncValidStatuses()).Return([]Charge{
+			{
+				ID:               "charge-1",
+				LCOrganizationID: lcoid,
+			},
+			{
+				ID:               "charge-2",
+				LCOrganizationID: lcoid,
+			},
+			{
+				ID:               "charge-3",
+				LCOrganizationID: lcoid,
+			},
+		}, nil).Once()
+
+		// First charge - fails to get recurrent charge
+		xm.On("GenerateId").Return(xid1, nil).Once()
+		em.On("ToEvent", orgCtx1, lcoid, events.EventActionSyncRecurrentCharge, events.EventTypeInfo, map[string]interface{}{"id": "charge-1"}).Return(events.Event{}).Once()
+		am.On("GetRecurrentCharge", orgCtx1, "charge-1").Return(nil, errors.New("api error")).Once()
+		em.On("ToError", orgCtx1, mock.Anything).Return(errors.New("failed to get recurrent charge: api error")).Once()
+		sm.On("IncrementChargeSyncErrorCount", orgCtx1, "charge-1").Return(nil).Once()
+
+		// Second charge - succeeds
+		xm.On("GenerateId").Return(xid2, nil).Once()
+		em.On("ToEvent", orgCtx2, lcoid, events.EventActionSyncRecurrentCharge, events.EventTypeInfo, map[string]interface{}{"id": "charge-2"}).Return(events.Event{}).Once()
+		am.On("GetRecurrentCharge", orgCtx2, "charge-2").Return(&livechat.RecurrentCharge{
+			BaseCharge: livechat.BaseCharge{},
+		}, nil).Once()
+		sm.On("UpdateChargePayload", orgCtx2, "charge-2", mock.Anything).Return(nil).Once()
+		em.On("CreateEvent", orgCtx2, mock.Anything).Return(nil).Once()
+
+		// Third charge - fails to update payload
+		xm.On("GenerateId").Return(xid3, nil).Once()
+		em.On("ToEvent", orgCtx3, lcoid, events.EventActionSyncRecurrentCharge, events.EventTypeInfo, map[string]interface{}{"id": "charge-3"}).Return(events.Event{}).Once()
+		am.On("GetRecurrentCharge", orgCtx3, "charge-3").Return(&livechat.RecurrentCharge{
+			BaseCharge: livechat.BaseCharge{},
+		}, nil).Once()
+		sm.On("UpdateChargePayload", orgCtx3, "charge-3", mock.Anything).Return(errors.New("db error")).Once()
+		em.On("ToError", orgCtx3, mock.Anything).Return(errors.New("failed to update charge payload: db error")).Once()
+		sm.On("IncrementChargeSyncErrorCount", orgCtx3, "charge-3").Return(nil).Once()
+
+		err := s.SyncCharges(ctx)
+		assert.Error(t, err)
+		assert.ErrorContains(t, err, "failed to get recurrent charge")
 		assert.ErrorContains(t, err, "failed to update charge payload")
 
 		assertExpectations(t)

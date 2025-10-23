@@ -32,6 +32,7 @@ const (
 	EventActionSyncTopUp                        EventAction = "sync_top_up_event"
 	EventActionActivateCharge                   EventAction = "activate_charge"
 	EventActionAddVoucherFunds                  EventAction = "add_voucher_funds"
+	EventActionCleanupFailedCharge              EventAction = "cleanup_failed_charge"
 	EventActionUnknown                          EventAction = "unknown"
 )
 

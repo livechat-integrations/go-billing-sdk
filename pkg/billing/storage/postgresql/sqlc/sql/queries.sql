@@ -78,3 +78,16 @@ SELECT EXISTS(
     SELECT 1 FROM trial_usage
     WHERE lc_organization_id = $1
 );
+
+-- name: IncrementChargeSyncErrorCount :exec
+UPDATE charges
+SET sync_error_count = sync_error_count + 1,
+    last_sync_error_at = NOW()
+WHERE id = $1
+AND deleted_at IS NULL;
+
+-- name: GetChargesWithHighErrorCount :many
+SELECT *
+FROM charges
+WHERE sync_error_count >= $1
+AND deleted_at IS NULL;

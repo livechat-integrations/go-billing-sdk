@@ -190,3 +190,21 @@ func (r *PostgresqlPGX) RecordTrialUsage(ctx context.Context, lcOrganizationID s
 func (r *PostgresqlPGX) HasUsedTrial(ctx context.Context, lcOrganizationID string) (bool, error) {
 	return r.queries.HasTrialUsage(ctx, lcOrganizationID)
 }
+
+func (r *PostgresqlPGX) IncrementChargeSyncErrorCount(ctx context.Context, chargeID string) error {
+	return r.queries.IncrementChargeSyncErrorCount(ctx, chargeID)
+}
+
+func (r *PostgresqlPGX) GetChargesWithHighErrorCount(ctx context.Context, threshold int) ([]billing.Charge, error) {
+	rows, err := r.queries.GetChargesWithHighErrorCount(ctx, int32(threshold))
+	if err != nil {
+		return nil, err
+	}
+
+	var charges []billing.Charge
+	for _, row := range rows {
+		charges = append(charges, *row.ToBillingCharge())
+	}
+
+	return charges, nil
+}

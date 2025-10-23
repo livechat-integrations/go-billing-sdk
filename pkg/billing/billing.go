@@ -35,6 +35,7 @@ type ServiceInterface interface {
 	GetActiveSubscriptionsByOrganizationID(ctx context.Context, lcOrganizationID string) ([]Subscription, error)
 	GetSubscriptionsByOrganizationID(ctx context.Context, lcOrganizationID string) ([]Subscription, error)
 	SyncCharges(ctx context.Context) error
+	CleanupFailedCharges(ctx context.Context) error
 
 	// Trial methods
 	CreateRecurrentChargeWithTrial(ctx context.Context, name string, price int, lcOrganizationID string, chargeFrequency int) (string, error)
@@ -349,6 +350,8 @@ func (s *Service) SyncCharges(ctx context.Context) error {
 		return fmt.Errorf("failed to get charges by statuses: %w", err)
 	}
 
+	var errs []error
+
 	for _, charge := range charges {
 		organizationCtx := context.WithValue(ctx, OrganizationIDCtxKey{}, charge.LCOrganizationID)
 		organizationCtx = context.WithValue(organizationCtx, EventIDCtxKey{}, s.idProvider.GenerateId())
@@ -361,7 +364,7 @@ func (s *Service) SyncCharges(ctx context.Context) error {
 
 		if recCharge.Status == livechat.RecurrentChargeStatusPending && recCharge.CreatedAt.AddDate(0, 1, 0).Before(time.Now()) {
 			if err = s.cancelChange(organizationCtx, charge); err != nil {
-				return err
+				errs = append(errs, err)
 			}
 
 			continue
@@ -371,10 +374,12 @@ func (s *Service) SyncCharges(ctx context.Context) error {
 		lcCharge, err := s.billingAPI.GetRecurrentCharge(organizationCtx, charge.ID)
 		if err != nil {
 			event.Type = events.EventTypeError
-			return s.eventService.ToError(organizationCtx, events.ToErrorParams{
+			errs = append(errs, s.eventService.ToError(organizationCtx, events.ToErrorParams{
 				Event: event,
 				Err:   fmt.Errorf("failed to get recurrent charge: %w", err),
-			})
+			}))
+			_ = s.storage.IncrementChargeSyncErrorCount(organizationCtx, charge.ID)
+			continue
 		}
 
 		switch lcCharge.Status {
@@ -383,24 +388,65 @@ func (s *Service) SyncCharges(ctx context.Context) error {
 			lcCharge, err = s.billingAPI.ActivateRecurrentCharge(organizationCtx, charge.ID)
 			if err != nil {
 				event.Type = events.EventTypeError
-				return s.eventService.ToError(organizationCtx, events.ToErrorParams{
+				errs = append(errs, s.eventService.ToError(organizationCtx, events.ToErrorParams{
 					Event: event,
 					Err:   fmt.Errorf("failed to activate charge: %w", err),
-				})
+				}))
+				_ = s.storage.IncrementChargeSyncErrorCount(organizationCtx, charge.ID)
+				continue
 			}
 		}
 
 		rawCharge, _ := json.Marshal(lcCharge)
 		if err = s.storage.UpdateChargePayload(organizationCtx, charge.ID, rawCharge); err != nil {
 			event.Type = events.EventTypeError
-			return s.eventService.ToError(organizationCtx, events.ToErrorParams{
+			errs = append(errs, s.eventService.ToError(organizationCtx, events.ToErrorParams{
 				Event: event,
 				Err:   fmt.Errorf("failed to update charge payload: %w", err),
-			})
+			}))
+			_ = s.storage.IncrementChargeSyncErrorCount(organizationCtx, charge.ID)
+			continue
 		}
 
 		event.SetPayload(lcCharge)
 		_ = s.eventService.CreateEvent(organizationCtx, event)
+	}
+
+	if len(errs) > 0 {
+		return errors.Join(errs...)
+	}
+
+	return nil
+}
+
+func (s *Service) CleanupFailedCharges(ctx context.Context) error {
+	charges, err := s.storage.GetChargesWithHighErrorCount(ctx, 10)
+	if err != nil {
+		return fmt.Errorf("failed to get charges with high error count: %w", err)
+	}
+
+	var errs []error
+
+	for _, charge := range charges {
+		organizationCtx := context.WithValue(ctx, OrganizationIDCtxKey{}, charge.LCOrganizationID)
+		organizationCtx = context.WithValue(organizationCtx, EventIDCtxKey{}, s.idProvider.GenerateId())
+
+		event := s.eventService.ToEvent(organizationCtx, charge.LCOrganizationID, events.EventActionCleanupFailedCharge, events.EventTypeInfo, map[string]interface{}{"id": charge.ID, "sync_error_count": charge.SyncErrorCount})
+
+		if err = s.storage.DeleteCharge(organizationCtx, charge.ID); err != nil {
+			event.Type = events.EventTypeError
+			errs = append(errs, s.eventService.ToError(organizationCtx, events.ToErrorParams{
+				Event: event,
+				Err:   fmt.Errorf("failed to delete charge: %w", err),
+			}))
+			continue
+		}
+
+		_ = s.eventService.CreateEvent(organizationCtx, event)
+	}
+
+	if len(errs) > 0 {
+		return errors.Join(errs...)
 	}
 
 	return nil

@@ -19,6 +19,8 @@ type Storage interface {
 	DeleteCharge(ctx context.Context, id string) error
 	GetChargesByOrganizationID(ctx context.Context, lcID string) ([]Charge, error)
 	GetChargesByStatuses(ctx context.Context, statuses []string) ([]Charge, error)
+	IncrementChargeSyncErrorCount(ctx context.Context, chargeID string) error
+	GetChargesWithHighErrorCount(ctx context.Context, threshold int) ([]Charge, error)
 
 	CreateSubscription(ctx context.Context, subscription Subscription) error
 	GetSubscriptionsByOrganizationID(ctx context.Context, lcID string) ([]Subscription, error)
