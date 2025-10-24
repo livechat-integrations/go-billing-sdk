@@ -86,7 +86,7 @@ func (h *Handler) HandleDPSWebhook(ctx context.Context, req DPSWebhookRequest) e
 			event.Type = events.EventTypeError
 			return h.eventService.ToError(ctx, events.ToErrorParams{
 				Event: event,
-				Err:   fmt.Errorf("sync recurrent charge: %w", err),
+				Err:   fmt.Errorf("sync recurrent charge %s: %w", chargeID, err),
 			})
 		}
 
