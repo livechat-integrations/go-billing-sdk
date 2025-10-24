@@ -385,7 +385,7 @@ func TestService_HandleDPSWebhook(t *testing.T) {
 		em.On("ToEvent", billingCtx, lcoid, events.EventActionUnknown, events.EventTypeInfo, req).Return(levent).Once()
 		em.On("ToError", billingCtx, events.ToErrorParams{
 			Event: levent,
-			Err:   fmt.Errorf("sync recurrent charge: %w", assert.AnError),
+			Err:   fmt.Errorf("sync recurrent charge x1c2v3: %w", assert.AnError),
 		}).Return(assert.AnError).Once()
 		lctx := context.WithValue(context.Background(), SubscriptionPlanNameCtxKey{}, planName)
 		err := h.HandleDPSWebhook(lctx, req)
