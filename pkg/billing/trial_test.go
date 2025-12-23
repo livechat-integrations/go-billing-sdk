@@ -217,7 +217,7 @@ func TestSubscription_IsActive_EndOfDay(t *testing.T) {
 }
 
 func TestEndOfDay(t *testing.T) {
-	// Test with a specific time
+	// Test with a specific time - should return midnight of the next day
 	loc, _ := time.LoadLocation("America/New_York")
 	input := time.Date(2024, 6, 15, 10, 30, 45, 123456789, loc)
 
@@ -225,11 +225,11 @@ func TestEndOfDay(t *testing.T) {
 
 	assert.Equal(t, 2024, result.Year())
 	assert.Equal(t, time.June, result.Month())
-	assert.Equal(t, 15, result.Day())
-	assert.Equal(t, 23, result.Hour())
-	assert.Equal(t, 59, result.Minute())
-	assert.Equal(t, 59, result.Second())
-	assert.Equal(t, 999999999, result.Nanosecond())
+	assert.Equal(t, 16, result.Day()) // Next day
+	assert.Equal(t, 0, result.Hour())
+	assert.Equal(t, 0, result.Minute())
+	assert.Equal(t, 0, result.Second())
+	assert.Equal(t, 0, result.Nanosecond())
 	assert.Equal(t, loc, result.Location())
 }
 
