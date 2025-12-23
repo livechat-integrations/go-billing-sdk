@@ -68,8 +68,8 @@ func (c Subscription) IsActive() bool {
 
 	// During trial period: has TrialEndsAt and no CurrentChargeAt yet
 	if p.TrialEndsAt != nil && p.CurrentChargeAt == nil {
-		// Active if still in trial period
-		if p.TrialEndsAt.After(time.Now()) {
+		// Active if still in trial period (until end of day)
+		if endOfDay(*p.TrialEndsAt).After(time.Now()) {
 			return true
 		}
 		return false
@@ -94,10 +94,15 @@ func (c Subscription) IsTrialActive() bool {
 	_ = json.Unmarshal(c.Charge.Payload, &p)
 
 	return p.TrialEndsAt != nil &&
-		p.TrialEndsAt.After(time.Now()) &&
+		endOfDay(*p.TrialEndsAt).After(time.Now()) &&
 		p.CurrentChargeAt == nil
 }
 
 func GetSyncValidStatuses() []string {
 	return []string{"active", "pending", "accepted", "past_due", "frozen"}
+}
+
+func endOfDay(t time.Time) time.Time {
+	year, month, day := t.Date()
+	return time.Date(year, month, day, 23, 59, 59, 999999999, t.Location())
 }

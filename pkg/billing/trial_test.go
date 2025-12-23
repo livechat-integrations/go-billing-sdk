@@ -148,6 +148,91 @@ func TestSubscription_IsActive_WithTrial(t *testing.T) {
 	}
 }
 
+func TestSubscription_IsTrialActive_EndOfDay(t *testing.T) {
+	now := time.Now()
+	// Trial ended earlier today (e.g., 1 hour ago) - should still be active until end of day
+	earlierToday := time.Date(now.Year(), now.Month(), now.Day(), now.Hour()-1, 0, 0, 0, now.Location())
+
+	tests := []struct {
+		name         string
+		subscription Subscription
+		expected     bool
+	}{
+		{
+			name: "trial ended earlier today - still active until end of day",
+			subscription: Subscription{
+				Charge: &Charge{
+					Payload: mustMarshal(livechat.RecurrentCharge{
+						TrialEndsAt:     &earlierToday,
+						CurrentChargeAt: nil,
+					}),
+				},
+			},
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := tt.subscription.IsTrialActive()
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestSubscription_IsActive_EndOfDay(t *testing.T) {
+	now := time.Now()
+	// Trial ended earlier today - should still be active until end of day
+	earlierToday := time.Date(now.Year(), now.Month(), now.Day(), now.Hour()-1, 0, 0, 0, now.Location())
+	nextCharge := now.Add(30 * 24 * time.Hour)
+
+	tests := []struct {
+		name         string
+		subscription Subscription
+		expected     bool
+	}{
+		{
+			name: "trial ended earlier today - still active until end of day",
+			subscription: Subscription{
+				Charge: &Charge{
+					Payload: mustMarshal(livechat.RecurrentCharge{
+						BaseCharge: livechat.BaseCharge{
+							Status: "pending",
+						},
+						TrialEndsAt:  &earlierToday,
+						NextChargeAt: &nextCharge,
+					}),
+				},
+			},
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := tt.subscription.IsActive()
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestEndOfDay(t *testing.T) {
+	// Test with a specific time
+	loc, _ := time.LoadLocation("America/New_York")
+	input := time.Date(2024, 6, 15, 10, 30, 45, 123456789, loc)
+
+	result := endOfDay(input)
+
+	assert.Equal(t, 2024, result.Year())
+	assert.Equal(t, time.June, result.Month())
+	assert.Equal(t, 15, result.Day())
+	assert.Equal(t, 23, result.Hour())
+	assert.Equal(t, 59, result.Minute())
+	assert.Equal(t, 59, result.Second())
+	assert.Equal(t, 999999999, result.Nanosecond())
+	assert.Equal(t, loc, result.Location())
+}
+
 // Helper function to marshal JSON for tests
 func mustMarshal(v interface{}) json.RawMessage {
 	data, err := json.Marshal(v)
